@@ -2608,3 +2608,9 @@ body.scroll-lock {
   background: color-mix(in srgb, var(--status-warning) 12%, transparent);
   border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
 }
+.form-card.rule-card {
+  max-width: 760px;
+}
+.form-card.rule-card .rule-form {
+  max-width: 440px;
+}
