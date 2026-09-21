@@ -1,0 +1,10 @@
+.env
+.env.*
+certs
+bin
+*.test
+*.out
+.git
+
+# Panel ayrı imajdır (server/panel/Dockerfile); server imajının bağlamına girmesin.
+panel

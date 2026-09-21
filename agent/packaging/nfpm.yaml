@@ -1,0 +1,80 @@
+# .deb ve .rpm paketlerinin tek tanımı (nfpm). Doğrudan çağrılmaz: agent/packaging/build.sh gerekli
+# ortam değişkenlerini (VERSION, GOARCH, PKG_BINARY, PKG_STAGE, ...) kurup çalıştırır.
+name: healthbeat-agent
+arch: ${GOARCH}
+platform: linux
+version: ${VERSION}
+section: admin
+priority: optional
+maintainer: ${MAINTAINER}
+description: |
+  HealthBeat agent (CPU, RAM, disk and Docker reporting)
+  Reports this server's CPU, RAM, disk and (optionally) Docker state to a HealthBeat server.
+  It makes no decisions: thresholds and alerts live on the server.
+  After installing, configure and start it with: sudo healthbeat-agent-setup
+homepage: ${HOMEPAGE}
+license: Proprietary
+
+# Statik binary'dir (CGO yok): dağıtıma özgü kütüphane bağımlılığı yoktur.
+# Sıkıştırma bilerek gzip: eski dağıtımların (Ubuntu 18.04, Debian 10, RHEL 8.0) paket yöneticileri
+# zstd'yi tanımayabilir.
+deb:
+  compression: gzip
+rpm:
+  compression: gzip
+
+# preinstall groupadd/useradd çağırır: RHEL ailesinde bunlar shadow-utils'tir (minimal imajlarda yoktur).
+# Debian ailesinde bunları sağlayan `passwd` zaten zorunlu pakettir, ayrıca bağımlılık gerekmez.
+overrides:
+  rpm:
+    depends:
+      - shadow-utils
+
+contents:
+  - src: ${PKG_BINARY}
+    dst: /usr/bin/healthbeat-agent
+    file_info: {mode: 0755}
+
+  # Unit dosyası: repodaki unit'in yalnızca ExecStart yolu farklıdır (build.sh üretir).
+  # Debian ailesi /lib, RHEL ailesi /usr/lib altındaki unit'leri paketler.
+  - src: ${PKG_STAGE}/healthbeat-agent.service
+    dst: /lib/systemd/system/healthbeat-agent.service
+    file_info: {mode: 0644}
+    packager: deb
+  - src: ${PKG_STAGE}/healthbeat-agent.service
+    dst: /usr/lib/systemd/system/healthbeat-agent.service
+    file_info: {mode: 0644}
+    packager: rpm
+
+  # Yapılandırma sihirbazı: paket config yazmaz; kurulumdan sonra bu komut yazar.
+  - src: agent/deploy/install.sh
+    dst: /usr/share/healthbeat/install.sh
+    file_info: {mode: 0755}
+  - src: agent/packaging/healthbeat-agent-setup
+    dst: /usr/sbin/healthbeat-agent-setup
+    file_info: {mode: 0755}
+  # install.sh bu işaretçiyi görünce install/upgrade/rollback/uninstall'ı reddeder (paket yöneticisi sahibidir).
+  - src: ${PKG_STAGE}/installed-from-package
+    dst: /usr/share/healthbeat/installed-from-package
+    file_info: {mode: 0644}
+
+  - src: docs/AGENT.md
+    dst: /usr/share/doc/healthbeat/AGENT.md
+    file_info: {mode: 0644}
+  - src: docs/COMPATIBILITY.md
+    dst: /usr/share/doc/healthbeat/COMPATIBILITY.md
+    file_info: {mode: 0644}
+  - src: docs/DISTRIBUTION.md
+    dst: /usr/share/doc/healthbeat/DISTRIBUTION.md
+    file_info: {mode: 0644}
+
+  # Yapılandırma dizini: servis grubu okuyabilir (kimlik bilgisi tutar). Grubu preinstall oluşturur.
+  - dst: /etc/healthbeat
+    type: dir
+    file_info: {mode: 0750, owner: root, group: healthbeat}
+
+scripts:
+  preinstall: agent/packaging/preinstall.sh
+  postinstall: agent/packaging/postinstall.sh
+  preremove: agent/packaging/preremove.sh
+  postremove: agent/packaging/postremove.sh

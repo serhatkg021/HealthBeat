@@ -1,0 +1,10 @@
+{
+  "cpu_usage_pct": 11.5,
+  "ram_usage_pct": 42.25,
+  "disk": [
+    {"mount": "/", "used_pct": 13.6, "total": 500107862016, "free": 432000000000}
+  ],
+  "docker_containers": [
+    {"name": "web", "image": "nginx:1", "status": "running", "cpu_pct": 0.5, "ram_mb": 12.5, "restart_count": 1, "uptime_seconds": 3600}
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "cpu_usage_pct": 22.5,
+  "ram_usage_pct": 55.5,
+  "disk": [
+    {"mount": "/", "used_pct": 13.6, "total": 500107862016, "free": 432000000000},
+    {"mount": "/boot/efi", "used_pct": 0.6, "total": 1000000000, "free": 994000000}
+  ],
+  "cpu_cores": 12,
+  "ram_total_mb": 15823,
+  "physical_disks": [
+    {"name": "nvme0n1", "model": "CT500P2SSD8", "size_bytes": 500107862016, "kind": "nvme", "mounts": ["/", "/boot/efi"]}
+  ],
+  "docker_containers": []
+}

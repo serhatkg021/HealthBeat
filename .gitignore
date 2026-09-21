@@ -1,0 +1,15 @@
+/server/bin/
+/agent/bin/
+/server/certs/
+/server/server
+/agent/agent
+*.exe
+*.test
+*.out
+.env
+.env.*
+!.env.example
+*.log
+
+# Sürüm artifact'ları (scripts/release.sh)
+/dist/

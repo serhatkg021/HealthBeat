@@ -1,0 +1,14 @@
+{
+  "cpu_usage_pct": 33.5,
+  "ram_usage_pct": 66.5,
+  "disk": [
+    {"mount": "/", "used_pct": 13.6, "total": 500107862016, "free": 432000000000, "inodes_used_pct": 4.2}
+  ],
+  "cpu_cores": 8,
+  "gpu": [{"name": "rtx", "temp_c": 61}],
+  "load_average": {"1m": 0.5, "5m": 0.4, "15m": 0.3},
+  "agent_notes": "bu alanlar bu server sürümünde yok",
+  "docker_containers": [
+    {"name": "db", "image": "postgres:16", "status": "running", "cpu_pct": 1.5, "ram_mb": 300.5, "restart_count": 0, "uptime_seconds": 10, "health": "healthy"}
+  ]
+}

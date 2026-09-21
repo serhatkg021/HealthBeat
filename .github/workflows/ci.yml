@@ -1,0 +1,102 @@
+# Her push ve pull request'te testler; release.yml de sürüm etiketinde bunu çağırır (workflow_call),
+# yani testleri geçmeyen bir sürüm yayınlanmaz. Sürüm çağrısı yalnızca ilgili hattın işlerini çalıştırır:
+# `agent/vX.Y.Z` -> agent, `server/vX.Y.Z` -> server + panel (push/PR'da hepsi çalışır).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+    inputs:
+      components:
+        description: "Çalıştırılacak hat: all (varsayılan), agent ya da server"
+        type: string
+        default: all
+
+permissions:
+  contents: read
+
+jobs:
+  release-scripts:
+    name: sürüm betikleri (release_test.sh)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: sürüm tutarlılığı kuralları (agent/server hatları, etiketler, değişiklik günlükleri)
+        run: scripts/release_test.sh
+
+  agent:
+    name: agent (go test, install.sh, paketler)
+    if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'agent' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # install_test.sh eski bir agent'ı git geçmişinden derler
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.mod
+      - name: go vet + go test
+        working-directory: agent
+        run: |
+          go vet ./...
+          go test ./... -race
+      - name: install.sh testleri
+        run: agent/deploy/install_test.sh
+      - name: nfpm kur
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.1
+      - name: paket testleri (Ubuntu, Debian, Rocky, Alma, Amazon Linux imajlarında)
+        run: agent/packaging/test_packages.sh
+
+  server:
+    name: server (go test, PostgreSQL)
+    if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'server' }}
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Testler bu veritabanında geçici şemalar açar ve siler (asla üretim veritabanına yöneltme).
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - name: go vet + go test
+        working-directory: server
+        run: |
+          go vet ./...
+          go test ./... -race
+
+  panel:
+    name: panel (tsc, test, build)
+    if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'server' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/panel/package-lock.json
+      - name: bağımlılıkları kur
+        working-directory: server/panel
+        run: npm ci
+      - name: tsc, test, build
+        working-directory: server/panel
+        run: |
+          npx tsc -b
+          npm test
+          npm run build

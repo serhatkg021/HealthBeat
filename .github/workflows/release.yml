@@ -1,0 +1,205 @@
+# Sürüm yayını: İKİ bağımsız sürüm hattı vardır (süreç: docs/DISTRIBUTION.md). Hat, etiketin ön ekinden gelir:
+#
+#   git tag agent/v1.0.1  && git push origin agent/v1.0.1     agent hattı
+#       1) ci.yml (yalnızca agent) geçmeli
+#       2) agent: binary'ler, tarball'lar, .deb/.rpm, SHA256SUMS + GPG imzası -> GitHub Release
+#   git tag server/v1.1.0 && git push origin server/v1.1.0    server + panel hattı
+#       1) ci.yml (server + panel) geçmeli
+#       2) server-verify: sürüm tutarlılığı (server/panel sürümü = etiket, LatestAgent gerçek bir agent sürümü, değişiklik günlüğü)
+#       3) images: server/panel/certs-init imajları (amd64+arm64) -> GHCR (ve Docker Hub, isteğe bağlı)
+#       4) server-release: imajlar yayınlandıktan SONRA GitHub Release (sürüm notları + imaj adları)
+#
+# Gerekli ayarlar (Settings > Secrets and variables > Actions):
+#   secrets.GPG_PRIVATE_KEY      agent hattı için zorunlu: SHA256SUMS'ı imzalayan anahtarın armored özel anahtarı
+#   secrets.GPG_PASSPHRASE       anahtar PAROLALIYSA zorunlu (yoksa imzalama 'No passphrase given' ile düşer); parolasızsa ekleme
+#   vars.DOCKERHUB_NAMESPACE     isteğe bağlı: doluysa imajlar Docker Hub'a da gider
+#   secrets.DOCKERHUB_USERNAME / secrets.DOCKERHUB_TOKEN   Docker Hub kullanılıyorsa
+name: Release
+
+on:
+  push:
+    tags: ["agent/v*", "server/v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  meta:
+    name: sürüm hattını belirle
+    runs-on: ubuntu-24.04
+    outputs:
+      component: ${{ steps.parse.outputs.component }}
+      version: ${{ steps.parse.outputs.version }}
+    steps:
+      - id: parse
+        run: |
+          tag="$GITHUB_REF_NAME"
+          case "$tag" in
+            agent/v*)  component=agent;  version="${tag#agent/v}" ;;
+            server/v*) component=server; version="${tag#server/v}" ;;
+            *) echo "::error::etiket '$tag' bir sürüm hattına ait değil (agent/vX.Y.Z ya da server/vX.Y.Z)"; exit 1 ;;
+          esac
+          if ! printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::etiket '$tag' geçerli bir SemVer taşımıyor"; exit 1
+          fi
+          echo "component=$component" >>"$GITHUB_OUTPUT"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+  ci:
+    needs: meta
+    uses: ./.github/workflows/ci.yml
+    with:
+      components: ${{ needs.meta.outputs.component }}
+
+  # ------------------------------------------------------------------ agent hattı
+  agent:
+    name: agent artifact'ları + GitHub Release
+    needs: [meta, ci]
+    if: ${{ needs.meta.outputs.component == 'agent' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # release oluşturmak için
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: agent/go.mod
+          cache-dependency-path: agent/go.mod
+      - name: nfpm kur
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.1
+      - name: GPG anahtarını içe aktar
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          if [ -z "$GPG_PRIVATE_KEY" ]; then
+            echo "::error::secrets.GPG_PRIVATE_KEY is not set: releases must be signed (see docs/DISTRIBUTION.md)"
+            exit 1
+          fi
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "GPG_KEY_ID=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')" >>"$GITHUB_ENV"
+      - name: artifact'ları üret ve imzala
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: scripts/release.sh agent "$VERSION" --skip-tests --require-tag
+      - name: GitHub Release oluştur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          case "$VERSION" in *-*) flags+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" "dist/agent-v$VERSION"/* \
+            --title "HealthBeat Agent $VERSION" --notes-file "dist/agent-v$VERSION/RELEASE_NOTES.md" --verify-tag "${flags[@]}"
+
+  # ------------------------------------------------------------ server + panel hattı
+  server-verify:
+    name: server sürüm tutarlılığı
+    needs: [meta, ci]
+    if: ${{ needs.meta.outputs.component == 'server' }}
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # LatestAgent'ın gerçek bir agent etiketi olduğunu doğrulamak için etiketler gerekir
+      - name: server/panel sürümü = etiket, LatestAgent yayınlanmış, değişiklik günlüğü var
+        run: scripts/release.sh server "$VERSION" --check --require-tag
+
+  images:
+    name: imaj (${{ matrix.image }})
+    # Yalnızca sürüm tutarlılığı doğrulandıysa yayınla: yanlış numaralı bir imaj oluşmasın.
+    needs: [meta, ci, server-verify]
+    if: ${{ needs.meta.outputs.component == 'server' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write # GHCR'a yazmak için
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: server
+            context: server
+          - image: panel
+            context: server/panel
+          - image: certs-init
+            context: deploy/certs-init
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: imaj adlarını belirle
+        id: names
+        env:
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE }}
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}" # GHCR küçük harf ister
+          {
+            echo "list<<EOF"
+            echo "ghcr.io/${owner}/healthbeat-${{ matrix.image }}"
+            [ -z "$DOCKERHUB_NAMESPACE" ] || echo "docker.io/${DOCKERHUB_NAMESPACE}/healthbeat-${{ matrix.image }}"
+            echo "EOF"
+          } >>"$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        if: ${{ vars.DOCKERHUB_NAMESPACE != '' }}
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        with:
+          images: ${{ steps.names.outputs.list }}
+          # Etiket `server/v1.1.0` biçiminde olduğu için sürüm açıkça verilir: 1.1.0, 1.1 ve (önsürüm değilse) latest.
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.meta.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.meta.outputs.version }}
+            type=raw,value=latest,enable=${{ !contains(needs.meta.outputs.version, '-') }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.meta.outputs.version }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: ${{ matrix.context }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+
+  server-release:
+    name: server GitHub Release
+    # İmajlar yayınlandıktan SONRA: release sayfası "imaj yok" durumunu göstermesin.
+    needs: [meta, images]
+    if: ${{ needs.meta.outputs.component == 'server' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # release oluşturmak için
+    env:
+      VERSION: ${{ needs.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: sürüm notlarını hazırla
+        run: scripts/release.sh server "$VERSION" --skip-tests --require-tag
+      - name: GitHub Release oluştur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=()
+          case "$VERSION" in *-*) flags+=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" \
+            --title "HealthBeat Server $VERSION" --notes-file "dist/server-v$VERSION/RELEASE_NOTES.md" --verify-tag "${flags[@]}"

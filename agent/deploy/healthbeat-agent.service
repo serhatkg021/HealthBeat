@@ -1,0 +1,50 @@
+[Unit]
+Description=HealthBeat agent
+Documentation=file:///usr/share/doc/healthbeat/AGENT.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=healthbeat
+Group=healthbeat
+ExecStart=/usr/local/bin/healthbeat-agent -config /etc/healthbeat/agent.json
+Restart=on-failure
+RestartSec=5
+
+# Agent yalnızca /proc okur ve mount'lara statfs() yapar, ağla konuşur ve (pull modunda) yetkisiz
+# tek bir portta dinler. Geri kalan her şey engellenir.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+
+ProtectSystem=strict
+# read-only ("yes" değil): disk toplayıcı izleniyorsa /home'a hâlâ statfs() yapabilmeli.
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+# `systemd-analyze security` önerse de "~@resources" EKLEME: Go runtime'ı bu syscall'ların
+# bir kısmına ihtiyaç duyar ve agent core dump ile ölür (doğrulandı).
+
+# Bilerek AYARLANMADI: ProcSubset=pid / ProtectProc=invisible, agent'ın asıl amacı olan
+# /proc/stat ve /proc/meminfo'yu gizlerdi.
+
+[Install]
+WantedBy=multi-user.target

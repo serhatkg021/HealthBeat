@@ -1,0 +1,6 @@
+#!/bin/sh
+# Paketle kurulan HealthBeat agent'ının yapılandırmasını yazar ve servisi başlatır (sihirbaz: install.sh configure).
+#   sudo healthbeat-agent-setup                       # adım adım sorar
+#   sudo healthbeat-agent-setup --mode push --server-url https://... --host-id <uuid>   # etkileşimsiz
+# Seçenekler için: healthbeat-agent-setup --help
+exec /usr/share/healthbeat/install.sh configure "$@"

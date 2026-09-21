@@ -1,0 +1,47 @@
+# nginx imajının envsubst adımıyla /etc/nginx/conf.d/default.conf'a işlenir.
+# Yalnızca ${API_BASE_URL} yerine konur; nginx'in kendi $değişkenlerine dokunulmaz.
+server {
+    listen 8080;
+    server_name _;
+    server_tokens off;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # TLS bu container'ın önünde sonlandırılır (yük dengeleyici / reverse
+    # proxy); bu yüzden içeride düz HTTP'dir. HSTS düz HTTP üzerinde tarayıcılarca
+    # yok sayılır, bu yüzden yerel çalıştırmalarda zararsızdır.
+    #
+    # NOT: bir location bloğu içindeki herhangi bir add_header bunların YERİNE GEÇER; bu yüzden
+    # aşağıdaki location'lar önbellek denetimi için `expires` kullanır (o geçmez).
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "DENY" always;
+    add_header Referrer-Policy "no-referrer" always;
+    # Panel token'larını localStorage'da tutar; bu yüzden önemli tehdit script enjeksiyonudur:
+    # script'ler yalnızca bu origin'den, sayfanın konuşabileceği tek dış host ise API'dir.
+    # 'unsafe-inline' yalnızca stiller içindir (React/recharts satır içi style öznitelikleri
+    # koyar), script'ler için asla.
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ${API_BASE_URL}; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+
+    # Çalışma zamanı yapılandırması: asla önbelleğe alınmamalı, yoksa değişen bir API adresi yok sayılır.
+    location = /config.js {
+        expires epoch;
+    }
+
+    # Vite, /assets altında içerik hash'li dosya adları üretir; bu yüzden sonsuza dek önbelleğe alınabilirler.
+    location /assets/ {
+        expires 1y;
+        try_files $uri =404;
+    }
+
+    # İsteğe bağlı API reverse proxy'si (API_PROXY_URL doluysa entrypoint yazar; bkz.
+    # deploy/docker-entrypoint.d/15-healthbeat-config.sh). Boşsa dosya yalnızca bir yorum satırı içerir.
+    include /tmp/healthbeat-api-proxy.conf;
+
+    # SPA: bilinmeyen yollar (/alerts gibi istemci tarafı rotalar) index.html'e düşer.
+    location / {
+        expires epoch;
+        try_files $uri /index.html;
+    }
+}
