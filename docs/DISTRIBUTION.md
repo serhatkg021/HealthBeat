@@ -252,7 +252,7 @@ kurulum, `purge`, eski tarball kurulumu için uyarı. Şunlar **doğrulanmadı**
   (tarball yoluyla) denendi. Paketin `postinst` restart'ı ve RHEL ailesindeki servis davranışı gerçek VM ister.
 - **SELinux (`enforcing`):** RHEL ailesinde Docker socket / `/proc` erişimi engellenebilir; bu makinede test edilemez.
 - **arm64 çalışma zamanı:** arm64 paketler derlenir ve üst verisi doğrulanır, bu makinede çalıştırılamaz.
-- **İki hatlı iş akışı (`agent/v*`, `server/v*`):** `actionlint` temiz, `scripts/release_test.sh` (28 kontrol) ve betiklerin mutasyon testi geçti; **gerçek bir etiketle GitHub'da henüz çalıştırılmadı** (ilk `agent/v1.0.0` ve `server/v1.0.0` yayınları ilk gerçek deneme olacak; özellikle `docker/metadata-action`'ın `value=` ile verilen sürümden `1.4.0`/`1.4`/`latest` etiketlerini üretmesi ve `/` içeren etiketle `gh release create`).
+- **İki hatlı iş akışı (`agent/v*`, `server/v*`):** `actionlint` temiz, `scripts/release_test.sh` (28 kontrol) ve betiklerin mutasyon testi geçti; **gerçek etiketlerle GitHub'da çalıştırıldı** (`agent/v1.0.0`: imzalı release, imza ve özetler bağımsız anahtar halkasında doğrulandı; `server/v1.0.0`: üç imaj GHCR'a gitti, release oluştu). Not: aynı adlı GHCR paketleri başka bir repoya bağlıysa `denied: permission_denied: read_package` ile itme reddedilir; eski paketi silmek ya da yeni repoya *Manage Actions access* ile yazma izni vermek gerekir.
 - **GHCR ve paket kurulumu:** bir sunucuda **GHCR'dan `docker compose pull`** ile imaj çekme, release'ten indirilen bir **paketin gerçek
   bir makinede kurulumu** ve Docker Hub yolu (kullanılmıyor) henüz doğrulanmadı.
 - Ubuntu 20.04, Debian 11, CentOS Stream 9 ve diğer türevler ayrıca denenmedi (aynı paket/statik binary).
