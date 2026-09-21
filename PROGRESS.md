@@ -4,7 +4,7 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-22 — v1.0.0 temiz başlangıç.
+**Son güncelleme:** 2026-09-22 — v1.0.0 temiz başlangıç; `agent/v1.0.0` ve `server/v1.0.0` yayınlandı.
 
 ## Durum
 
@@ -52,7 +52,6 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Doğrulanmadı
 
-- İki hatlı GitHub Actions iş akışı gerçek bir etiketle çalıştırılmadı (`agent/v1.0.0` ve `server/v1.0.0` ilk deneme olacak).
 - GHCR'dan `docker compose pull`, release paketinin gerçek makinede kurulumu, gerçek SMTP sağlayıcısıyla alert e-postası,
   gerçek systemd/SELinux/arm64 çalışma zamanı (ayrıntı: `docs/DISTRIBUTION.md` §10).
 - Panelin yeni bölümleri (organizasyon ağacı, iletişim kişileri, bildirim kuralları, eşik mirası, profil) tarayıcıda uçtan uca elle gezilmedi;
@@ -60,7 +59,6 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Sıradaki işler
 
-1. `agent/v1.0.0` ve `server/v1.0.0` etiketlerini at, iş akışını doğrula (bkz. `docs/DISTRIBUTION.md` §11).
-2. SMTP'yi gerçek bir sağlayıcıyla dene (alert e-postası + şifre sıfırlama).
-3. Ek bildirim kanalları (SMS, Slack, Discord, Telegram) ve iki faktörlü doğrulama.
-4. Panelde organizasyon/sunucu bazlı bildirim kuralı görünümünün tarayıcıda gözden geçirilmesi.
+1. SMTP'yi gerçek bir sağlayıcıyla dene (alert e-postası + şifre sıfırlama).
+2. Ek bildirim kanalları (SMS, Slack, Discord, Telegram) ve iki faktörlü doğrulama.
+3. Panelde organizasyon/sunucu bazlı bildirim kuralı görünümünün tarayıcıda gözden geçirilmesi.
