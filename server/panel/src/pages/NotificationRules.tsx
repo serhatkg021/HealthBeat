@@ -65,7 +65,7 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
   const available = candidatesForNewRoute(candidates, list, channel)
 
   return (
-    <div className="card form-card">
+    <div className="card form-card rule-card">
       <h2 className="card-title">
         <BellRing size={16} strokeWidth={1.75} />
         Bildirim kuralları
