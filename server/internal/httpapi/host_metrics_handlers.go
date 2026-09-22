@@ -2,10 +2,8 @@ package httpapi
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,15 +11,9 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-const (
-	// Bir grafik piksellerinden fazla nokta gösteremez; yanıtı sınırlamak, tek bir isteğin
-	// server'a belleğinde ne kadar tutturabileceğini de sınırlar.
-	defaultMetricsMaxPoints = 1000
-	maxMetricsMaxPoints     = 5000
-)
-
-// handleGetHostMetrics, panelin host detay geçmiş grafiklerini besler (bkz.
-// docs/MIMARI.md bölüm 7: GET /hosts/:id/metrics?from=&to=).
+// handleGetHostMetrics, panelin host detay sayfasını besler: "Genel" sekmesindeki anlık kartlar
+// dizinin son elemanını kullanır, geçmiş grafiği tüm diziyi (bkz. docs/MIMARI.md bölüm 7:
+// GET /hosts/:id/metrics?from=&to=). Yanıt her zaman ham satırlardır, ortalanmaz/kovalanmaz.
 func (d *Deps) handleGetHostMetrics(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))
 	if err != nil {
@@ -73,17 +65,7 @@ func (d *Deps) handleGetHostMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	maxPoints := defaultMetricsMaxPoints
-	if v := r.URL.Query().Get("max_points"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n < 1 || n > maxMetricsMaxPoints {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("max_points 1 ile %d arasında olmalı", maxMetricsMaxPoints))
-			return
-		}
-		maxPoints = n
-	}
-
-	points, err := d.metrics.ListByHostAndRange(r.Context(), id, from, to, maxPoints)
+	points, err := d.metrics.ListByHostAndRange(r.Context(), id, from, to)
 	if err != nil {
 		log.Printf("get host metrics: %v", err)
 		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")

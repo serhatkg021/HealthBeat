@@ -167,6 +167,8 @@ export const hostsApi = {
     apiRequest<Host>(`/api/v1/hosts/${id}`, { method: 'PUT', body: patch }),
   remove: (id: string) => apiRequest<void>(`/api/v1/hosts/${id}`, { method: 'DELETE' }),
   rotateCredentials: (id: string) => apiRequest<Host>(`/api/v1/hosts/${id}/rotate-credentials`, { method: 'POST' }),
+  // Ham satırlar (ortalanmaz/kovalanmaz): "Genel" sekmesindeki anlık kartlar dizinin son elemanını,
+  // geçmiş grafiği ("Detay") tüm diziyi kullanır.
   metrics: (id: string, from?: string, to?: string) =>
     apiRequest<MetricPoint[]>(`/api/v1/hosts/${id}/metrics`, { query: { from, to } }),
   docker: (id: string) => apiRequest<DockerContainerReport[]>(`/api/v1/hosts/${id}/docker`),

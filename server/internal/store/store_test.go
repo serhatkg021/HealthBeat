@@ -702,74 +702,18 @@ func seedMetrics(t *testing.T, pool interface {
 	}
 }
 
-func TestMetricsRangeIsBoundedAndAveraged(t *testing.T) {
+// ListByHostAndRange hiçbir zaman kovalamaz/ortalamaz: aralıktaki her ham satır, sıralı ve
+// değiştirilmemiş, döner — kısa vadeli bir tepe noktası (ör. bir alert'i tetikleyen okuma)
+// komşu örneklerle ortalanıp kaybolmasın diye.
+func TestMetricsRangeReturnsEveryRawSample(t *testing.T) {
 	pool := testdb.New(t)
 	ctx := context.Background()
 	m := store.NewMetrics(pool)
 	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "A"), "c", "h")
 
 	end := time.Now().UTC().Truncate(time.Second)
-	// cpu'su 0/100 arasında değişen 20.000 birer saniyelik örnek (gerçek ortalama 50).
-	seedMetrics(t, pool, host, end, 20000, time.Second, `(CASE WHEN g % 2 = 0 THEN 0 ELSE 100 END)`)
-	from := end.Add(-20000 * time.Second)
-
-	pts, err := m.ListByHostAndRange(ctx, host, from, end, 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(pts) < 90 || len(pts) > 102 {
-		t.Fatalf("%d points for 20,000 samples with maxPoints=100", len(pts))
-	}
-	// İç kovalar birçok örneğin ortalamasını alır: 0/100 dönüşümü ~50 çıkmalı; ham satırlar
-	// bunu asla vermez.
-	mid := pts[len(pts)/2]
-	if mid.CPUUsagePct < 45 || mid.CPUUsagePct > 55 || mid.RAMUsagePct != 40 {
-		t.Fatalf("interior bucket cpu=%v ram=%v, want ~50 / 40", mid.CPUUsagePct, mid.RAMUsagePct)
-	}
-	if len(mid.Disk) != 1 || mid.Disk[0].Mount != "/" {
-		t.Fatalf("bucket lost its disk reading: %+v", mid.Disk)
-	}
-	for i := 1; i < len(pts); i++ {
-		if !pts[i].Timestamp.After(pts[i-1].Timestamp) {
-			t.Fatal("points are not strictly ascending")
-		}
-	}
-	if pts[0].Timestamp.Before(from.Add(-time.Duration(200) * time.Second)) {
-		t.Fatalf("first bucket %v starts far before the requested range %v", pts[0].Timestamp, from)
-	}
-
-	// Kova kenarları "from"a göreli değil sabitlenmiştir: pencereyi bir saniye kaydırmak paylaşılan
-	// kovaları aynı zaman damgalarında bırakmalı (titreme yok).
-	pts2, err := m.ListByHostAndRange(ctx, host, from.Add(time.Second), end.Add(time.Second), 100)
-	if err != nil {
-		t.Fatal(err)
-	}
-	seen := map[time.Time]bool{}
-	for _, p := range pts {
-		seen[p.Timestamp] = true
-	}
-	shared := 0
-	for _, p := range pts2 {
-		if seen[p.Timestamp] {
-			shared++
-		}
-	}
-	if shared < len(pts)-3 {
-		t.Fatalf("only %d of %d bucket timestamps survived a 1s window shift; buckets are not anchored", shared, len(pts))
-	}
-}
-
-func TestMetricsRangeReturnsRawWhenItFits(t *testing.T) {
-	pool := testdb.New(t)
-	ctx := context.Background()
-	m := store.NewMetrics(pool)
-	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "A"), "c", "h")
-
-	end := time.Now().UTC().Truncate(time.Second)
-	// 30 örnek, 60 sn arayla, cpu = 10,20,...: herhangi bir kovaya göre seyrek; bu yüzden her
-	// kova en fazla bir örnek tutar ve değişmeden (ortalaması alınmadan) dönmeli.
 	seedMetrics(t, pool, host, end, 30, time.Minute, `(10 + (29 - g) * 1)`)
-	pts, err := m.ListByHostAndRange(ctx, host, end.Add(-time.Hour), end, 1000)
+	pts, err := m.ListByHostAndRange(ctx, host, end.Add(-time.Hour), end)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -781,33 +725,36 @@ func TestMetricsRangeReturnsRawWhenItFits(t *testing.T) {
 			t.Fatalf("point %d cpu = %v, want %v (raw, unaveraged)", i, p.CPUUsagePct, want)
 		}
 	}
+	for i := 1; i < len(pts); i++ {
+		if !pts[i].Timestamp.After(pts[i-1].Timestamp) {
+			t.Fatal("points are not strictly ascending")
+		}
+	}
 
 	// Aşırı dar / dejenere aralıklar da çalışır.
-	if pts, err := m.ListByHostAndRange(ctx, host, end, end, 10); err != nil || len(pts) != 1 {
+	if pts, err := m.ListByHostAndRange(ctx, host, end, end); err != nil || len(pts) != 1 {
 		t.Fatalf("zero-width range: %d points, err=%v", len(pts), err)
 	}
-	if pts, err := m.ListByHostAndRange(ctx, host, end.Add(time.Hour), end.Add(2*time.Hour), 10); err != nil || len(pts) != 0 {
+	if pts, err := m.ListByHostAndRange(ctx, host, end.Add(time.Hour), end.Add(2*time.Hour)); err != nil || len(pts) != 0 {
 		t.Fatalf("empty range: %d points, err=%v", len(pts), err)
 	}
 }
 
-// İnceleme bulgusu için regresyon: çok geniş aralıklı tek bir istek eskiden her örneği
-// döndürüyordu (ölçüldü: 2,4 sn'de 300.000 nokta).
-func TestMetricsWideRangeCannotReturnEverything(t *testing.T) {
+// Büyük bir örnek sayısı da (ör. 200.000 satır geniş bir aralıkta) bounded/kovalanmaz — hepsi
+// olduğu gibi döner. Yanıt boyutu bilinçli olarak sınırlanmıyor.
+func TestMetricsRangeWithManySamplesReturnsAllOfThem(t *testing.T) {
 	pool := testdb.New(t)
 	m := store.NewMetrics(pool)
 	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "A"), "c", "h")
 	end := time.Now().UTC()
-	seedMetrics(t, pool, host, end, 200000, time.Second, `50`)
+	seedMetrics(t, pool, host, end, 5000, time.Second, `50`)
 
-	start := time.Now()
-	pts, err := m.ListByHostAndRange(context.Background(), host, time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), end, 1000)
+	pts, err := m.ListByHostAndRange(context.Background(), host, time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC), end)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("200,000 samples over a 26-year range -> %d points in %v", len(pts), time.Since(start))
-	if len(pts) > 1100 {
-		t.Fatalf("%d points returned; the response must be bounded near maxPoints", len(pts))
+	if len(pts) != 5000 {
+		t.Fatalf("%d points, want all 5,000 raw samples (no bucketing)", len(pts))
 	}
 }
 

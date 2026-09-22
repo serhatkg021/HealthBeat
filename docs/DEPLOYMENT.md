@@ -74,11 +74,11 @@ sayacını tutar. Server bir reverse proxy'nin arkasına konursa `X-Forwarded-Fo
 
 ### Veritabanı
 
-- **PostgreSQL ≥ 15 gerekir** (şema `UNIQUE NULLS NOT DISTINCT` ve `ON DELETE SET NULL (sütun)` kullanır; metrik
-  grafikleri `date_bin`). Şemanın tamamı: [docs/VERITABANI.md](VERITABANI.md).
-- Metrik grafik uç noktası (`GET /hosts/:id/metrics`) yanıtı `max_points` (varsayılan 1000, en çok
-  5000) ile sınırlar; geniş aralıklar bucket'lanıp ortalaması alınır. Docker container'ları için
-  yalnızca **son durum** saklanır (geçmiş tutulmaz).
+- **PostgreSQL ≥ 15 gerekir** (şema `UNIQUE NULLS NOT DISTINCT` ve `ON DELETE SET NULL (sütun)` kullanır).
+  Şemanın tamamı: [docs/VERITABANI.md](VERITABANI.md).
+- Metrik uç noktası (`GET /hosts/:id/metrics`) aralıktaki her ham örneği olduğu gibi döner — hiçbir kovalama/ortalama
+  yapmaz; çok geniş aralıklı/çok örnekli istekler yanıtı büyütür. Docker container'ları için yalnızca **son durum**
+  saklanır (geçmiş tutulmaz).
 - Kullanıcı e-postaları küçük harfe normalize edilir (veritabanı kısıtı da bunu zorlar).
 
 ### Veritabanı migration'ları

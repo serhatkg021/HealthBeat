@@ -4,9 +4,8 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-23 — alert e-postaları yeniden tasarlandı: çözülme ve seviye değişimi (iki yönde) artık
-bildiriyor, format organizasyon/hostname/IP ve zaman dilimi içerecek şekilde genişledi; gerçek bir SMTP sağlayıcısıyla
-uçtan uca doğrulandı.
+**Son güncelleme:** 2026-09-23 — `GET /hosts/:id/metrics`'ten kovalama/ortalama kaldırıldı; panelin "Genel" sekmesindeki
+anlık kartlar artık her zaman gerçek son ham okumayı gösteriyor.
 
 ## Durum
 
@@ -48,7 +47,6 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 - Access token'lar tek tek iptal edilemez (≤ 15 dk).
 - Pull agent sertifikası varsayılan olarak doğrulanmaz (`PULL_CA_CERT_FILE` ile açılır).
 - Docker container geçmişi tutulmaz (yalnızca son durum).
-- Metrik grafiği geniş aralıklarda ortalama alır; kısa zirveleri düzleştirir.
 - Bildirim kanalı yalnızca e-posta; SMS/Slack/Discord/Telegram şemada hazır, uygulama yok. İki faktörlü doğrulama alanları yalnızca saklanır.
 - Operatör organizasyon düzeyinde bir şey (iletişim kişileri, kurallar listesi) göremez; yalnızca atandığı sunucuların kurallarını okur.
 
