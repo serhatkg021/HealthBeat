@@ -1042,41 +1042,24 @@ func TestSoleSuperAdminCannotLockTheSystemOut(t *testing.T) {
 	a.expect(409, "PUT", "/api/v1/users/"+backupID.String(), backup, map[string]any{"role": "org_admin"}, nil)
 }
 
-func TestMetricsEndpointBoundsItsResponse(t *testing.T) {
+// /metrics hiçbir zaman kovalamaz/ortalamaz ve yanıtı sınırlamaz: aralıktaki her ham satır döner.
+func TestMetricsEndpointReturnsEveryRawSample(t *testing.T) {
 	a := newAPI(t)
 	root, _ := a.login("root@x.test", "super_admin")
 	org := a.createOrg(root, "o")
 	c := a.createPushHost(root, org, "c")
-	// 20.000 birer saniyelik örnek (regresyon: bu eskiden tam olarak döndürülüyordu).
 	if _, err := a.pool.Exec(context.Background(),
 		`INSERT INTO metrics (host_id, recorded_at, cpu_usage_pct, ram_usage_pct, disk_json)
-		 SELECT $1, now() - (g || ' seconds')::interval, 10, 20, '[]'::jsonb FROM generate_series(1, 20000) g`, c.ID); err != nil {
+		 SELECT $1, now() - (g || ' seconds')::interval, 10, 20, '[]'::jsonb FROM generate_series(1, 5000) g`, c.ID); err != nil {
 		t.Fatal(err)
 	}
 	path := "/api/v1/hosts/" + c.ID.String() + "/metrics?from=2020-01-01T00:00:00Z"
 
 	var pts []map[string]any
 	a.expect(200, "GET", path, root, nil, &pts)
-	if len(pts) == 0 || len(pts) > 1100 {
-		t.Fatalf("default request returned %d points, want between 1 and ~1000", len(pts))
+	if len(pts) != 5000 {
+		t.Fatalf("%d points, want all 5,000 raw samples (no bucketing/bound)", len(pts))
 	}
-
-	pts = nil
-	a.expect(200, "GET", path+"&max_points=50", root, nil, &pts)
-	if len(pts) == 0 || len(pts) > 60 {
-		t.Fatalf("max_points=50 returned %d points", len(pts))
-	}
-
-	for _, q := range []string{"max_points=0", "max_points=-1", "max_points=5001", "max_points=abc", "max_points="} {
-		want := 400
-		if q == "max_points=" { // boş değer "verilmedi" demektir
-			want = 200
-		}
-		if got := a.call("GET", path+"&"+q, root, nil, nil); got != want {
-			t.Errorf("?%s = %d, want %d", q, got, want)
-		}
-	}
-	a.expect(200, "GET", path+"&max_points=5000", root, nil, nil)
 }
 
 func TestDockerEndpointReflectsLatestReport(t *testing.T) {

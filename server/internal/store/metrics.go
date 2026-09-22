@@ -3,14 +3,12 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"math"
 	"sort"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"healthbeat-server/internal/model"
@@ -125,48 +123,17 @@ func (s *Metrics) ReplaceDockerContainers(ctx context.Context, hostID uuid.UUID,
 	return tx.Commit(ctx)
 }
 
-// metricsBucketOrigin, kova sınırlarını ("from"a değil) sabit bir ana bağlar; böylece kayan
-// pencereyle yenilenen bir grafik titremek yerine aynı kova kenarlarını korur.
-const metricsBucketOrigin = "2001-01-01 00:00:00+00"
-
-// ListByHostAndRange, host detay sayfasının geçmiş grafiklerini besler (bkz.
-// docs/MIMARI.md bölüm 7: GET /hosts/:id/metrics?from=&to=).
-//
-// Sonuç yaklaşık maxPoints'i asla aşmaz: aralık bundan fazla satır üretecekse örnekler sabit
-// genişlikli zaman kovalarına gruplanır ve her kova örneklerinin cpu/ram ORTALAMASI olarak
-// döndürülür (kova başlangıcına zaman damgalı, disk = kovanın en son okuması). Örnekleri
-// zaten sığan bir aralık ham satırlar olarak döndürülür. Bu, istenen aralık ne kadar geniş
-// olursa olsun hem yanıt boyutunu hem tek bir isteğin kullanabileceği belleği sınırlar.
-func (s *Metrics) ListByHostAndRange(ctx context.Context, hostID uuid.UUID, from, to time.Time, maxPoints int) ([]model.MetricPoint, error) {
-	if maxPoints < 1 {
-		maxPoints = 1
-	}
-	bucketSeconds := int64(math.Ceil(to.Sub(from).Seconds() / float64(maxPoints)))
-
-	var (
-		rows pgx.Rows
-		err  error
+// ListByHostAndRange, host detay sayfasının hem "Genel" sekmesindeki anlık kartlarını (son
+// nokta) hem geçmiş grafiklerini besler (bkz. docs/MIMARI.md bölüm 7: GET /hosts/:id/metrics?from=&to=).
+// Her zaman HAM satırları döndürür — hiçbir kovalama/ortalama yapmaz.
+func (s *Metrics) ListByHostAndRange(ctx context.Context, hostID uuid.UUID, from, to time.Time) ([]model.MetricPoint, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT recorded_at, cpu_usage_pct, ram_usage_pct, disk_json
+		 FROM metrics
+		 WHERE host_id = $1 AND recorded_at BETWEEN $2 AND $3
+		 ORDER BY recorded_at`,
+		hostID, from, to,
 	)
-	if bucketSeconds <= 1 { // saniyede en fazla bir örnek aralığa düşebilir: ham sığar
-		rows, err = s.pool.Query(ctx,
-			`SELECT recorded_at, cpu_usage_pct, ram_usage_pct, disk_json
-			 FROM metrics
-			 WHERE host_id = $1 AND recorded_at BETWEEN $2 AND $3
-			 ORDER BY recorded_at`,
-			hostID, from, to,
-		)
-	} else {
-		rows, err = s.pool.Query(ctx,
-			`SELECT date_bin($4::interval, recorded_at, $5::timestamptz) AS bucket,
-			        avg(cpu_usage_pct), avg(ram_usage_pct),
-			        (array_agg(disk_json ORDER BY recorded_at DESC))[1]
-			 FROM metrics
-			 WHERE host_id = $1 AND recorded_at BETWEEN $2 AND $3
-			 GROUP BY bucket
-			 ORDER BY bucket`,
-			hostID, from, to, fmt.Sprintf("%d seconds", bucketSeconds), metricsBucketOrigin,
-		)
-	}
 	if err != nil {
 		return nil, err
 	}
