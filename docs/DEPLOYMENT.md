@@ -59,7 +59,7 @@ kullanılmış/süresi dolmuş kayıtlar saatlik işle temizlenir. Kullanıcı y
 
 Denemek için gerçek SMTP gerekmez: `docker compose --profile mail up -d` bir **Mailpit** yakalayıcısı başlatır
 (e-postalar iletilmez, `http://localhost:8025` gelen kutusunda görünür). `.env`'ye `SMTP_HOST=mailpit`, `SMTP_PORT=1025`,
-`SMTP_FROM=healthbeat@localhost`, `PANEL_BASE_URL=http://localhost:8080` ekleyip `docker compose up -d server` ile server'ı yeniden başlat.
+`SMTP_FROM=healthbeat@localhost`, `PANEL_BASE_URL=https://localhost` ekleyip `docker compose up -d server` ile server'ı yeniden başlat.
 
 **Alert e-postaları arka planda gönderilir:** metrik alma (push/pull) yolunu bloklamazlar. SMTP
 oturumu en fazla 30 sn sürer; kuyruk (256) dolarsa yeni bildirimler düşürülür ve log'a yazılır
@@ -206,10 +206,14 @@ gider (Vite dev proxy'si böyle çalışır).
 
 ### Docker ile
 
+Panel kendi TLS'ini kendi sonlandırır — `/certs/cert.pem` + `/certs/key.pem` okur, tıpkı server gibi
+(bölüm 3, "Gerçek sertifika kullanmak"). Compose kullanıyorsan bu, server'la **aynı** `certs`
+volume'üdür (bölüm 6); panel'i tek başına çalıştırıyorsan kendi sertifika çiftini mount et:
+
 ```sh
 cd server/panel
 docker build -t healthbeat-panel .
-docker run -p 8080:8080 -e API_BASE_URL=https://api.example.com healthbeat-panel
+docker run -p 443:8443 -v /yol/certs:/certs:ro -e API_BASE_URL=https://api.example.com healthbeat-panel
 ```
 
 Container açılışta `API_BASE_URL`'i **doğrular** (yalnızca `https://host[:port]` /
@@ -223,13 +227,15 @@ Container açılışta `API_BASE_URL`'i **doğrular** (yalnızca `https://host[:
   `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, HSTS. Panel token'larını
   `localStorage`'da tuttuğu için (bilinen v1 trade-off'u) script enjeksiyonuna karşı asıl
   savunma bu CSP'dir.
-- Container **düz HTTP (8080)** konuşur; **TLS'i önüne koyduğun load balancer / reverse
-  proxy** (Caddy, Traefik, bulut LB, ...) sonlandırmalıdır. Panel sadece HTTPS üzerinden
-  açılmalıdır.
+- Container yalnızca **HTTPS (8443, dışarıya istediğin porttan yayınlarsın)** dinler; düz HTTP hiç
+  sunulmaz. `/certs`'te sertifika yoksa nginx açılmayı reddeder — bilerek: yarım bir yapılandırmayla
+  sessizce HTTP'ye düşmek yerine.
+- `/certs/cert.pem`+`key.pem` değişince (yıllık rotasyon gibi) nginx bunu **kendiliğinden algılamaz**
+  (server'ın Go tarafındaki hot-reload'unun aksine); container'ı yeniden başlat.
 
 ### Docker'sız
-`npm ci && npm run build`, ardından `dist/` içeriğini herhangi bir static host'a koy,
-`config.js`'i elle düzenle ve SPA fallback'i aç (nginx: `try_files $uri /index.html;`).
+`npm ci && npm run build`, ardından `dist/` içeriğini kendi TLS'ini sonlandıran bir static
+host'a koy, `config.js`'i elle düzenle ve SPA fallback'i aç (nginx: `try_files $uri /index.html;`).
 CSP'yi kendi host'unda da uygulamanı öneririz (`deploy/nginx.conf.template`'e bak).
 
 ### Server tarafı: CORS
@@ -252,7 +258,7 @@ olmadığından CORS'tan etkilenmez.
 - [ ] Birden çok kopya ve otomatik migration kullanılacaksa `AUTO_MIGRATE` kararı verildi (ör. üretimde `false` + dağıtım adımında `migrate up`)
 - [ ] API için CA imzalı sertifika + otomatik yenileme (certbot) kurulu
 - [ ] `CORS_ALLOWED_ORIGINS` yalnızca panel origin'ini içeriyor
-- [ ] Panel yalnızca HTTPS üzerinden erişilebilir
+- [ ] Panel gerçek bir sertifika sunuyor (kendinden imzalı değil) — bkz. "Gerçek sertifika kullanmak"
 - [ ] `SMTP_*` ayarlandı ve bir test alert'iyle e-postanın gittiği görüldü
 - [ ] "Şifremi unuttum" isteniyorsa `PANEL_BASE_URL` da ayarlandı ve bir hesapla sıfırlama e-postası uçtan uca denendi
 - [ ] Agent'lar `insecure_skip_verify: false` ile bağlanıyor (özel CA kullanıyorsan `ca_cert_file` ile)
@@ -273,7 +279,7 @@ server + panel'i tek komutla ayağa kaldırır:
 docker compose up -d --build
 ```
 
-- **Panel:** `http://localhost:8080` (`HB_PANEL_PORT`) · **API:** `https://localhost:8443` (`HB_API_PORT`, agent'lar buraya bağlanır).
+- **Panel:** `https://localhost` (`HB_PANEL_PORT`, varsayılan `443`) · **API:** `https://localhost:8443` (`HB_API_PORT`, agent'lar buraya bağlanır). İkisi de aynı kendinden imzalı sertifikayı sunar (aşağıdaki "Gerçek sertifika kullanmak"); tarayıcı ilk seferde bir güven uyarısı gösterir.
 - `init-env.sh` var olan bir `.env`'e **dokunmaz** — sırları yeniden üretmek istersen dosyayı
   sil ve yeniden çalıştır (bu, saklı pull secret'ları ve mevcut oturumları geçersiz kılar).
 - Çıktıdaki geçici admin şifresi yalnızca o an gösterilir (`.env`'de `BOOTSTRAP_ADMIN_PASSWORD`
@@ -286,16 +292,25 @@ docker compose up -d --build
 | `db` | PostgreSQL 16, `pgdata` volume'ünde. |
 | `certs-init` | Tek seferlik: `certs` volume'ünde sertifika yoksa kendinden imzalı bir çift yazar, sonra çıkar. Sertifika **varsa dokunmaz**. |
 | `server` | API server; `db` sağlıklı ve `certs-init` tamamlanınca başlar. |
-| `panel` | Panel; `API_PROXY_URL=https://server:8443` ile panel `/api/` isteklerini server'a **kendi origin'inden** proxy'ler (CORS ve sertifika onayı gerekmez — bkz. `server/panel/deploy/docker-entrypoint.d/15-healthbeat-config.sh`). Panel ile API'yi ayrı alan adlarında sunacaksan `.env`'de `API_PROXY_URL=` (boş) yap, `API_BASE_URL` ve `CORS_ALLOWED_ORIGINS` ver (bölüm 4). |
+| `panel` | Panel; kendi TLS'ini `certs` volume'ünden (server'la aynı sertifika) sonlandırır. `API_PROXY_URL=https://server:8443` ile panel `/api/` isteklerini server'a **kendi origin'inden** proxy'ler (CORS ve sertifika onayı gerekmez — bkz. `server/panel/deploy/docker-entrypoint.d/15-healthbeat-config.sh`). Panel ile API'yi ayrı alan adlarında sunacaksan `.env`'de `API_PROXY_URL=` (boş) yap, `API_BASE_URL` ve `CORS_ALLOWED_ORIGINS` ver (bölüm 4). |
 
 **Kalıcı veriler** adlandırılmış volume'lerdedir; `docker compose down` / `up` onları **silmez**:
-`pgdata` (tüm kullanıcılar, sunucular, metrikler, alert'ler) ve `certs` (server'ın okuduğu TLS
-sertifikası). Volume'leri silmek yalnızca `docker compose down -v` ile olur.
+`pgdata` (tüm kullanıcılar, sunucular, metrikler, alert'ler) ve `certs` (server VE panelin okuduğu TLS
+sertifikası — ikisi de aynı domain'i sunduğu için tek çift yeter). Volume'leri silmek yalnızca
+`docker compose down -v` ile olur.
 
-**Gerçek sertifika kullanmak** için `certs-init` ilk çalışmadan önce (ya da volume'ü temizleyip
-yeniden) `cert.pem` + `key.pem`'i `certs` volume'üne koy — dosya varsa `certs-init` dokunmaz.
-Agent'ların server'a hangi adres(ler)le bağlanacağını kendinden imzalı sertifika için
-`HB_TLS_HOSTS`'a yaz (yalnızca **ilk** oluşturmada okunur, virgülle ayrılmış DNS/IP).
+**Panel her zaman HTTPS'tir**, kendinden imzalı ya da gerçek bir sertifikayla — hiçbir zaman düz HTTP
+sunmaz, bu yüzden `HB_PANEL_BIND` varsayılanı `0.0.0.0`'dır. Gerçek sertifikan yoksa tarayıcı kendinden
+imzalı olana bir kez güven uyarısı gösterir; bağlantı yine de uçtan uca şifrelidir.
+
+**Gerçek sertifika kullanmak** (önerilir — nereden geldiği bu projenin ilgi alanı dışında: satın alınmış,
+müşterinin verdiği, bir CA'ya imzalattığın, fark etmez) için `certs-init` ilk çalışmadan önce (ya da
+volume'ü temizleyip yeniden) `cert.pem` + `key.pem`'i `certs` volume'üne koy — dosya varsa `certs-init`
+dokunmaz, **server ve panel aynı çifti okur.** Sunucunun/panelin hangi domain(ler) için geçerli olacağını
+kendinden imzalı sertifika için `HB_TLS_HOSTS`'a yaz (yalnızca **ilk** oluşturmada okunur, virgülle ayrılmış
+DNS/IP; tarayıcının VE agent'ların bağlanacağı gerçek domain'i buraya ekle, ör.
+`HB_TLS_HOSTS=healthbeat.xxx.com`). Yenilemede aynı iki dosyayı değiştirirsin; server bunu kendiliğinden
+algılar, panel (nginx) container'ının yeniden başlatılması gerekir.
 
 **Yedekleme:** `docker compose exec db pg_dump -U healthbeat healthbeat > backup.sql` (veya
 volume'ü doğrudan yedekle). `.env`'deki `JWT_*`, `SECRETS_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`'ü

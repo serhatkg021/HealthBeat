@@ -41,6 +41,8 @@ openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 
   -keyout "$dir/key.pem" -out "$dir/cert.pem" 2>/dev/null
 
 chown "$uid:$uid" "$dir/key.pem" "$dir/cert.pem"
-chmod 600 "$dir/key.pem"
+# 640, salt sahibine değil: panel (nginx) de aynı çifti okur, sahibiyle aynı GRUPTADIR ama
+# farklı bir kullanıcıdır (bkz. server/panel/Dockerfile).
+chmod 640 "$dir/key.pem"
 chmod 644 "$dir/cert.pem"
 echo "healthbeat: kendinden imzalı sertifika üretildi ($san); gerçek sertifikanı $dir içine cert.pem/key.pem olarak koyarak değiştirebilirsin"

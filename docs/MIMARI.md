@@ -107,7 +107,8 @@ Kurallar:
 - Kısa ömürlü access token + döndürülen refresh token (aile bazlı iptal; yeniden kullanım tüm aileyi kapatır).
 - Yönetici tarafından oluşturulan hesap ilk girişte şifresini değiştirmek zorundadır.
 - E-posta ile şifre sıfırlama (tek kullanımlık, kısa ömürlü, yalnızca özet saklanır).
-- HTTPS zorunludur (TLS terminasyonu olmadan panel açılmaz).
+- HTTPS zorunludur: panel ve API, aynı domain için aynı sertifikayı (kendinden imzalı ya da operatörün sağladığı;
+  bkz. `docs/DEPLOYMENT.md`) kendi başlarına sunar — düz HTTP hiçbir zaman servis edilmez.
 - Rol bazlı erişim her uçta uygulanır (bölüm 4).
 - **Audit log:** kritik işlemler (sunucu/organizasyon/kullanıcı/eşik/kişi/bildirim kuralı değişiklikleri, girişler) kim, ne
   zaman, hangi IP'den olduğuyla kaydedilir.
