@@ -56,9 +56,11 @@ release dalı açma: doğrudan `main`'dan etiketle.
 
 ## 6. GitHub ayarları (bir kez)
 
-Settings → Branches → `main` için: PR zorunlu, durum kontrolleri (CI) zorunlu, doğrudan push kapalı. Settings → Tags: `agent/*`
-ve `server/*` etiketlerini yalnızca yöneticiler oluşturabilsin. **Not:** özel (private) repolarda bu koruma kuralları GitHub
-planına bağlıdır; kullanılamıyorsa bu belgedeki kurallar disiplinle uygulanır.
+Settings → Branches → `main` için: PR zorunlu, durum kontrolleri (CI) zorunlu, doğrudan push kapalı. Settings → General →
+Pull Requests: **"Automatically delete head branches"** açık — bir PR birleşince dalı GitHub kendisi siler (bölüm 1'deki "birleşince
+dalı sil" kuralını elle yapmaya gerek kalmaz). Settings → Tags: `agent/*` ve `server/*` etiketlerini yalnızca yöneticiler
+oluşturabilsin. **Not:** özel (private) repolarda bu koruma kuralları GitHub planına bağlıdır; kullanılamıyorsa bu belgedeki
+kurallar disiplinle uygulanır.
 
 ## 7. Testleri yerelde çalıştırma
 
