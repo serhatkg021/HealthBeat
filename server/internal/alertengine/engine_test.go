@@ -384,11 +384,21 @@ func TestResolvedEmailShowsTheResolvingReadingNotTheLastEscalatedOne(t *testing.
 	if len(msgs) != 4 { // açık, kritiğe yükseldi, uyarıya düştü, çözüldü
 		t.Fatalf("%d emails total, want 4", len(msgs))
 	}
-	if !strings.Contains(msgs[3].Text(), "ÇÖZÜLDÜ") {
-		t.Fatalf("last email must be the resolved one:\n%s", msgs[3].Text())
+	// Teslimat 2 paralel işçiyle yapılır: kuyruğa alma sırası korunsa da, e-postaların
+	// SMTP'ye ulaşma sırası garantili değildir — ÇÖZÜLDÜ olanı konuma göre değil içeriğe
+	// göre bulunur.
+	var resolvedEmail *testsmtp.Message
+	for i := range msgs {
+		if strings.Contains(msgs[i].Text(), "ÇÖZÜLDÜ") {
+			resolvedEmail = &msgs[i]
+			break
+		}
 	}
-	if !strings.Contains(msgs[3].Text(), "Değer: %20,00 (eşik: %80,00)") {
-		t.Errorf("resolved email must show the resolving reading (20,00), not the stale de-escalated one (85):\n%s", msgs[3].Text())
+	if resolvedEmail == nil {
+		t.Fatalf("no resolved (ÇÖZÜLDÜ) email among %d messages", len(msgs))
+	}
+	if !strings.Contains(resolvedEmail.Text(), "Değer: %20,00 (eşik: %80,00)") {
+		t.Errorf("resolved email must show the resolving reading (20,00), not the stale de-escalated one (85):\n%s", resolvedEmail.Text())
 	}
 }
 
