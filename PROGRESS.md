@@ -52,10 +52,9 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Doğrulanmadı
 
-- GHCR'dan `docker compose pull`, release paketinin gerçek makinede kurulumu, gerçek SMTP sağlayıcısıyla alert e-postası,
+- GHCR'dan `docker compose pull`, release paketinin gerçek makinede kurulumu,
   gerçek systemd/SELinux/arm64 çalışma zamanı (ayrıntı: `docs/DISTRIBUTION.md` §10).
 
 ## Sıradaki işler
 
-1. SMTP'yi gerçek bir sağlayıcıyla dene (alert e-postası + şifre sıfırlama).
-2. Ek bildirim kanalları (SMS, Slack, Discord, Telegram) ve iki faktörlü doğrulama.
+1. Ek bildirim kanalları (SMS, Slack, Discord, Telegram) ve iki faktörlü doğrulama.

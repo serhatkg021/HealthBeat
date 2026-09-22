@@ -52,7 +52,7 @@ func newAPIWithLimits(t *testing.T, limits httpapi.RateLimits) *api {
 	t.Helper()
 	pool := testdb.New(t)
 	tokens := authsvc.NewTokenService([]byte("access"), []byte("refresh"), 15*time.Minute, time.Hour)
-	engine := alertengine.New(pool, notify.New(notify.Config{})) // yalnızca log'a yazan posta
+	engine := alertengine.New(pool, notify.New(notify.Config{}), "") // yalnızca log'a yazan posta
 	deps := httpapi.NewDeps(pool, tokens, engine, limits, testdb.SecretBox(t))
 	return &api{t: t, pool: pool, handler: deps.Router(), tokens: tokens, deps: deps}
 }
@@ -1607,7 +1607,7 @@ func TestAnyUserCanChangeTheirPasswordAndThatEndsTheirOtherSessions(t *testing.T
 func TestChangePasswordGuessesAreRateLimited(t *testing.T) {
 	pool := testdb.New(t)
 	tokens := authsvc.NewTokenService([]byte(strings.Repeat("a", 32)), []byte(strings.Repeat("r", 32)), 15*time.Minute, time.Hour)
-	deps := httpapi.NewDeps(pool, tokens, alertengine.New(pool, notify.New(notify.Config{})),
+	deps := httpapi.NewDeps(pool, tokens, alertengine.New(pool, notify.New(notify.Config{}), ""),
 		httpapi.RateLimits{AuthFailuresPerMinute: 60, IngestPerMinute: 60}, testdb.SecretBox(t))
 	a := &api{t: t, pool: pool, handler: deps.Router(), tokens: tokens}
 	testdb.User(t, pool, "u@x.test", "operator", password)
