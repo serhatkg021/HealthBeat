@@ -66,7 +66,7 @@ func main() {
 		Password: cfg.SMTPPassword,
 		From:     cfg.SMTPFrom,
 	})
-	alertEngine := alertengine.New(pool, mailer)
+	alertEngine := alertengine.New(pool, mailer, cfg.PanelBaseURL)
 	// pool.Close'un defer'inden sonra kaydedildiği için önce çalışır: kuyruktaki alert e-postaları
 	// veritabanı kapanmadan önce (sınırlı sürede) teslim edilir.
 	defer func() {

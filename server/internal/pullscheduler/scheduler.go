@@ -199,7 +199,7 @@ func (s *Scheduler) pollOne(ctx context.Context, c store.PullHostInfo) {
 		log.Printf("pull scheduler: mark host %s online: %v", c.ID, err)
 	}
 
-	s.engine.ResolveOffline(ctx, c.ID)
+	s.engine.ResolveOffline(ctx, c.ID, c.OrganizationID)
 	s.engine.EvaluateDocker(ctx, c.ID, c.OrganizationID, payload.DockerContainers)
 	s.engine.EvaluateMetrics(ctx, c.ID, c.OrganizationID, payload.CPUUsagePct, payload.RAMUsagePct, payload.Disk)
 }

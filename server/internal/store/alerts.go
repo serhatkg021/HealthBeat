@@ -105,19 +105,49 @@ func (s *Alerts) UpdateLevel(ctx context.Context, id uuid.UUID, level string, va
 	return err
 }
 
-func (s *Alerts) Resolve(ctx context.Context, id uuid.UUID) error {
-	_, err := s.pool.Exec(ctx, `UPDATE alerts SET status = 'resolved', resolved_at = now() WHERE id = $1 AND status <> 'resolved'`, id)
-	return err
+// Resolve bir alert'i çözer ve güncel hâlini döndürür (bildirim e-postası bunun üzerinden kurulur).
+// Alert zaten çözülmüşse (eşzamanlı bir çağrı önce davranmış) ErrNotFound döner — bu bir hata değil,
+// çağıranın ikinci kez bildirim göndermemesi için bir işarettir.
+//
+// value/threshold verilirse (eşik-tabanlı çözülmede: cpu/ram/disk/docker_restart eşiğin altına
+// dönünce), kaydı da bu ÇÖZÜLME anındaki okumaya günceller — yoksa alert'in son yükseltildiği
+// andaki (eşiğin hâlâ üstündeki) eski değer kalır ve "Değer: %52 (eşik: %40)" gibi, gerçekte artık
+// eşiğin altına inmiş bir okumayı yanlışlıkla üstündeymiş gibi gösteren bir e-postaya yol açar.
+// Diğer çözülme yolları (mount/container kaybolması, host online olması) sayısal bir okuma
+// taşımaz; onlar nil geçer ve son bilinen değer/eşik olduğu gibi kalır.
+func (s *Alerts) Resolve(ctx context.Context, id uuid.UUID, value, threshold *float64) (model.Alert, error) {
+	row := s.pool.QueryRow(ctx,
+		`UPDATE alerts SET status = 'resolved', resolved_at = now(),
+		        value = COALESCE($2, value), threshold = COALESCE($3, threshold)
+		 WHERE id = $1 AND status <> 'resolved' RETURNING `+alertColumns,
+		id, value, threshold,
+	)
+	a, err := scanAlert(row)
+	if err != nil {
+		if isNoRows(err) {
+			return model.Alert{}, ErrNotFound
+		}
+		return model.Alert{}, err
+	}
+	return a, nil
 }
 
-// ResolveOpenByHostAndMetric hem normal eşik toparlanması hem de host yeniden rapor
-// verdiğinde host_offline alert'ini kendiliğinden çözmek için kullanılır.
-func (s *Alerts) ResolveOpenByHostAndMetric(ctx context.Context, hostID uuid.UUID, alertType string) error {
-	_, err := s.pool.Exec(ctx,
-		`UPDATE alerts SET status = 'resolved', resolved_at = now() WHERE host_id = $1 AND alert_type = $2 AND status = 'open'`,
+// ResolveOpenByHostAndMetric hem normal eşik toparlanması hem de host yeniden rapor verdiğinde
+// host_offline alert'ini kendiliğinden çözmek için kullanılır; çözülen alert'i döndürür (ya da
+// açık bir şey yoksa ErrNotFound — bildirim gerekmediğinin işareti).
+func (s *Alerts) ResolveOpenByHostAndMetric(ctx context.Context, hostID uuid.UUID, alertType string) (model.Alert, error) {
+	row := s.pool.QueryRow(ctx,
+		`UPDATE alerts SET status = 'resolved', resolved_at = now() WHERE host_id = $1 AND alert_type = $2 AND status = 'open' RETURNING `+alertColumns,
 		hostID, alertType,
 	)
-	return err
+	a, err := scanAlert(row)
+	if err != nil {
+		if isNoRows(err) {
+			return model.Alert{}, ErrNotFound
+		}
+		return model.Alert{}, err
+	}
+	return a, nil
 }
 
 // ListOpen, bir host'ın tek bir metrik türündeki tüm açık alert'lerini subject'inden

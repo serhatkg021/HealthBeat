@@ -143,15 +143,50 @@ func TestAlertLifecycleAndDedupLookup(t *testing.T) {
 	}
 
 	b, _ := alerts.Create(ctx, host, "ram", "critical")
-	if err := alerts.Resolve(ctx, b.ID); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := alerts.GetByID(ctx, b.ID)
-	if got.Status != model.AlertStatusResolved || got.ResolvedAt == nil {
-		t.Fatalf("resolved alert = %+v", got)
+	resolved, err := alerts.Resolve(ctx, b.ID, nil, nil)
+	if err != nil || resolved.Status != model.AlertStatusResolved || resolved.ResolvedAt == nil {
+		t.Fatalf("Resolve: %+v err=%v", resolved, err)
 	}
 	if _, err := alerts.Acknowledge(ctx, b.ID, ackBy); !errors.Is(err, store.ErrNotFound) {
 		t.Fatal("resolved alert could be acknowledged")
+	}
+}
+
+// Regresyon: eşik-tabanlı bir çözülmede value/threshold verilmezse alert, seviyesinin son
+// yükseltildiği andaki (hâlâ eşik üstü) eski okumayla kalırdı — bildirim e-postasında "eşiğin
+// altına döndü" derken değeri hâlâ eşiğin üstünde gösterirdi. Resolve artık verilen okumayla
+// bu kolonları da günceller.
+func TestResolveUpdatesValueAndThresholdToTheResolvingReading(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	alerts := store.NewAlerts(pool)
+	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "A"), "h", "h")
+
+	stale, staleThreshold := 64.9, 60.0
+	a, _, err := alerts.CreateIfNoneOpen(ctx, host, "ram", "", "critical", &stale, &staleThreshold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolving, warningThreshold := 38.2, 40.0
+	resolved, err := alerts.Resolve(ctx, a.ID, &resolving, &warningThreshold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Value == nil || *resolved.Value != resolving || resolved.Threshold == nil || *resolved.Threshold != warningThreshold {
+		t.Fatalf("resolved = %+v, want value=%v threshold=%v", resolved, resolving, warningThreshold)
+	}
+
+	// nil verilirse (sayısal bir okuması olmayan çözülme yolları) eski değer olduğu gibi kalır.
+	b, _, err := alerts.CreateIfNoneOpen(ctx, host, "cpu", "", "warning", &stale, &staleThreshold)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedNoReading, err := alerts.Resolve(ctx, b.ID, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolvedNoReading.Value == nil || *resolvedNoReading.Value != stale {
+		t.Fatalf("resolved without a reading = %+v, want the value unchanged (%v)", resolvedNoReading, stale)
 	}
 }
 
@@ -626,7 +661,7 @@ func TestCreateIfNoneOpenIsAtomicPerHostAndMetric(t *testing.T) {
 	if err != nil || !created {
 		t.Fatalf("after acknowledge: created=%v err=%v", created, err)
 	}
-	alerts.Resolve(ctx, second.ID)
+	alerts.Resolve(ctx, second.ID, nil, nil)
 	if _, created, _ = alerts.CreateIfNoneOpen(ctx, host, "cpu", "", "warning", nil, nil); !created {
 		t.Fatal("after resolve a new alert must be able to open")
 	}

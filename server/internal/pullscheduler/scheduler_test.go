@@ -112,7 +112,7 @@ func newEnvTLS(t *testing.T, interval int, h http.HandlerFunc, cert *tls.Certifi
 		t.Fatal(err)
 	}
 
-	engine := alertengine.New(pool, notify.New(notify.Config{}))
+	engine := alertengine.New(pool, notify.New(notify.Config{}), "")
 	return &env{t: t, ctx: context.Background(), pool: pool, s: New(pool, engine, box, rootCAs), org: org, host: host, fake: fake, engine: engine}
 }
 
