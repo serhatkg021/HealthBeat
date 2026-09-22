@@ -94,7 +94,7 @@ func (f *fixture) alertCount(t *testing.T) int {
 func TestHungSMTPDoesNotBlockIngest(t *testing.T) {
 	f := newFixture(t, 1)
 	hung := startHungSMTP(t)
-	e := New(f.pool, hung.mailer())
+	e := New(f.pool, hung.mailer(), "")
 
 	start := time.Now()
 	e.EvaluateMetrics(context.Background(), f.hosts[0], f.org, 97, 10, nil)
@@ -118,7 +118,7 @@ func TestHungSMTPDoesNotBlockIngest(t *testing.T) {
 func TestFullMailQueueDropsWithoutBlocking(t *testing.T) {
 	f := newFixture(t, 4)
 	hung := startHungSMTP(t)
-	e := newEngine(f.pool, hung.mailer(), 2, 1) // 1 işçi (takılı) + 2 tane daha için yer
+	e := newEngine(f.pool, hung.mailer(), "", 2, 1) // 1 işçi (takılı) + 2 tane daha için yer
 
 	start := time.Now()
 	for _, c := range f.hosts { // 4 host x (cpu + ram) = 8 alert, kuyruğun alabileceğinden çok daha fazla
@@ -145,7 +145,7 @@ func TestFullMailQueueDropsWithoutBlocking(t *testing.T) {
 func TestCloseDeliversQueuedMailAndLaterNotificationsAreIgnored(t *testing.T) {
 	f := newFixture(t, 3)
 	smtp := testsmtp.Start(t)
-	e := New(f.pool, notify.New(notify.Config{Host: smtp.Host, Port: smtp.Port, From: "hb@x.test"}))
+	e := New(f.pool, notify.New(notify.Config{Host: smtp.Host, Port: smtp.Port, From: "hb@x.test"}), "")
 
 	for _, c := range f.hosts[:2] {
 		e.EvaluateMetrics(context.Background(), c, f.org, 97, 10, nil)

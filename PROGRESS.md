@@ -4,7 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-22 — v1.0.0 yayınlandı (`agent/v1.0.0`, `server/v1.0.0`); panelin yeni ekranları tarayıcıda gezildi.
+**Son güncelleme:** 2026-09-23 — alert e-postaları yeniden tasarlandı: çözülme ve seviye değişimi (iki yönde) artık
+bildiriyor, format organizasyon/hostname/IP ve zaman dilimi içerecek şekilde genişledi; gerçek bir SMTP sağlayıcısıyla
+uçtan uca doğrulandı.
 
 ## Durum
 
@@ -52,10 +54,9 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Doğrulanmadı
 
-- GHCR'dan `docker compose pull`, release paketinin gerçek makinede kurulumu, gerçek SMTP sağlayıcısıyla alert e-postası,
+- GHCR'dan `docker compose pull`, release paketinin gerçek makinede kurulumu,
   gerçek systemd/SELinux/arm64 çalışma zamanı (ayrıntı: `docs/DISTRIBUTION.md` §10).
 
 ## Sıradaki işler
 
-1. SMTP'yi gerçek bir sağlayıcıyla dene (alert e-postası + şifre sıfırlama).
-2. Ek bildirim kanalları (SMS, Slack, Discord, Telegram) ve iki faktörlü doğrulama.
+1. Ek bildirim kanalları (SMS, Slack, Discord, Telegram) ve iki faktörlü doğrulama.

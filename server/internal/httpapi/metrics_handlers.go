@@ -64,7 +64,7 @@ func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ingest metrics: mark online: %v", err)
 	}
 
-	d.alertEngine.ResolveOffline(r.Context(), hostID)
+	d.alertEngine.ResolveOffline(r.Context(), hostID, orgID)
 	d.alertEngine.EvaluateDocker(r.Context(), hostID, orgID, req.DockerContainers)
 	d.alertEngine.EvaluateMetrics(r.Context(), hostID, orgID, req.CPUUsagePct, req.RAMUsagePct, req.Disk)
 

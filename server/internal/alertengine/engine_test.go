@@ -34,6 +34,11 @@ type env struct {
 // denetlenebilsin diye gerçek bir SMTP dinleyicisi.
 func newEnv(t *testing.T) *env {
 	t.Helper()
+	return newEnvWithPanel(t, "https://panel.test")
+}
+
+func newEnvWithPanel(t *testing.T, panelBaseURL string) *env {
+	t.Helper()
 	pool := testdb.New(t)
 	smtp := testsmtp.Start(t)
 	mailer := notify.New(notify.Config{Host: smtp.Host, Port: smtp.Port, From: "hb@x.test"})
@@ -45,7 +50,7 @@ func newEnv(t *testing.T) *env {
 
 	return &env{
 		ctx: context.Background(), pool: pool, smtp: smtp, org: org, host: host, admin: admin,
-		engine: alertengine.New(pool, mailer),
+		engine: alertengine.New(pool, mailer, panelBaseURL),
 		alerts: store.NewAlerts(pool),
 	}
 }
@@ -121,8 +126,14 @@ func TestDedupEscalateResolveRecur(t *testing.T) {
 	if len(rows) != 1 || rows[0].ID != firstID || rows[0].Level != model.AlertLevelCritical {
 		t.Fatalf("after escalation: %+v, want the same alert now critical", rows)
 	}
-	if n := len(e.messages()); n != 1 {
-		t.Fatalf("escalation sent %d emails total, want still 1", n)
+	// Yükselme kendi e-postasını gönderir: uyarıda "vaktim var" diyen biri kritiğe geçtiğinde
+	// bundan habersiz kalmamalı — daha önce bilgilendirilmiş olsa bile tekrar yazılır.
+	msgs := e.messages()
+	if len(msgs) != 2 {
+		t.Fatalf("%d emails total after escalation, want 2 (open + escalated)", len(msgs))
+	}
+	if !strings.Contains(msgs[1].Text(), "Seviye: KRİTİK") {
+		t.Errorf("escalation email missing Seviye: KRİTİK:\n%s", msgs[1].Text())
 	}
 
 	e.feedCPU(20) // toparlanma kendiliğinden çözer
@@ -130,14 +141,27 @@ func TestDedupEscalateResolveRecur(t *testing.T) {
 	if len(rows) != 1 || rows[0].Status != model.AlertStatusResolved || rows[0].ResolvedAt == nil {
 		t.Fatalf("after recovery: %+v, want resolved", rows)
 	}
+	msgs = e.messages() // çözülme kendi e-postasını gönderir
+	if len(msgs) != 3 {
+		t.Fatalf("%d emails total after recovery, want 3 (open + escalated + resolved)", len(msgs))
+	}
+	if !strings.Contains(msgs[2].Text(), "ÇÖZÜLDÜ") {
+		t.Errorf("recovery email missing ÇÖZÜLDÜ:\n%s", msgs[2].Text())
+	}
+	// Regresyon: çözülme e-postası GERÇEK çözülme okumasını göstermeli, alert'in son yükseltildiği
+	// (hâlâ eşik üstü) eski okumayı değil — yoksa "Değer: %97 (eşik: %80)" gibi eşiğin hâlâ
+	// aşılıyormuş görünen, çözülmeyle çelişen bir mail çıkar.
+	if !strings.Contains(msgs[2].Text(), "Değer: %20,00 (eşik: %80,00)") {
+		t.Errorf("resolved email must show the resolving reading (20,00), not the stale escalated one:\n%s", msgs[2].Text())
+	}
 
 	e.feedCPU(90) // yeni bir olay yeni bir alert ve yeni bir e-postadır
 	rows = e.rows(t, "cpu")
 	if len(rows) != 2 {
 		t.Fatalf("after recurrence: %d alerts, want 2", len(rows))
 	}
-	if n := len(e.messages()); n != 2 {
-		t.Fatalf("%d emails after recurrence, want 2", n)
+	if n := len(e.messages()); n != 4 {
+		t.Fatalf("%d emails total after recurrence, want 4 (open + escalated + resolved + new open)", n)
 	}
 }
 
@@ -214,10 +238,25 @@ func TestEmailGoesToSuperAdminsAndThatOrgsAdminsOnly(t *testing.T) {
 	if strings.Join(to, ",") != "admin-acme@x.test,root@x.test" {
 		t.Fatalf("recipients = %v", to)
 	}
-	for _, want := range []string{"KRİTİK CPU alert'i: web-1", "Sunucu: web-1", "Seviye: KRİTİK"} {
+	for _, want := range []string{"CPU kullanım uyarısı", "Organizasyon: acme", "Title: web-1", "Seviye: KRİTİK", "Panel: https://panel.test/hosts/" + e.host.String()} {
 		if !strings.Contains(msgs[0].Text(), want) {
 			t.Errorf("email missing %q:\n%s", want, msgs[0].Text())
 		}
+	}
+}
+
+// panelBaseURL boşsa (kurulumda ayarlanmamışsa) e-postaya asla yarım/geçersiz bir bağlantı
+// eklenmemeli; satır tamamen atlanır.
+func TestEmailOmitsPanelLinkWhenNotConfigured(t *testing.T) {
+	e := newEnvWithPanel(t, "")
+	e.feedCPU(97)
+
+	msgs := e.messages()
+	if len(msgs) != 1 {
+		t.Fatalf("%d emails, want 1", len(msgs))
+	}
+	if strings.Contains(msgs[0].Text(), "Panel:") {
+		t.Errorf("email must not contain a Panel: line when panelBaseURL is empty:\n%s", msgs[0].Text())
 	}
 }
 
@@ -270,9 +309,11 @@ func TestHostNotificationRuleOverridesTheOrganizationRule(t *testing.T) {
 	}
 }
 
-// Alert yükselince, kuralın en düşük seviyesi ancak şimdi aşılan alıcı ilk kez bilgilendirilir; zaten haberdar
-// olana aynı alert için ikinci e-posta gitmez.
-func TestEscalationNotifiesOnlyTheRecipientsWhoseLevelIsNowReached(t *testing.T) {
+// Alert seviyesi değiştiğinde (warning->critical YA DA critical->warning, alert hâlâ açıkken),
+// o anki seviyenin TÜM alıcılarına gider — daha önce başka seviyede bilgilendirilmiş olan da dahil:
+// kimse durumun kötüleştiğinden ya da iyileştiğinden habersiz kalmamalı. Yalnızca AYNI seviyede
+// kalmak yeni e-posta üretmez.
+func TestEscalationNotifiesTheFullNewLevelAudience(t *testing.T) {
 	e := newEnv(t)
 	early := testdb.User(t, e.pool, "early@x.test", "org_admin", "pw")
 	late := testdb.User(t, e.pool, "late@x.test", "org_admin", "pw")
@@ -295,13 +336,59 @@ func TestEscalationNotifiesOnlyTheRecipientsWhoseLevelIsNowReached(t *testing.T)
 	}
 	e.feedCPU(97)
 	msgs = e.messages()
-	if len(msgs) != 2 || len(msgs[1].To) != 1 || msgs[1].To[0] != "late@x.test" {
-		t.Fatalf("after escalation emails = %+v, want a second one to late@ only", msgs)
+	if len(msgs) != 2 {
+		t.Fatalf("%d emails total after escalation, want 2", len(msgs))
+	}
+	to := append([]string(nil), msgs[1].To...)
+	sort.Strings(to)
+	if strings.Join(to, ",") != "early@x.test,late@x.test" {
+		t.Fatalf("escalation recipients = %v, want both early@ and late@ (full critical-level audience)", to)
 	}
 	e.feedCPU(98) // aynı seviyede kalmak yeni e-posta üretmez
-	e.feedCPU(85) // seviye düşünce de üretmez
 	if n := len(e.messages()); n != 2 {
-		t.Fatalf("%d emails in total, want 2", n)
+		t.Fatalf("%d emails in total, want still 2 (same level)", n)
+	}
+
+	e.feedCPU(85) // seviye düşer (kritikten uyarıya, alert hâlâ açık) — bu da kendi e-postasını gönderir
+	msgs = e.messages()
+	if len(msgs) != 3 {
+		t.Fatalf("%d emails total after de-escalation, want 3", len(msgs))
+	}
+	to = append([]string(nil), msgs[2].To...)
+	sort.Strings(to)
+	if strings.Join(to, ",") != "early@x.test" {
+		t.Fatalf("de-escalation recipients = %v, want only early@ (late@'s min_level is critical)", to)
+	}
+	if !strings.Contains(msgs[2].Text(), "Seviye: UYARI") {
+		t.Errorf("de-escalation email missing Seviye: UYARI:\n%s", msgs[2].Text())
+	}
+}
+
+// Regresyon (canlıda yakalandı): kritiğe yükselip sonra uyarıya düşen ve en son eşiğin
+// tamamen altına inerek çözülen bir alert'te, çözülme e-postası GERÇEK çözülme okumasını
+// göstermeli — kritikten uyarıya düşüldüğü andaki eski okumayı değil. Aksi hâlde "Değer" eşiğin
+// hâlâ üstündeymiş gibi görünür ve okuyan "eşik üstüyken nasıl çözüldü?" diye kafası karışır.
+func TestResolvedEmailShowsTheResolvingReadingNotTheLastEscalatedOne(t *testing.T) {
+	e := newEnv(t)
+
+	e.feedCPU(85) // uyarı açılır
+	e.feedCPU(97) // kritiğe yükselir
+	e.feedCPU(85) // uyarıya düşer (hâlâ açık, eski okuması burada 85 olurdu)
+	e.feedCPU(20) // eşiğin tamamen altına iner: çözülür
+
+	rows := e.rows(t, "cpu")
+	if len(rows) != 1 || rows[0].Status != model.AlertStatusResolved {
+		t.Fatalf("after full recovery: %+v, want resolved", rows)
+	}
+	msgs := e.messages()
+	if len(msgs) != 4 { // açık, kritiğe yükseldi, uyarıya düştü, çözüldü
+		t.Fatalf("%d emails total, want 4", len(msgs))
+	}
+	if !strings.Contains(msgs[3].Text(), "ÇÖZÜLDÜ") {
+		t.Fatalf("last email must be the resolved one:\n%s", msgs[3].Text())
+	}
+	if !strings.Contains(msgs[3].Text(), "Değer: %20,00 (eşik: %80,00)") {
+		t.Errorf("resolved email must show the resolving reading (20,00), not the stale de-escalated one (85):\n%s", msgs[3].Text())
 	}
 }
 
@@ -349,10 +436,19 @@ func TestOfflineAlertLifecycle(t *testing.T) {
 		t.Fatalf("%d emails for one outage, want 1", n)
 	}
 
-	e.engine.ResolveOffline(e.ctx, e.host) // host yeniden rapor verdi
+	e.engine.ResolveOffline(e.ctx, e.host, e.org) // host yeniden rapor verdi
 	rows = e.rows(t, model.AlertTypeHostOffline)
 	if rows[0].Status != model.AlertStatusResolved {
 		t.Fatalf("status = %q, want resolved", rows[0].Status)
+	}
+	msgs := e.messages() // kümülatif: kesinti + toparlanma
+	if len(msgs) != 2 {
+		t.Fatalf("%d emails total after recovery, want 2 (outage + recovery)", len(msgs))
+	}
+	for _, want := range []string{"ÇÖZÜLDÜ", "sunucu tekrar çevrimiçi", "Çözülme:", "Çözüm Süresi:"} {
+		if !strings.Contains(msgs[1].Text(), want) {
+			t.Errorf("recovery email missing %q:\n%s", want, msgs[1].Text())
+		}
 	}
 
 	e.engine.RaiseOffline(e.ctx, e.host, e.org) // yeniden sessizleşir: yeni kesinti
@@ -473,7 +569,7 @@ func TestDockerRestartAlertsAreOnePerContainer(t *testing.T) {
 
 	// E-posta container'ı adıyla söyler; böylece okuyan hangisine bakacağını bilir.
 	joined := msgs[0].Text() + msgs[1].Text()
-	for _, want := range []string{"container web", "container db", "Container: web", "Container: db", "docker restart"} {
+	for _, want := range []string{"container restart uyarısı (web)", "container restart uyarısı (db)", "Container: web", "Container: db", "docker restart"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("emails do not mention %q:\n%s", want, joined)
 		}
@@ -634,7 +730,7 @@ func TestDiskAlertsArePerMountAndNameTheMount(t *testing.T) {
 		t.Fatalf("%d emails, want one per alerting mount", len(msgs))
 	}
 	joined := msgs[0].Text() + msgs[1].Text()
-	for _, want := range []string{"mount /data", "mount /boot", "Mount: /data", "Mount: /boot"} {
+	for _, want := range []string{"disk kullanım uyarısı (/data)", "disk kullanım uyarısı (/boot)", "Mount: /data", "Mount: /boot"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("emails do not say which mount is affected (%q missing):\n%s", want, joined)
 		}
@@ -652,8 +748,10 @@ func TestDiskAlertsArePerMountAndNameTheMount(t *testing.T) {
 	if got := e.diskAlerts(t); len(got) != 2 {
 		t.Fatalf("a second mount filling up did not get its own alert: %+v", got)
 	}
-	if n := len(e.messages()); n != 3 {
-		t.Fatalf("%d emails, want 3 (/data, /boot, then /)", n)
+	// Kümülatif: /data açık + /boot açık + /data çözüldü + /boot yükseldi (kritiğe geçiş kendi
+	// e-postasını gönderir, alıcı zaten warning'de bilgilendirilmiş olsa bile) + / açık.
+	if n := len(e.messages()); n != 5 {
+		t.Fatalf("%d emails, want 5 (/data open, /boot open, /data resolved, /boot escalated, / open)", n)
 	}
 }
 
@@ -950,7 +1048,8 @@ func TestMissingDiskAlertResolvesTheMomentTheMountIsBack(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		e.report(t, map[string]float64{"/": 10})
 	}
-	if len(e.missingAlerts(t)) != 1 || len(e.messages()) != 2 {
+	// Kümülatif: kayıp + çözüldü + yeniden kayıp.
+	if len(e.missingAlerts(t)) != 1 || len(e.messages()) != 3 {
 		t.Fatal("a second disappearance must raise a new alert and email")
 	}
 }
