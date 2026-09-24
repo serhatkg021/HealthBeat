@@ -7,6 +7,7 @@
 - [ ] **agent** (`agent/`) → agent hattı etkilenir · `agent/CHANGELOG.md` "Yayınlanmamış" güncellendi
 - [ ] **server / panel** (`server/`, `server/panel/`) → server hattı etkilenir · `server/CHANGELOG.md` "Yayınlanmamış" güncellendi (panel maddeleri "Panel:" ile)
 - [ ] Yalnızca belge / CI (sürüm çıkarmaz)
+- [ ] Görünür etkisi yok (davranışı değiştirmeyen refactor) → madde "Yayınlanmamış"ın sonundaki `### İç değişiklikler (davranış değişmedi)` başlığında (`CONTRIBUTING.md` §3)
 
 ## Kontrol
 

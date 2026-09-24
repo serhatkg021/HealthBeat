@@ -4,6 +4,8 @@ Biçim [Keep a Changelog](https://keepachangelog.com/) ilkelerini izler; sürüm
 Agent'ın **kendi sürüm hattı** vardır: `agent/vX.Y.Z` etiketiyle yayınlanır (server ve panelden bağımsız; bkz.
 `docs/DISTRIBUTION.md`). Her sürümün başlığı `## [X.Y.Z] - YYYY-AA-GG` biçimindedir: `scripts/release-notes.sh agent X.Y.Z`
 release notlarını buradan çıkarır. Server ve panel: `server/CHANGELOG.md`. Uyumluluk kuralları: `docs/COMPATIBILITY.md`.
+Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç değişiklikler (davranış değişmedi)" başlığında listelenir
+(bkz. `CONTRIBUTING.md` §3).
 
 ## [Yayınlanmamış]
 
