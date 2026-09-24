@@ -189,7 +189,7 @@ func TestPolledReportsDriveAlerts(t *testing.T) {
 	alerts := store.NewAlerts(e.pool)
 
 	e.poll()
-	open, err := alerts.GetOpen(e.ctx, e.host.ID, "cpu")
+	open, err := alerts.GetActive(e.ctx, e.host.ID, "cpu")
 	if err != nil || open.Level != model.AlertLevelCritical {
 		t.Fatalf("open cpu alert = %+v, err = %v; want critical", open, err)
 	}
@@ -206,12 +206,12 @@ func TestPolledReportsDriveAlerts(t *testing.T) {
 func TestSuccessfulPollResolvesOfflineAlert(t *testing.T) {
 	e := newEnv(t, 10, report(1, 1))
 	e.engine.RaiseOffline(e.ctx, e.host.ID, e.org)
-	if _, err := store.NewAlerts(e.pool).GetOpen(e.ctx, e.host.ID, model.AlertTypeHostOffline); err != nil {
+	if _, err := store.NewAlerts(e.pool).GetActive(e.ctx, e.host.ID, model.AlertTypeHostOffline); err != nil {
 		t.Fatalf("precondition: offline alert should be open: %v", err)
 	}
 
 	e.poll()
-	if _, err := store.NewAlerts(e.pool).GetOpen(e.ctx, e.host.ID, model.AlertTypeHostOffline); err == nil {
+	if _, err := store.NewAlerts(e.pool).GetActive(e.ctx, e.host.ID, model.AlertTypeHostOffline); err == nil {
 		t.Fatal("offline alert still open after the host answered")
 	}
 }
@@ -376,7 +376,7 @@ func TestPolledContainersDriveRestartAlerts(t *testing.T) {
 	testdb.Threshold(t, e.pool, nil, nil, "docker_restart", 3, 10)
 
 	e.poll()
-	open, err := store.NewAlerts(e.pool).ListOpen(e.ctx, e.host.ID, model.MetricTypeDockerRestart)
+	open, err := store.NewAlerts(e.pool).ListActive(e.ctx, e.host.ID, model.MetricTypeDockerRestart)
 	if err != nil || len(open) != 1 || open[0].Subject != "web" || open[0].Level != model.AlertLevelWarning {
 		t.Fatalf("open docker_restart alerts = %+v err=%v, want a single warning for web", open, err)
 	}

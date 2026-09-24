@@ -165,35 +165,119 @@ func TestDedupEscalateResolveRecur(t *testing.T) {
 	}
 }
 
-// Belgelenmiş karar (PROGRESS.md): onaylamak hâlâ eşiğin üstünde olan bir metriği susturmaz
-// — sonraki okuma yeni bir alert açar.
-func TestAcknowledgedAlertDoesNotSuppressNewOne(t *testing.T) {
-	e := newEnv(t)
-	e.feedCPU(90)
-	open, err := e.alerts.GetOpen(e.ctx, e.host, "cpu")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := e.alerts.Acknowledge(e.ctx, open.ID, e.admin); err != nil {
-		t.Fatal(err)
-	}
+// ---- onay: "gördüm, sustur ama izle" (docs/MIMARI.md bölüm 8) ---------------------------------------------------
 
-	e.feedCPU(90)
-	if rows := e.rows(t, "cpu"); len(rows) != 2 {
-		t.Fatalf("%d alerts, want 2 (one acknowledged, one new open)", len(rows))
+func (e *env) acknowledge(t *testing.T, a model.Alert) {
+	t.Helper()
+	if _, err := e.alerts.Acknowledge(e.ctx, a.ID, e.admin); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestRecoveryDoesNotTouchAcknowledgedAlert(t *testing.T) {
+func (e *env) activeCPU(t *testing.T) model.Alert {
+	t.Helper()
+	a, err := e.alerts.GetActive(e.ctx, e.host, "cpu")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+// Onaylanan alert, metrik eşiğin üstünde kaldıkça yeni bir alert ya da e-posta doğurmaz; eşik altına inince çözülür
+// ve "ÇÖZÜLDÜ" e-postası gider.
+func TestAcknowledgedAlertIsSilencedButWatched(t *testing.T) {
 	e := newEnv(t)
 	e.feedCPU(90)
-	open, _ := e.alerts.GetOpen(e.ctx, e.host, "cpu")
-	e.alerts.Acknowledge(e.ctx, open.ID, e.admin)
+	a := e.activeCPU(t)
+	e.acknowledge(t, a)
+
+	e.feedCPU(90)
+	e.feedCPU(91)
+	rows := e.rows(t, "cpu")
+	if len(rows) != 1 || rows[0].Status != model.AlertStatusAcknowledged {
+		t.Fatalf("alerts after acknowledge = %+v, want the single acknowledged alert", rows)
+	}
+	if n := len(e.messages()); n != 1 {
+		t.Fatalf("%d emails, want 1: acknowledging must silence the same event", n)
+	}
 
 	e.feedCPU(10)
-	got, _ := e.alerts.GetByID(e.ctx, open.ID)
-	if got.Status != model.AlertStatusAcknowledged {
-		t.Fatalf("status = %q, want it left acknowledged", got.Status)
+	got, _ := e.alerts.GetByID(e.ctx, a.ID)
+	if got.Status != model.AlertStatusResolved || got.ResolvedAt == nil {
+		t.Fatalf("status after recovery = %q, want resolved", got.Status)
+	}
+	msgs := e.messages()
+	if len(msgs) != 2 || !strings.Contains(msgs[1].Text(), "ÇÖZÜLDÜ") {
+		t.Fatalf("emails = %d, want the open one and a ÇÖZÜLDÜ one", len(msgs))
+	}
+}
+
+// Onaylanmış bir alert yükselirse (uyarı → kritik) durum ciddileşmiştir: e-posta gider ve onay kalkar. Düşüşte
+// e-posta yine gider ama onay korunur.
+func TestEscalationReopensAcknowledgedAlert(t *testing.T) {
+	e := newEnv(t)
+	e.feedCPU(85) // uyarı
+	e.acknowledge(t, e.activeCPU(t))
+
+	e.feedCPU(97) // kritik
+	a := e.activeCPU(t)
+	if a.Level != model.AlertLevelCritical || a.Status != model.AlertStatusOpen || a.AcknowledgedAt != nil || a.AcknowledgedBy != nil {
+		t.Fatalf("after escalation = %+v, want critical, open and no acknowledgement", a)
+	}
+	if n := len(e.messages()); n != 2 {
+		t.Fatalf("%d emails, want 2 (open + escalation)", n)
+	}
+
+	e.acknowledge(t, a)
+	e.feedCPU(85) // yeniden uyarı
+	a = e.activeCPU(t)
+	if a.Level != model.AlertLevelWarning || a.Status != model.AlertStatusAcknowledged || a.AcknowledgedBy == nil {
+		t.Fatalf("after de-escalation = %+v, want warning and still acknowledged", a)
+	}
+	if n := len(e.messages()); n != 3 {
+		t.Fatalf("%d emails, want 3 (level changes are always notified)", n)
+	}
+	if rows := e.rows(t, "cpu"); len(rows) != 1 {
+		t.Fatalf("%d cpu alerts, want the same single alert throughout", len(rows))
+	}
+}
+
+func TestAcknowledgedOfflineAlertResolvesWhenHostReturns(t *testing.T) {
+	e := newEnv(t)
+	e.engine.RaiseOffline(e.ctx, e.host, e.org)
+	a, err := e.alerts.GetActive(e.ctx, e.host, model.AlertTypeHostOffline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.acknowledge(t, a)
+
+	e.engine.RaiseOffline(e.ctx, e.host, e.org) // hâlâ sessiz
+	if rows := e.rows(t, model.AlertTypeHostOffline); len(rows) != 1 {
+		t.Fatalf("%d offline alerts, want 1: the acknowledged one still covers it", len(rows))
+	}
+
+	e.engine.ResolveOffline(e.ctx, e.host, e.org)
+	if got, _ := e.alerts.GetByID(e.ctx, a.ID); got.Status != model.AlertStatusResolved {
+		t.Fatalf("status = %q, want resolved once the host reports again", got.Status)
+	}
+	if n := len(e.messages()); n != 2 {
+		t.Fatalf("%d emails, want 2 (offline + back online)", n)
+	}
+}
+
+func TestAcknowledgedDiskAlertResolvesWhenMountDisappears(t *testing.T) {
+	e := newEnv(t)
+	e.diskEnv(t)
+	e.feedDisks(map[string]float64{"/": 90, "/data": 10})
+	a, err := e.alerts.GetActiveSubject(e.ctx, e.host, model.MetricTypeDisk, "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.acknowledge(t, a)
+
+	e.feedDisks(map[string]float64{"/data": 10}) // "/" artık raporlanmıyor
+	if got, _ := e.alerts.GetByID(e.ctx, a.ID); got.Status != model.AlertStatusResolved {
+		t.Fatalf("status = %q, want resolved when the mount is gone", got.Status)
 	}
 }
 
@@ -530,7 +614,7 @@ func containers(counts map[string]int) []model.DockerContainerReport {
 
 func (e *env) dockerAlerts(t *testing.T) map[string]model.Alert {
 	t.Helper()
-	open, err := e.alerts.ListOpen(e.ctx, e.host, model.MetricTypeDockerRestart)
+	open, err := e.alerts.ListActive(e.ctx, e.host, model.MetricTypeDockerRestart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -714,7 +798,7 @@ func (e *env) feedDisks(pcts map[string]float64) {
 
 func (e *env) diskAlerts(t *testing.T) map[string]model.Alert {
 	t.Helper()
-	open, err := e.alerts.ListOpen(e.ctx, e.host, model.MetricTypeDisk)
+	open, err := e.alerts.ListActive(e.ctx, e.host, model.MetricTypeDisk)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -994,7 +1078,7 @@ func (e *env) report(t *testing.T, pcts map[string]float64) {
 
 func (e *env) missingAlerts(t *testing.T) map[string]model.Alert {
 	t.Helper()
-	open, err := e.alerts.ListOpen(e.ctx, e.host, model.AlertTypeDiskMissing)
+	open, err := e.alerts.ListActive(e.ctx, e.host, model.AlertTypeDiskMissing)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -36,7 +36,11 @@ girer; sürüm etiketleri yalnızca `main`'dan atılır.** (GitFlow'daki gibi `d
   değilsen üst başlıklara yaz. Yalnızca belge ya da CI değiştiren PR'lar sürüm çıkarmaz ve madde eklemez.
 - **Sözleşme değişikliği (ingest alanı/protokol) tek PR'dadır:** agent tarafı, server tarafı, `server/testdata/payloads/` ve
   `scripts/compat_e2e.sh` birlikte gelir (`docs/COMPATIBILITY.md` §6 kontrol listesi). Dağıtım sırası yine server, sonra agent.
-- **Migration'lar yalnızca ileri yönlü ve eklemelidir** (yeni tablo / nullable sütun); eski server yeni şemayla çalışabilmeli.
+- **Migration'lar yalnızca ileri yönlü ve eklemelidir** (yeni tablo / nullable sütun); güncelleme sırasında hâlâ çalışan
+  eski server yeni şemayla çalışabilmeli. Kaçınılmaz bir index/kısıt değişikliği ya da veri düzeltmesi, bunu bozmadığı
+  gösterilip `docs/COMPATIBILITY.md` kural 6 ve §4'e yazılarak yapılır. Eski bir binary yeni şemayla **açılmaz**; bu yüzden
+  migration içeren her PR'ın CHANGELOG maddesi bunu ve geri dönüş yolunu (`.down.sql` ya da yedek, `docs/DISTRIBUTION.md`
+  §8.3) belirtir ve `.down.sql`'in çalıştığı test edilir.
 - **`PROGRESS.md`** her işin sonuna eklenir; aynı anda açık iki PR aynı dosyanın sonunu değiştirdiği için çakışma çıkarsa
   iki bölümü de koru.
 - Birleştirme biçimi: **squash** (PR başlığı commit iletisi olur; geçmiş temiz kalır). Birleşince dalı sil.

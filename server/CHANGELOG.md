@@ -49,6 +49,19 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   `docs/DEPLOYMENT.md`, "Gerçek sertifika kullanmak".
 
 ### Düzeltildi
+- **Onaylanan alert artık "sustur ama izle":** önceden onaylanan bir alert hiç çözülmüyor, metrik hâlâ eşiğin üstündeyse bir
+  sonraki raporda (≈30 sn içinde) aynı olay için yeni bir alert ve yeni bir e-posta açılıyordu. Artık onaylanan alert çözülene
+  kadar aktif kalıyor: yeni alert/e-posta açılmıyor; eşik altına inince (ya da mount/container kaybolunca, sunucu tekrar rapor
+  verince) çözülüyor ve "ÇÖZÜLDÜ" e-postası gidiyor. Seviye **yükselirse** (uyarı → kritik) e-posta gidiyor ve onay kalkıyor
+  (alert yeniden açık); düşerse onay korunuyor. Migration `000002`, "tek aktif alert" kuralını onaylanmışları da kapsayacak
+  şekilde değiştiriyor ve eski davranışın bıraktığı kopyalarda (aynı sunucu + tür + konu için onaylanmış eski olay + yeniden
+  açılmış olay) en yenisi dışındakileri çözülmüş sayıyor (e-posta gönderilmez). Özet ekranındaki "açık alert" sayısı yine
+  yalnızca onaylanmamışları sayıyor. **Bu sürüm bir migration içerir:** 1.0.x'e yalnızca `HB_VERSION`'ı değiştirerek
+  dönülemez (eski server bilmediği migration'ı görünce açılmaz); geri dönüş `000002_alert_acknowledged_active.down.sql` +
+  geçmiş satırının silinmesiyle ya da güncelleme öncesi yedekle (`docs/DISTRIBUTION.md` §8.3).
+- **Belgeler: geri alma adımları düzeltildi.** `docs/DISTRIBUTION.md` §8.3 ve `docs/COMPATIBILITY.md` kural 6, eski
+  server'ın yeni şemayla açılabileceğini söylüyordu; migration aracı bunu bilerek reddediyor. Artık iki doğru yol
+  (`.down.sql` ile veriyi koruyarak ya da yedekten) anlatılıyor.
 - **Panel üzerinden gelen bütün kullanıcılar tek IP görünüyordu:** Docker Compose'da panel `/api/`'yi server'a proxy'lediği
   için server her isteği panel container'ının IP'sinden geliyor sanıyordu. Sonuçları: tek bir kişinin hatalı girişleri
   (dakikada ~10) **herkesin** girişini ve oturum yenilemesini 429 ile engelleyebiliyordu (yenileme düşünce oturumlar

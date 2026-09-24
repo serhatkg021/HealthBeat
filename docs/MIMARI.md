@@ -184,10 +184,14 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   organizasyonunun varsayılanı → üst şirketlerin varsayılanı (en yakın önce) → genel varsayılan. Hiçbiri yoksa o metrik alert
   üretmez.
 - **Durumlar:** `open` → `acknowledged` (onaylayan kullanıcı kaydedilir) → `resolved`. Sunucu + alert türü + subject
-  (mount/container) başına en fazla bir açık alert vardır; eşik altına inince otomatik `resolved`.
+  (mount/container) başına en fazla bir **aktif** (açık ya da onaylanmış) alert vardır; eşik altına inince otomatik `resolved`.
+- **Onay "gördüm, sustur ama izle" demektir:** onaylanan alert çözülene kadar aktif kalır; metrik eşiğin üstünde kaldıkça aynı
+  olay için yeni alert ya da e-posta açılmaz, eşik altına inince (ya da mount/container kaybolunca, sunucu tekrar rapor verince)
+  çözülür ve "ÇÖZÜLDÜ" e-postası gider. Seviye **yükselirse** (uyarı → kritik) onay kalkar ve alert yeniden açık olur — durum
+  ciddileşti, biri yeniden sahiplenmeli; seviye düşerse onay korunur.
 - **Alert kaydı** tetiklendiği andaki ölçümü ve eşiği taşır (panel "%97,5 (eşik %95)" gösterir).
-- **Dedup:** açık alert varken aynı olay için yeniden bildirim gitmez. Seviye yükselirse yalnızca yeni seviyeyle kural
-  eşiği aşılan alıcılar (ör. "yalnızca kritik" kuralı olan) ilk kez bilgilendirilir.
+- **Dedup:** aktif alert varken aynı olay için yeniden bildirim gitmez. Seviye değiştiğinde (iki yönde de) yeni seviyenin
+  tüm alıcılarına yeniden e-posta gider; açılış ve çözülme de bildirilir.
 - **Offline tespiti:** pull'da agent'a ulaşılamazsa, push'ta beklenen sürede veri gelmezse ayrı bir `host_offline` alert'i.
   Seçili bir disk üst üste birkaç raporda görünmezse `disk_missing`.
 - **Kime gider — bildirim kuralları:** kapsam bir **organizasyon** (altındaki dal için de geçerli) ya da bir **sunucu**dur;

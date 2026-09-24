@@ -43,12 +43,16 @@ func nullable(subject string) *string {
 	return &subject
 }
 
-// CreateIfNoneOpen, bu host+tür+subject için zaten açık bir alert yoksa atomik olarak bir
-// alert açar (alerts_one_open_uidx unique index'i ile sağlanır) ve ekleyip eklemediğini bildirir. subject,
+// Aktif alert: çözülmemiş (açık ya da onaylanmış) alert. Onay "gördüm, sustur ama izle" demektir: onaylanan alert
+// çözülene kadar aktif kalır, aynı olay için yeni alert açılmasını engeller ve eşik altına inince çözülür
+// (bkz. docs/MIMARI.md bölüm 8). Bir host + tür + subject için en fazla bir aktif alert vardır (alerts_one_active_uidx).
+
+// CreateIfNoneActive, bu host+tür+subject için aktif bir alert yoksa atomik olarak bir
+// alert açar (alerts_one_active_uidx unique index'i ile sağlanır) ve ekleyip eklemediğini bildirir. subject,
 // host'ın bütünüyle ilgili alert'ler için "" (NULL saklanır) ve docker_restart için container adıdır. value ve
 // threshold tetiklendiği andaki ölçülen değer ve eşiktir (olay alert'lerinde nil). Eşzamanlı çağıranlar bu yüzden ikisi birden
 // oluşturamaz — tam biri created=true alır ve yalnızca o kişi kimseye bildirim yapmalıdır.
-func (s *Alerts) CreateIfNoneOpen(ctx context.Context, hostID uuid.UUID, alertType, subject, level string, value, threshold *float64) (alert model.Alert, created bool, err error) {
+func (s *Alerts) CreateIfNoneActive(ctx context.Context, hostID uuid.UUID, alertType, subject, level string, value, threshold *float64) (alert model.Alert, created bool, err error) {
 	row := s.pool.QueryRow(ctx,
 		`INSERT INTO alerts (host_id, alert_type, subject, level, value, threshold) VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT DO NOTHING
@@ -58,23 +62,23 @@ func (s *Alerts) CreateIfNoneOpen(ctx context.Context, hostID uuid.UUID, alertTy
 	alert, err = scanAlert(row)
 	if err != nil {
 		if isNoRows(err) {
-			return model.Alert{}, false, nil // açık bir alert zaten var
+			return model.Alert{}, false, nil // aktif bir alert zaten var
 		}
 		return model.Alert{}, false, err
 	}
 	return alert, true, nil
 }
 
-// GetOpen, bu host+metrik için açık alert yoksa store.ErrNotFound döndürür — tekrar
+// GetActive, bu host+metrik için aktif (açık ya da onaylanmış) alert yoksa store.ErrNotFound döndürür — tekrar
 // bildirimi önleme/bekleme denetimi (bkz. docs/MIMARI.md bölüm 8).
-func (s *Alerts) GetOpen(ctx context.Context, hostID uuid.UUID, alertType string) (model.Alert, error) {
-	return s.GetOpenSubject(ctx, hostID, alertType, "")
+func (s *Alerts) GetActive(ctx context.Context, hostID uuid.UUID, alertType string) (model.Alert, error) {
+	return s.GetActiveSubject(ctx, hostID, alertType, "")
 }
 
-// GetOpenSubject, belirli bir subject (bir container) hakkındaki alert için GetOpen'dır.
-func (s *Alerts) GetOpenSubject(ctx context.Context, hostID uuid.UUID, alertType, subject string) (model.Alert, error) {
+// GetActiveSubject, belirli bir subject (mount ya da container) hakkındaki alert için GetActive'dir.
+func (s *Alerts) GetActiveSubject(ctx context.Context, hostID uuid.UUID, alertType, subject string) (model.Alert, error) {
 	row := s.pool.QueryRow(ctx,
-		`SELECT `+alertColumns+` FROM alerts WHERE host_id = $1 AND alert_type = $2 AND subject IS NOT DISTINCT FROM $3 AND status = 'open'`,
+		`SELECT `+alertColumns+` FROM alerts WHERE host_id = $1 AND alert_type = $2 AND subject IS NOT DISTINCT FROM $3 AND status <> 'resolved'`,
 		hostID, alertType, nullable(subject),
 	)
 	a, err := scanAlert(row)
@@ -99,9 +103,16 @@ func (s *Alerts) GetByID(ctx context.Context, id uuid.UUID) (model.Alert, error)
 	return a, nil
 }
 
-// UpdateLevel, açık bir alert'in seviyesini (ve o andaki değer/eşiğini) günceller: uyarı → kritik gibi.
-func (s *Alerts) UpdateLevel(ctx context.Context, id uuid.UUID, level string, value, threshold *float64) error {
-	_, err := s.pool.Exec(ctx, `UPDATE alerts SET level = $2, value = $3, threshold = $4 WHERE id = $1`, id, level, value, threshold)
+// UpdateLevel, aktif bir alert'in seviyesini (ve o andaki değer/eşiğini) günceller: uyarı → kritik gibi. reopen,
+// onaylanmış bir alert'i yeniden açar (onayı siler): seviye yükselince durum ciddileşmiştir, biri yeniden sahiplenmeli.
+func (s *Alerts) UpdateLevel(ctx context.Context, id uuid.UUID, level string, value, threshold *float64, reopen bool) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE alerts SET level = $2, value = $3, threshold = $4,
+		        status = CASE WHEN $5 THEN 'open' ELSE status END,
+		        acknowledged_at = CASE WHEN $5 THEN NULL ELSE acknowledged_at END,
+		        acknowledged_by = CASE WHEN $5 THEN NULL ELSE acknowledged_by END
+		 WHERE id = $1 AND status <> 'resolved'`,
+		id, level, value, threshold, reopen)
 	return err
 }
 
@@ -132,12 +143,12 @@ func (s *Alerts) Resolve(ctx context.Context, id uuid.UUID, value, threshold *fl
 	return a, nil
 }
 
-// ResolveOpenByHostAndMetric hem normal eşik toparlanması hem de host yeniden rapor verdiğinde
-// host_offline alert'ini kendiliğinden çözmek için kullanılır; çözülen alert'i döndürür (ya da
-// açık bir şey yoksa ErrNotFound — bildirim gerekmediğinin işareti).
-func (s *Alerts) ResolveOpenByHostAndMetric(ctx context.Context, hostID uuid.UUID, alertType string) (model.Alert, error) {
+// ResolveActiveByHostAndMetric, host yeniden rapor verdiğinde host_offline alert'ini (onaylanmış olsa da)
+// kendiliğinden çözmek için kullanılır; çözülen alert'i döndürür (ya da aktif bir şey yoksa ErrNotFound —
+// bildirim gerekmediğinin işareti).
+func (s *Alerts) ResolveActiveByHostAndMetric(ctx context.Context, hostID uuid.UUID, alertType string) (model.Alert, error) {
 	row := s.pool.QueryRow(ctx,
-		`UPDATE alerts SET status = 'resolved', resolved_at = now() WHERE host_id = $1 AND alert_type = $2 AND status = 'open' RETURNING `+alertColumns,
+		`UPDATE alerts SET status = 'resolved', resolved_at = now() WHERE host_id = $1 AND alert_type = $2 AND status <> 'resolved' RETURNING `+alertColumns,
 		hostID, alertType,
 	)
 	a, err := scanAlert(row)
@@ -150,11 +161,11 @@ func (s *Alerts) ResolveOpenByHostAndMetric(ctx context.Context, hostID uuid.UUI
 	return a, nil
 }
 
-// ListOpen, bir host'ın tek bir metrik türündeki tüm açık alert'lerini subject'inden
-// bağımsız döndürür — subject'i (bir container) kaybolmuş alert'leri bulmak için kullanılır.
-func (s *Alerts) ListOpen(ctx context.Context, hostID uuid.UUID, alertType string) ([]model.Alert, error) {
+// ListActive, bir host'ın tek bir metrik türündeki tüm aktif (açık ya da onaylanmış) alert'lerini subject'inden
+// bağımsız döndürür — subject'i (mount ya da container) kaybolmuş alert'leri bulmak için kullanılır.
+func (s *Alerts) ListActive(ctx context.Context, hostID uuid.UUID, alertType string) ([]model.Alert, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT `+alertColumns+` FROM alerts WHERE host_id = $1 AND alert_type = $2 AND status = 'open' ORDER BY subject`,
+		`SELECT `+alertColumns+` FROM alerts WHERE host_id = $1 AND alert_type = $2 AND status <> 'resolved' ORDER BY subject`,
 		hostID, alertType,
 	)
 	if err != nil {
