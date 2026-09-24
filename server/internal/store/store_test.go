@@ -109,7 +109,7 @@ func TestAlertLifecycleAndDedupLookup(t *testing.T) {
 	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "A"), "c", "h")
 	ackBy := testdb.User(t, pool, "acker@x.test", "super_admin", "pw")
 
-	if _, err := alerts.GetOpen(ctx, host, "cpu"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := alerts.GetActive(ctx, host, "cpu"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("GetOpen with none: err=%v, want ErrNotFound", err)
 	}
 
@@ -120,10 +120,10 @@ func TestAlertLifecycleAndDedupLookup(t *testing.T) {
 	if a.Status != model.AlertStatusOpen {
 		t.Fatalf("new alert status = %q", a.Status)
 	}
-	if got, err := alerts.GetOpen(ctx, host, "cpu"); err != nil || got.ID != a.ID {
+	if got, err := alerts.GetActive(ctx, host, "cpu"); err != nil || got.ID != a.ID {
 		t.Fatalf("GetOpen: %v %v", got.ID, err)
 	}
-	if _, err := alerts.GetOpen(ctx, host, "ram"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := alerts.GetActive(ctx, host, "ram"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatal("GetOpen must be per metric type")
 	}
 
@@ -137,9 +137,10 @@ func TestAlertLifecycleAndDedupLookup(t *testing.T) {
 	if _, err := alerts.Acknowledge(ctx, a.ID, ackBy); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("second Acknowledge: err=%v, want ErrNotFound (not open)", err)
 	}
-	// Onaylanmış bir alert artık "açık" değildir: tekrar bildirimi önleme araması onu yok sayar.
-	if _, err := alerts.GetOpen(ctx, host, "cpu"); !errors.Is(err, store.ErrNotFound) {
-		t.Fatal("acknowledged alert still returned by GetOpen")
+	// Onaylanmış bir alert çözülene kadar aktiftir ("gördüm, sustur ama izle"): tekrar bildirimi önleme araması onu
+	// bulur, böylece aynı olay için yeni bir alert açılmaz.
+	if got, err := alerts.GetActive(ctx, host, "cpu"); err != nil || got.ID != a.ID || got.Status != model.AlertStatusAcknowledged {
+		t.Fatalf("GetActive after acknowledge: %+v err=%v, want the acknowledged alert", got, err)
 	}
 
 	b, _ := alerts.Create(ctx, host, "ram", "critical")
@@ -163,7 +164,7 @@ func TestResolveUpdatesValueAndThresholdToTheResolvingReading(t *testing.T) {
 	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "A"), "h", "h")
 
 	stale, staleThreshold := 64.9, 60.0
-	a, _, err := alerts.CreateIfNoneOpen(ctx, host, "ram", "", "critical", &stale, &staleThreshold)
+	a, _, err := alerts.CreateIfNoneActive(ctx, host, "ram", "", "critical", &stale, &staleThreshold)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,7 +178,7 @@ func TestResolveUpdatesValueAndThresholdToTheResolvingReading(t *testing.T) {
 	}
 
 	// nil verilirse (sayısal bir okuması olmayan çözülme yolları) eski değer olduğu gibi kalır.
-	b, _, err := alerts.CreateIfNoneOpen(ctx, host, "cpu", "", "warning", &stale, &staleThreshold)
+	b, _, err := alerts.CreateIfNoneActive(ctx, host, "cpu", "", "warning", &stale, &staleThreshold)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -630,20 +631,20 @@ func TestLastSuperAdminGuardHoldsUnderConcurrency(t *testing.T) {
 	}
 }
 
-func TestCreateIfNoneOpenIsAtomicPerHostAndMetric(t *testing.T) {
+func TestCreateIfNoneActiveIsAtomicPerHostAndMetric(t *testing.T) {
 	pool := testdb.New(t)
 	ctx := context.Background()
 	alerts := store.NewAlerts(pool)
 	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "A"), "c", "h")
 
-	first, created, err := alerts.CreateIfNoneOpen(ctx, host, "cpu", "", "warning", nil, nil)
+	first, created, err := alerts.CreateIfNoneActive(ctx, host, "cpu", "", "warning", nil, nil)
 	if err != nil || !created {
 		t.Fatalf("first: created=%v err=%v", created, err)
 	}
-	if _, created, err = alerts.CreateIfNoneOpen(ctx, host, "cpu", "", "critical", nil, nil); err != nil || created {
+	if _, created, err = alerts.CreateIfNoneActive(ctx, host, "cpu", "", "critical", nil, nil); err != nil || created {
 		t.Fatalf("second while open: created=%v err=%v, want created=false", created, err)
 	}
-	if _, created, _ = alerts.CreateIfNoneOpen(ctx, host, "ram", "", "warning", nil, nil); !created {
+	if _, created, _ = alerts.CreateIfNoneActive(ctx, host, "ram", "", "warning", nil, nil); !created {
 		t.Fatal("a different metric must be able to open its own alert")
 	}
 
@@ -652,17 +653,16 @@ func TestCreateIfNoneOpenIsAtomicPerHostAndMetric(t *testing.T) {
 		t.Fatal("plain INSERT of a second open alert succeeded; the unique index is missing")
 	}
 
-	// İlki artık açık olmayınca (onaylandı ya da çözüldü) yenisi açılabilir.
+	// Onaylanmış alert de aktiftir: yenisi açılamaz. Yalnızca çözülünce yenisi açılabilir.
 	ackBy := testdb.User(t, pool, "acker@x.test", "super_admin", "pw")
 	if _, err := alerts.Acknowledge(ctx, first.ID, ackBy); err != nil {
 		t.Fatal(err)
 	}
-	second, created, err := alerts.CreateIfNoneOpen(ctx, host, "cpu", "", "warning", nil, nil)
-	if err != nil || !created {
-		t.Fatalf("after acknowledge: created=%v err=%v", created, err)
+	if _, created, err = alerts.CreateIfNoneActive(ctx, host, "cpu", "", "warning", nil, nil); err != nil || created {
+		t.Fatalf("after acknowledge: created=%v err=%v, want created=false (acknowledged is still active)", created, err)
 	}
-	alerts.Resolve(ctx, second.ID, nil, nil)
-	if _, created, _ = alerts.CreateIfNoneOpen(ctx, host, "cpu", "", "warning", nil, nil); !created {
+	alerts.Resolve(ctx, first.ID, nil, nil)
+	if _, created, _ = alerts.CreateIfNoneActive(ctx, host, "cpu", "", "warning", nil, nil); !created {
 		t.Fatal("after resolve a new alert must be able to open")
 	}
 
@@ -674,7 +674,7 @@ func TestCreateIfNoneOpenIsAtomicPerHostAndMetric(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if _, created, err := alerts.CreateIfNoneOpen(ctx, other, "disk", "", "critical", nil, nil); err == nil && created {
+			if _, created, err := alerts.CreateIfNoneActive(ctx, other, "disk", "", "critical", nil, nil); err == nil && created {
 				wins.Add(1)
 			}
 		}()
@@ -965,33 +965,33 @@ func TestAlertSubjectsAllowOneOpenAlertPerContainer(t *testing.T) {
 	alerts := store.NewAlerts(pool)
 	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "A"), "c", "h")
 
-	a, created, err := alerts.CreateIfNoneOpen(ctx, host, "docker_restart", "web", "warning", nil, nil)
+	a, created, err := alerts.CreateIfNoneActive(ctx, host, "docker_restart", "web", "warning", nil, nil)
 	if err != nil || !created || a.Subject != "web" {
 		t.Fatalf("first: %+v created=%v err=%v", a, created, err)
 	}
-	if _, created, _ = alerts.CreateIfNoneOpen(ctx, host, "docker_restart", "db", "warning", nil, nil); !created {
+	if _, created, _ = alerts.CreateIfNoneActive(ctx, host, "docker_restart", "db", "warning", nil, nil); !created {
 		t.Fatal("a second container must get its own alert")
 	}
-	if _, created, _ = alerts.CreateIfNoneOpen(ctx, host, "docker_restart", "web", "critical", nil, nil); created {
+	if _, created, _ = alerts.CreateIfNoneActive(ctx, host, "docker_restart", "web", "critical", nil, nil); created {
 		t.Fatal("the same container got a second open alert")
 	}
 	// Host geneli alert ("" subject) container alert'lerinden bağımsızdır.
-	if _, created, _ = alerts.CreateIfNoneOpen(ctx, host, "docker_restart", "", "warning", nil, nil); !created {
+	if _, created, _ = alerts.CreateIfNoneActive(ctx, host, "docker_restart", "", "warning", nil, nil); !created {
 		t.Fatal("host-level alert blocked by container alerts")
 	}
 
-	got, err := alerts.GetOpenSubject(ctx, host, "docker_restart", "web")
+	got, err := alerts.GetActiveSubject(ctx, host, "docker_restart", "web")
 	if err != nil || got.ID != a.ID {
 		t.Fatalf("GetOpenSubject = %+v err=%v", got, err)
 	}
-	if _, err := alerts.GetOpenSubject(ctx, host, "docker_restart", "cache"); !errors.Is(err, store.ErrNotFound) {
+	if _, err := alerts.GetActiveSubject(ctx, host, "docker_restart", "cache"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("unknown subject: err=%v, want ErrNotFound", err)
 	}
-	if _, err := alerts.GetOpen(ctx, host, "docker_restart"); err != nil { // "" subject
+	if _, err := alerts.GetActive(ctx, host, "docker_restart"); err != nil { // "" subject
 		t.Fatalf("GetOpen (empty subject): %v", err)
 	}
 
-	open, _ := alerts.ListOpen(ctx, host, "docker_restart")
+	open, _ := alerts.ListActive(ctx, host, "docker_restart")
 	names := []string{}
 	for _, o := range open {
 		names = append(names, o.Subject)

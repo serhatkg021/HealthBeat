@@ -227,10 +227,22 @@ Server açılışta bekleyen migration'ları uygular (`AUTO_MIGRATE`). Panel gir
 
 ### 8.3 Geri alma
 
-Yalnızca kod: `HB_VERSION`'ı eski sürüme çevirip `docker compose up -d` — migration'lar **eklemeli**dir (yalnızca
-nullable sütun), eski server yeni sütunları görmez ama çalışır (`docs/COMPATIBILITY.md` kural 6). Veri sorunu
-varsa yedeği geri yükle:
-`docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup-….sql`.
+**İki sürüm arasında yeni migration yoksa** yalnızca kodu geri almak yeter: `HB_VERSION`'ı eski sürüme çevirip
+`docker compose up -d`. Hangi sürümün migration içerdiği `server/CHANGELOG.md`'de yazar; uygulanmış olanları
+`docker compose exec server healthbeat-server migrate status` listeler.
+
+**Yeni migration varsa eski server açılmaz** — bilmediği bir migration uygulanmış veritabanını reddeder ("the database has
+migrations this binary does not know"; `docs/COMPATIBILITY.md` kural 6). İki yol var:
+
+1. **Veriyi koruyarak:** geri döndüğün sürümden sonraki her migration'ın `.down.sql`'ini **en yeniden başlayarak** elle
+   uygula ve geçmişten satırını sil, sonra `HB_VERSION`'ı geri al. `.down.sql` dosyaları binary'de değil, repodadır
+   (`server/migrations/`, ilgili `server/vX.Y.Z` etiketinde):
+   ```sh
+   docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < server/migrations/000002_alert_acknowledged_active.down.sql
+   docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DELETE FROM healthbeat_migrations WHERE version = 2"'
+   ```
+2. **Yedekten:** güncelleme öncesi aldığın yedeği geri yükle (güncellemeden sonraki veri kaybolur):
+   `docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup-….sql`.
 
 ## 9. Bilerek yapmadıklarımız
 

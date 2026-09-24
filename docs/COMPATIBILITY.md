@@ -24,8 +24,13 @@ kuralları anlatır. Deploy sırası önerisi: **önce server, sonra agent'lar**
    temizlenir (`sanitizePhysicalDisks`).
 5. **Sürüm bilgisi gövdeye değil başlığa konur.** Gövdedeki bilinmeyen alan, bu sözleşmeyi henüz
    bilmeyen eski bir server'da 400 üretirdi; başlıklar ise sessizce yok sayılır.
-6. **Migration'lar yalnızca nullable/varsayılanlı sütun ekler**; server geri alınırsa eski kod yeni
-   sütunları görmez ama çalışır. `down` migration'lar canlıda kullanılmaz.
+6. **Migration'lar güncelleme anında çalışan eski server'ı bozmaz.** Varsayılan olarak yalnızca nullable/varsayılanlı
+   sütun (ya da yeni tablo) eklenir: yeni server migration'ı uyguladığında hâlâ çalışan eski bir süreç yeni sütunları görmez
+   ama çalışır. Bir index/kısıt değişikliği ya da veri düzeltmesi kaçınılmazsa eski kodun yeni şemayla ne yapacağı migration
+   dosyasında ve §4'te yazılır (ör. `000002`). **Eski bir binary ise bilmediği bir migration uygulanmış veritabanıyla
+   açılmaz** (`migrate`: "the database has migrations this binary does not know"): migration içeren bir sürümden geri dönüş,
+   o migration'ın `.down.sql`'i elle uygulanarak ya da yedekten yapılır (`docs/DISTRIBUTION.md` §8.3). `down` migration'lar
+   otomatik çalışmaz.
 
 ## 2. Sürümler ve protokol
 
@@ -76,7 +81,9 @@ eski sürümü göstermeye devam etmez.
 | yeni | **eski** (bu sözleşmeden önceki, bilinmeyen alanı 400 ile reddeden) | **Çalışır, degraded.** Agent 400 alınca aynı döngüde yalnızca çekirdek alanlarla yeniden dener (metrik kaybolmaz), her 10 döngüde tam payload'ı yoklar; server güncellenince kendiliğinden düzelir |
 | yeni | ağ/kimlik/5xx hatası | Geri dönüş **devreye girmez**: yalnızca 400 uyumsuzluk sayılır, diğer hatalar olduğu gibi bildirilir |
 | pull, eski agent | yeni | Çalışır (yanıt gevşek ayrıştırılır) |
-| server geri alındı | DB migration'ları ileride | Çalışır (yeni sütunlar nullable; eski kod onları seçmez) |
+| eski server süreci hâlâ çalışıyor | yeni server bir migration uyguladı | Çalışır (yeni sütunlar nullable; eski kod onları seçmez) |
+| eski server süreci hâlâ çalışıyor | `000002` uygulandı (tek aktif alert) | Çalışır: onaylanmış bir alert varken eski kod aynı olay için yeni alert açamaz ama onaylanmışları çözemez; yeni server devraldığında ilk raporda çözülür |
+| server geri alındı (eski binary yeniden başlatıldı) | DB'de bilmediği migration var | **Açılmaz.** Önce o migration'ların `.down.sql`'i (en yeniden başlayarak) uygulanıp geçmiş satırı silinir ya da güncelleme öncesi yedek geri yüklenir (`docs/DISTRIBUTION.md` §8.3) |
 
 Ölçülmüş (bkz. §7): ilk yayımlanan agent, donanım özetinden önceki agent ve makinede kurulu gerçek
 eski binary yeni server'a metrik yazar; yeni agent, eski server'a karşı çevrimiçi kalır ve metrik

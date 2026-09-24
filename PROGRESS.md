@@ -4,8 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-25 — `GET /hosts/:id/metrics/latest` eklendi; panelin "Genel" sekmesi 24 saatlik ham diziyi
-değil yalnızca son okumayı indiriyor.
+**Son güncelleme:** 2026-09-25 — Onaylanan alert "sustur ama izle" oldu: çözülene kadar aktif kalıyor (yeni alert/e-posta
+açılmıyor), eşik altına inince çözülüyor; seviye yükselince onay kalkıyor. Migration `000002` (tek aktif alert index'i) —
+baseline'dan sonraki ilk migration; bu yüzden geri alma belgeleri düzeltildi: eski binary yeni şemayla açılmaz, geri dönüş
+`.down.sql` ya da yedekle (`docs/DISTRIBUTION.md` §8.3).
 
 ## Durum
 

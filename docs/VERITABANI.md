@@ -1,7 +1,7 @@
 # Veritabanı şeması
 
-PostgreSQL **15 veya üstü** (`UNIQUE NULLS NOT DISTINCT`, `ON DELETE SET NULL (sütun)`). Şema tek bir migration'dır:
-`server/migrations/000001_baseline.up.sql`; sonraki her değişiklik `000002`'den başlayan yeni bir dosyadır
+PostgreSQL **15 veya üstü** (`UNIQUE NULLS NOT DISTINCT`, `ON DELETE SET NULL (sütun)`). Şema
+`server/migrations/000001_baseline.up.sql` ile kurulur; sonraki her değişiklik `000002`'den başlayan yeni bir dosyadır
 (bkz. `docs/DEPLOYMENT.md`, "Veritabanı migration'ları"). Bu belge o dosyadan **taze bir veritabanına migration
 uygulanarak** üretilmiştir; şema değişince tablo ayrıntılarını yeniden üretin (bu belgenin sonundaki not).
 
@@ -380,7 +380,7 @@ Alert kayıtları. Sunucu+tür+subject başına en fazla **bir açık** alert (k
 - **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
 - **PK** (id)
 - **İndeks** `alerts_host_id_idx`: `btree (host_id)`
-- **Benzersiz indeks** `alerts_one_open_uidx`: `btree (host_id, alert_type, subject) NULLS NOT DISTINCT WHERE (status = 'open'::text)`
+- **Benzersiz indeks** `alerts_one_active_uidx`: `btree (host_id, alert_type, subject) NULLS NOT DISTINCT WHERE (status <> 'resolved'::text)` — bir sunucu + tür + konu için en fazla bir aktif (açık ya da onaylanmış) alert (`000002`)
 - **İndeks** `alerts_status_idx`: `btree (status)`
 
 ### `notification_routes`

@@ -172,7 +172,7 @@ func (e *Engine) evaluateDisks(ctx context.Context, hostID, orgID uuid.UUID, dis
 		e.apply(ctx, hostID, orgID, model.MetricTypeDisk, d.Mount, d.UsedPct, threshold)
 	}
 
-	open, err := e.alerts.ListOpen(ctx, hostID, model.MetricTypeDisk)
+	open, err := e.alerts.ListActive(ctx, hostID, model.MetricTypeDisk)
 	if err != nil {
 		log.Printf("alert engine: list open disk alerts for host=%s: %v", hostID, err)
 		return
@@ -229,7 +229,7 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 		log.Printf("alert engine: read expected mounts for host=%s: %v", hostID, err)
 		return
 	}
-	open, err := e.alerts.ListOpen(ctx, hostID, model.AlertTypeDiskMissing)
+	open, err := e.alerts.ListActive(ctx, hostID, model.AlertTypeDiskMissing)
 	if err != nil {
 		log.Printf("alert engine: list open disk_missing alerts for host=%s: %v", hostID, err)
 		return
@@ -275,7 +275,7 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 		if seen {
 			continue
 		}
-		alert, created, err := e.alerts.CreateIfNoneOpen(ctx, hostID, model.AlertTypeDiskMissing, m, model.AlertLevelCritical, nil, nil)
+		alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, model.AlertTypeDiskMissing, m, model.AlertLevelCritical, nil, nil)
 		if err != nil {
 			log.Printf("alert engine: create disk_missing alert for host=%s mount=%q: %v", hostID, m, err)
 			continue
@@ -334,7 +334,7 @@ func (e *Engine) EvaluateDocker(ctx context.Context, hostID, orgID uuid.UUID, co
 		e.apply(ctx, hostID, orgID, model.MetricTypeDockerRestart, c.Name, float64(c.RestartCount), threshold)
 	}
 
-	open, err := e.alerts.ListOpen(ctx, hostID, model.MetricTypeDockerRestart)
+	open, err := e.alerts.ListActive(ctx, hostID, model.MetricTypeDockerRestart)
 	if err != nil {
 		log.Printf("alert engine: list open docker_restart alerts for host=%s: %v", hostID, err)
 		return
@@ -349,10 +349,12 @@ func (e *Engine) EvaluateDocker(ctx context.Context, hostID, orgID uuid.UUID, co
 // apply, bir host+metrik+subject için alert yaşam döngüsünü çözümlenmiş bir eşiğe göre
 // çalıştırır.
 func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType, subject string, value float64, threshold model.ThresholdConfig) {
-	existing, err := e.alerts.GetOpenSubject(ctx, hostID, metricType, subject)
-	hasOpen := err == nil
+	// Aktif alert: açık ya da onaylanmış. Onay "gördüm, sustur ama izle"dir: onaylanan alert yeni bir alert/bildirim
+	// açılmasını engeller ve eşik altına inince çözülür (bkz. store: aktif alert).
+	existing, err := e.alerts.GetActiveSubject(ctx, hostID, metricType, subject)
+	hasActive := err == nil
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		log.Printf("alert engine: get open alert for host=%s metric=%s subject=%q: %v", hostID, metricType, subject, err)
+		log.Printf("alert engine: get active alert for host=%s metric=%s subject=%q: %v", hostID, metricType, subject, err)
 		return
 	}
 
@@ -365,7 +367,7 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 	}
 
 	if level == "" {
-		if hasOpen {
+		if hasActive {
 			// Çözülme okuması: eşiğin altına döndüğü andaki gerçek ölçüm ve uyarı eşiği — böylece
 			// e-postadaki "Değer" alert'in son yükseltildiği eski, hâlâ eşik üstü okumayı değil,
 			// artık gerçekten eşiğin altında olan güncel durumu gösterir.
@@ -381,26 +383,31 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 	}
 	valuePtr, triggerPtr := &value, &trigger
 
-	if hasOpen {
-		// Tekrar bildirimi önleme/bekleme: bu host+metrik için zaten açık bir alert bu olayı
-		// kapsıyor — yalnızca seviyesi değiştiyse yeniden bildirilir.
+	if hasActive {
+		// Tekrar bildirimi önleme/bekleme: bu host+metrik için zaten aktif (açık ya da onaylanmış) bir alert bu
+		// olayı kapsıyor — yalnızca seviyesi değiştiyse yeniden bildirilir.
 		if existing.Level != level {
 			// Seviye değişimi (yükselme YA DA düşme) o alıcı için durumun gerçekten değiştiği
 			// anlamına gelir: uyarı mailini görüp "daha vaktim var" diyen biri kritiğe geçtiğinde,
 			// ya da tersine gereksiz yere endişelenmemesi için kritikten uyarıya düştüğünde bundan
 			// habersiz kalmamalı. Bu yüzden yeni seviyenin TÜM alıcılarına (daha önce bilgilendirilmiş
-			// olsalar bile) tekrar mail gider — açılış ve çözülme ile aynı kural.
-			if err := e.alerts.UpdateLevel(ctx, existing.ID, level, valuePtr, triggerPtr); err != nil {
+			// olsalar bile) tekrar mail gider — açılış ve çözülme ile aynı kural. Onaylanmış bir alert
+			// YÜKSELİRSE onay da kalkar (durum ciddileşti, biri yeniden sahiplenmeli); düşüşte onay korunur.
+			reopen := reopensOnLevelChange(existing, level)
+			if err := e.alerts.UpdateLevel(ctx, existing.ID, level, valuePtr, triggerPtr, reopen); err != nil {
 				log.Printf("alert engine: update alert %s level: %v", existing.ID, err)
 				return
 			}
 			existing.Level, existing.Value, existing.Threshold = level, valuePtr, triggerPtr
+			if reopen {
+				existing.Status, existing.AcknowledgedAt, existing.AcknowledgedBy = model.AlertStatusOpen, nil, nil
+			}
 			e.notify(ctx, orgID, existing)
 		}
 		return
 	}
 
-	alert, created, err := e.alerts.CreateIfNoneOpen(ctx, hostID, metricType, subject, level, valuePtr, triggerPtr)
+	alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, metricType, subject, level, valuePtr, triggerPtr)
 	if err != nil {
 		log.Printf("alert engine: create alert for host=%s metric=%s subject=%q: %v", hostID, metricType, subject, err)
 		return
@@ -408,9 +415,9 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 	if !created {
 		// Denetimimiz ile eklememiz arasında eşzamanlı bir değerlendirme açtı. Bildirim onundur;
 		// biz yalnızca seviyesinin güncel olduğundan emin oluruz.
-		if open, err := e.alerts.GetOpenSubject(ctx, hostID, metricType, subject); err == nil && open.Level != level {
-			if err := e.alerts.UpdateLevel(ctx, open.ID, level, valuePtr, triggerPtr); err != nil {
-				log.Printf("alert engine: update alert %s level: %v", open.ID, err)
+		if active, err := e.alerts.GetActiveSubject(ctx, hostID, metricType, subject); err == nil && active.Level != level {
+			if err := e.alerts.UpdateLevel(ctx, active.ID, level, valuePtr, triggerPtr, reopensOnLevelChange(active, level)); err != nil {
+				log.Printf("alert engine: update alert %s level: %v", active.ID, err)
 			}
 		}
 		return
@@ -418,14 +425,20 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 	e.notify(ctx, orgID, alert)
 }
 
-// ResolveOffline, bir host yeniden rapor verdiğinde açık host_offline alert'ini kendiliğinden
+// reopensOnLevelChange, onaylanmış bir alert'in yeni seviyeyle yeniden açılıp açılmayacağıdır: yalnızca seviye
+// yükselirse (ör. uyarı → kritik). Düşüşte onay korunur — durum hafifledi, sahibi zaten ilgileniyor.
+func reopensOnLevelChange(a model.Alert, newLevel string) bool {
+	return a.Status == model.AlertStatusAcknowledged && model.LevelRank(newLevel) > model.LevelRank(a.Level)
+}
+
+// ResolveOffline, bir host yeniden rapor verdiğinde aktif (açık ya da onaylanmış) host_offline alert'ini kendiliğinden
 // çözer ve "sunucu tekrar çevrimiçi" e-postasını kuyruğa alır — her başarılı push/pull
 // alımından sonra çağrılır.
 func (e *Engine) ResolveOffline(ctx context.Context, hostID, orgID uuid.UUID) {
-	alert, err := e.alerts.ResolveOpenByHostAndMetric(ctx, hostID, model.AlertTypeHostOffline)
+	alert, err := e.alerts.ResolveActiveByHostAndMetric(ctx, hostID, model.AlertTypeHostOffline)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
-			return // zaten açık değildi
+			return // aktif değildi
 		}
 		log.Printf("alert engine: resolve offline alert for host=%s: %v", hostID, err)
 		return
@@ -435,16 +448,16 @@ func (e *Engine) ResolveOffline(ctx context.Context, hostID, orgID uuid.UUID) {
 
 // RaiseOffline, bir host sessizleştiğinde offline monitor tarafından çağrılır.
 func (e *Engine) RaiseOffline(ctx context.Context, hostID, orgID uuid.UUID) {
-	_, err := e.alerts.GetOpen(ctx, hostID, model.AlertTypeHostOffline)
+	_, err := e.alerts.GetActive(ctx, hostID, model.AlertTypeHostOffline)
 	if err == nil {
-		return // zaten açık — tekrar bildirimi önle
+		return // zaten aktif (açık ya da onaylanmış) — tekrar bildirimi önle
 	}
 	if !errors.Is(err, store.ErrNotFound) {
 		log.Printf("alert engine: check open offline alert for host=%s: %v", hostID, err)
 		return
 	}
 
-	alert, created, err := e.alerts.CreateIfNoneOpen(ctx, hostID, model.AlertTypeHostOffline, "", model.AlertLevelCritical, nil, nil)
+	alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, model.AlertTypeHostOffline, "", model.AlertLevelCritical, nil, nil)
 	if err != nil {
 		log.Printf("alert engine: create offline alert for host=%s: %v", hostID, err)
 		return
