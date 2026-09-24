@@ -28,6 +28,12 @@ girer; sürüm etiketleri yalnızca `main`'dan atılır.** (GitFlow'daki gibi `d
 - **Hangi hat?** `agent/` değiştiyse **agent** hattı, `server/` ve `server/panel/` değiştiyse **server + panel** hattı etkilenir
   (bkz. `docs/DISTRIBUTION.md` §11.2). Her PR, etkilediği hattın değişiklik günlüğüne (`agent/CHANGELOG.md` ya da
   `server/CHANGELOG.md`, "Yayınlanmamış" bölümü) bir madde ekler; panel maddeleri "Panel:" ile başlar.
+- **Madde hangi başlığa?** Değişiklik günlüğü sürüm notunun kendisidir (`scripts/release-notes.sh` onu GitHub Release sayfasına
+  koyar); maddenin yeri tek soruyla belirlenir: *"Bu sürümü kuran biri bir fark görür mü, ya da bilmesi gerekir mi?"* API yanıtı
+  ya da hata metni, panel, e-posta, ortam değişkeni/yapılandırma, log biçimi, performans ya da şema değişiyorsa **evet**: madde
+  `### Eklendi` / `### Değişti` / `### Düzeltildi` altına yazılır. **Hayırsa** (davranışı değiştirmeyen refactor, iç düzenleme):
+  bölümün sonundaki `### İç değişiklikler (davranış değişmedi)` başlığına tek kısa satır. Hiçbir PR maddesiz kalmaz; emin
+  değilsen üst başlıklara yaz. Yalnızca belge ya da CI değiştiren PR'lar sürüm çıkarmaz ve madde eklemez.
 - **Sözleşme değişikliği (ingest alanı/protokol) tek PR'dadır:** agent tarafı, server tarafı, `server/testdata/payloads/` ve
   `scripts/compat_e2e.sh` birlikte gelir (`docs/COMPATIBILITY.md` §6 kontrol listesi). Dağıtım sırası yine server, sonra agent.
 - **Migration'lar yalnızca ileri yönlü ve eklemelidir** (yeni tablo / nullable sütun); eski server yeni şemayla çalışabilmeli.

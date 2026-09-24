@@ -4,8 +4,8 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-23 — `GET /hosts/:id/metrics`'ten kovalama/ortalama kaldırıldı; panelin "Genel" sekmesindeki
-anlık kartlar artık her zaman gerçek son ham okumayı gösteriyor.
+**Son güncelleme:** 2026-09-24 — Değişiklik günlüğüne "İç değişiklikler (davranış değişmedi)" başlığı kuralı eklendi
+(`CONTRIBUTING.md` §3, PR şablonu): server refactor serisinde görünür etkisi olmayan PR'lar bu başlığa yazılıyor.
 
 ## Durum
 
