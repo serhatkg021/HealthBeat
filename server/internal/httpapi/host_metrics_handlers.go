@@ -74,6 +74,50 @@ func (d *Deps) handleGetHostMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, points)
 }
 
+// handleGetHostLatestMetric, host'ın en son ham metrik örneğini döndürür; panelin "Genel" sekmesindeki anlık kartlar
+// yalnızca bunu gösterir ve tüm aralığı (GET /hosts/:id/metrics, varsayılan son 24 saat) indirmek zorunda kalmaz.
+// Biçim, /metrics dizisinin bir elemanıyla aynıdır. Host henüz hiç rapor vermediyse 204.
+func (d *Deps) handleGetHostLatestMetric(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "geçersiz sunucu kimliği")
+		return
+	}
+
+	host, err := d.hosts.GetByID(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
+			return
+		}
+		log.Printf("get host latest metric: lookup host: %v", err)
+		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
+		return
+	}
+	allowed, err := d.requireHostViewAccess(r, host)
+	if err != nil {
+		log.Printf("get host latest metric: check access: %v", err)
+		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
+		return
+	}
+	if !allowed {
+		writeError(w, http.StatusForbidden, "yetkiniz yok")
+		return
+	}
+
+	point, err := d.metrics.Latest(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		log.Printf("get host latest metric: %v", err)
+		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
+		return
+	}
+	writeJSON(w, http.StatusOK, point)
+}
+
 // handleGetHostDocker, her container'ın son raporlanan durumunu döndürür (bkz.
 // docs/MIMARI.md bölüm 7: GET /hosts/:id/docker).
 func (d *Deps) handleGetHostDocker(w http.ResponseWriter, r *http.Request) {

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"math"
 	"sort"
@@ -209,25 +210,43 @@ func (s *Metrics) LatestDockerContainers(ctx context.Context, hostID uuid.UUID) 
 	return containers, rows.Err()
 }
 
-// LatestDisks, host'ın en son raporundaki mount'ları döndürür — panelin hangi mount'ların
-// alert üretebileceğini seçerken sunduğu şey.
-func (s *Metrics) LatestDisks(ctx context.Context, hostID uuid.UUID) ([]model.DiskUsage, error) {
+// Latest, host'ın en son ham metrik örneğini döndürür; hiç örnek yoksa ErrNotFound. Panelin "Genel" sekmesindeki anlık
+// kartları besler (GET /hosts/:id/metrics/latest): tek satırdır, (host_id, recorded_at) birincil anahtarından okunur.
+func (s *Metrics) Latest(ctx context.Context, hostID uuid.UUID) (model.MetricPoint, error) {
+	var p model.MetricPoint
 	var diskJSON []byte
 	err := s.pool.QueryRow(ctx,
-		`SELECT disk_json FROM metrics WHERE host_id = $1 ORDER BY recorded_at DESC LIMIT 1`, hostID).Scan(&diskJSON)
+		`SELECT recorded_at, cpu_usage_pct, ram_usage_pct, disk_json FROM metrics
+		 WHERE host_id = $1 ORDER BY recorded_at DESC LIMIT 1`, hostID).
+		Scan(&p.Timestamp, &p.CPUUsagePct, &p.RAMUsagePct, &diskJSON)
 	if err != nil {
 		if isNoRows(err) {
-			return []model.DiskUsage{}, nil
+			return model.MetricPoint{}, ErrNotFound
 		}
+		return model.MetricPoint{}, err
+	}
+	if len(diskJSON) > 0 {
+		if err := json.Unmarshal(diskJSON, &p.Disk); err != nil {
+			return model.MetricPoint{}, err
+		}
+	}
+	return p, nil
+}
+
+// LatestDisks, host'ın en son raporundaki mount'ları döndürür — panelin hangi mount'ların
+// alert üretebileceğini seçerken sunduğu şey. Hiç rapor yoksa boş liste.
+func (s *Metrics) LatestDisks(ctx context.Context, hostID uuid.UUID) ([]model.DiskUsage, error) {
+	p, err := s.Latest(ctx, hostID)
+	if errors.Is(err, ErrNotFound) {
+		return []model.DiskUsage{}, nil
+	}
+	if err != nil {
 		return nil, err
 	}
-	disks := []model.DiskUsage{}
-	if len(diskJSON) > 0 {
-		if err := json.Unmarshal(diskJSON, &disks); err != nil {
-			return nil, err
-		}
+	if p.Disk == nil {
+		return []model.DiskUsage{}, nil
 	}
-	return disks, nil
+	return p.Disk, nil
 }
 
 // RecentReportedMounts, host'ın herhangi bir disk listeleyen son n raporunun mount
