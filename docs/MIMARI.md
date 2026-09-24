@@ -164,7 +164,7 @@ GET    /api/v1/me | /me/hosts | /meta
        /api/v1/organizations[/:id]              (ağaç: parent_organization_id, address)
        /api/v1/organizations/:id/contacts       + /api/v1/contacts/:id
        /api/v1/organizations/:id/hosts
-       /api/v1/hosts[/:id]                      metrics | docker | thresholds | disk-alerts | rotate-credentials
+       /api/v1/hosts[/:id]                      metrics[/latest] | docker | thresholds | disk-alerts | rotate-credentials
        /api/v1/thresholds[/:id]                 varsayılan eşikler (genel ya da organizasyon)
        /api/v1/notification-routes[/:id]        + .../organizations/:id|hosts/:id/notification-routes | -recipients
 GET    /api/v1/alerts?status=open               POST /api/v1/alerts/:id/acknowledge

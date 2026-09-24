@@ -93,7 +93,8 @@ ya da sonuna eklediğinden** emin ol (panelin nginx'i `$remote_addr` ile ezer). 
 - **PostgreSQL ≥ 15 gerekir** (şema `UNIQUE NULLS NOT DISTINCT` ve `ON DELETE SET NULL (sütun)` kullanır).
   Şemanın tamamı: [docs/VERITABANI.md](VERITABANI.md).
 - Metrik uç noktası (`GET /hosts/:id/metrics`) aralıktaki her ham örneği olduğu gibi döner — hiçbir kovalama/ortalama
-  yapmaz; çok geniş aralıklı/çok örnekli istekler yanıtı büyütür. Docker container'ları için yalnızca **son durum**
+  yapmaz; çok geniş aralıklı/çok örnekli istekler yanıtı büyütür (panel bunu yalnızca geçmiş grafiğinde kullanır). Anlık
+  durum için `GET /hosts/:id/metrics/latest` yalnızca en son ham örneği döner (hiç yoksa `204`). Docker container'ları için yalnızca **son durum**
   saklanır (geçmiş tutulmaz).
 - Kullanıcı e-postaları küçük harfe normalize edilir (veritabanı kısıtı da bunu zorlar).
 

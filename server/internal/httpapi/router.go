@@ -73,6 +73,7 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/alerts/{id}/acknowledge", d.requirePermission("alert.acknowledge", d.handleAcknowledgeAlert))
 
 	mux.HandleFunc("GET /api/v1/hosts/{id}/metrics", d.requirePermission("host.view", d.handleGetHostMetrics))
+	mux.HandleFunc("GET /api/v1/hosts/{id}/metrics/latest", d.requirePermission("host.view", d.handleGetHostLatestMetric))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/thresholds", d.requirePermission("threshold.view", d.handleGetHostThresholds))
 	mux.HandleFunc("PUT /api/v1/hosts/{id}/thresholds", d.requirePermission("threshold.edit", d.handleSetHostThresholds))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/disk-alerts", d.requirePermission("host.view", d.handleGetDiskAlerts))

@@ -36,7 +36,9 @@ export function HostDetailPage() {
 
   const agentPolicy = useAgentPolicy()
   const [host, setHost] = useState<Host | null>(null)
-  const [points, setPoints] = useState<MetricPoint[]>([])
+  // Son rapor edilen değerler — "Genel" sekmesi grafik değil, en güncel durumu gösterir; geçmiş bir "Detay"
+  // modalında ayrıca ve isteğe bağlı bir tarih aralığıyla yüklenir (bkz. HostMetricHistory).
+  const [latest, setLatest] = useState<MetricPoint | null>(null)
   const [containers, setContainers] = useState<DockerContainerReport[]>([])
   // Çubuk renkleri için sunucunun geçerli eşikleri (yüklenemezse çubuklar eşiksiz, yeşil kalır).
   const [thresholds, setThresholds] = useState<HostThresholdsResponse | null>(null)
@@ -49,7 +51,7 @@ export function HostDetailPage() {
       .get(id)
       .then(setHost)
       .catch((err) => setError(err instanceof Error ? err.message : 'sunucu yüklenemedi'))
-    hostsApi.metrics(id).then(setPoints).catch(() => undefined)
+    hostsApi.latestMetric(id).then(setLatest).catch(() => undefined)
     hostsApi.docker(id).then(setContainers).catch(() => undefined)
     hostsApi.thresholds(id).then(setThresholds).catch(() => undefined)
   }
@@ -60,10 +62,6 @@ export function HostDetailPage() {
   }
 
   useEffect(reload, [id])
-
-  // Son rapor edilen değerler — "Genel" sekmesi grafik değil, en güncel durumu gösterir; geçmiş bir "Detay"
-  // modalında ayrıca ve isteğe bağlı bir tarih aralığıyla yüklenir (bkz. HostMetricHistory).
-  const latest = points.length > 0 ? points[points.length - 1] : null
 
   const [tab, setTab] = useTab(TAB_IDS, 'genel')
   useDocumentTitle(host?.title)

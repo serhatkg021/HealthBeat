@@ -167,10 +167,12 @@ export const hostsApi = {
     apiRequest<Host>(`/api/v1/hosts/${id}`, { method: 'PUT', body: patch }),
   remove: (id: string) => apiRequest<void>(`/api/v1/hosts/${id}`, { method: 'DELETE' }),
   rotateCredentials: (id: string) => apiRequest<Host>(`/api/v1/hosts/${id}/rotate-credentials`, { method: 'POST' }),
-  // Ham satırlar (ortalanmaz/kovalanmaz): "Genel" sekmesindeki anlık kartlar dizinin son elemanını,
-  // geçmiş grafiği ("Detay") tüm diziyi kullanır.
+  // Geçmiş grafiği ("Detay"): aralıktaki ham satırların tamamı (ortalanmaz/kovalanmaz).
   metrics: (id: string, from?: string, to?: string) =>
     apiRequest<MetricPoint[]>(`/api/v1/hosts/${id}/metrics`, { query: { from, to } }),
+  // "Genel" sekmesindeki anlık kartlar: yalnızca en son ham örnek. Sunucu hiç rapor vermediyse null (204).
+  latestMetric: async (id: string): Promise<MetricPoint | null> =>
+    (await apiRequest<MetricPoint | undefined>(`/api/v1/hosts/${id}/metrics/latest`)) ?? null,
   docker: (id: string) => apiRequest<DockerContainerReport[]>(`/api/v1/hosts/${id}/docker`),
 }
 
