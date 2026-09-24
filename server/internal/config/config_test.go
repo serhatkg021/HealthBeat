@@ -105,6 +105,22 @@ func TestLoadRejectsInvalidCORSOrigins(t *testing.T) {
 	}
 }
 
+func TestLoadTrustedProxies(t *testing.T) {
+	setRequired(t)
+	if cfg, err := Load(); err != nil || !cfg.TrustedProxies.Empty() {
+		t.Fatalf("unset: %+v %v", cfg.TrustedProxies, err)
+	}
+	t.Setenv("TRUSTED_PROXIES", "panel, 10.0.0.0/8")
+	cfg, err := Load()
+	if err != nil || len(cfg.TrustedProxies.Hosts) != 1 || len(cfg.TrustedProxies.Prefixes) != 1 {
+		t.Fatalf("valid: %+v %v", cfg.TrustedProxies, err)
+	}
+	t.Setenv("TRUSTED_PROXIES", "0.0.0.0/0")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXIES") {
+		t.Fatalf("trust everyone: err=%v, want it to name TRUSTED_PROXIES", err)
+	}
+}
+
 func TestLoadRejectsWeakOrIdenticalJWTSecrets(t *testing.T) {
 	setRequired(t)
 	for name, tc := range map[string][2]string{

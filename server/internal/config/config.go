@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"healthbeat-server/internal/clientip"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/secretbox"
 	"healthbeat-server/internal/version"
@@ -55,6 +56,11 @@ type Config struct {
 	// farklı bir origin'den (static host) sunulduğunda gerekir. Boş = CORS başlığı yok.
 	// httpapi.ParseAllowedOrigins ile doğrulanır.
 	CORSAllowedOrigins []string
+
+	// TrustedProxies, X-Forwarded-For'una güvenilen reverse proxy'lerdir (IP, CIDR ya da docker'daki "panel" gibi bir
+	// host adı). İstemci IP'si (hız sınırları, denetim kaydı) yalnızca istek bunlardan birinden geldiğinde başlıktan
+	// okunur; boşsa her zaman TCP eşidir. Bkz. clientip.
+	TrustedProxies clientip.Proxies
 
 	// BootstrapAdminEmail/Password, açılışta ilk super_admin'i oluşturur, ama yalnızca hiç
 	// super_admin yokken (bu yüzden ayarlı bırakılabilir ya da ilk açılıştan sonra kaldırılabilir).
@@ -145,6 +151,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.PanelBaseURL, err = ParsePanelBaseURL(os.Getenv("PANEL_BASE_URL")); err != nil {
 		return nil, fmt.Errorf("invalid PANEL_BASE_URL: %w", err)
+	}
+	if cfg.TrustedProxies, err = clientip.ParseProxies(os.Getenv("TRUSTED_PROXIES")); err != nil {
+		return nil, fmt.Errorf("invalid TRUSTED_PROXIES: %w", err)
 	}
 	bootstrapEmail, bootstrapPassword := os.Getenv("BOOTSTRAP_ADMIN_EMAIL"), os.Getenv("BOOTSTRAP_ADMIN_PASSWORD")
 	if (bootstrapEmail == "") != (bootstrapPassword == "") {

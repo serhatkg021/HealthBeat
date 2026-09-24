@@ -12,6 +12,7 @@ import (
 
 	"healthbeat-server/internal/alertengine"
 	"healthbeat-server/internal/authsvc"
+	"healthbeat-server/internal/clientip"
 	"healthbeat-server/internal/config"
 	"healthbeat-server/internal/db"
 	"healthbeat-server/internal/httpapi"
@@ -83,6 +84,18 @@ func main() {
 	}, secrets)
 
 	deps.SetAgentPolicy(httpapi.AgentPolicy{Latest: cfg.LatestAgentVersion, Min: cfg.MinSupportedAgentVersion})
+
+	// İstemci IP'si (hız sınırları, denetim kaydı): X-Forwarded-For yalnızca TRUSTED_PROXIES'teki bir proxy'den
+	// gelirse okunur. Host adları (compose'da "panel") arka planda periyodik çözülür.
+	clientIPs := clientip.New(cfg.TrustedProxies)
+	if cfg.TrustedProxies.Empty() {
+		log.Printf("client IPs: taken from the TCP peer (TRUSTED_PROXIES is not set)")
+	} else {
+		log.Printf("client IPs: X-Forwarded-For is trusted only from %s", cfg.TrustedProxies)
+	}
+	go clientIPs.Run(ctx)
+	deps.SetClientIPResolver(clientIPs)
+
 	deps.SetPasswordReset(mailer, cfg.PanelBaseURL)
 	switch {
 	case mailer.Enabled() && cfg.PanelBaseURL != "":
