@@ -10,11 +10,14 @@ import (
 	"healthbeat-server/internal/ratelimit"
 )
 
-// remoteIP TCP karşı taraf adresidir. X-Forwarded-For bilerek güvenilmez: server TLS'i kendisi
-// sonlandırır (önünde proxy yok); bu yüzden başlık saldırgan denetiminde olur ve herkesin
-// sınırlayıcıyı atlatmasına izin verirdi. Önüne güvenilir bir reverse proxy konursa bunun
-// bir güvenilir-proxy ayarına ihtiyacı olur.
+// remoteIP, hız sınırlarının ve denetim kaydının kullandığı istemci IP'sidir. Router'daki resolveClientIP onu istek
+// başına bir kez belirler: TCP eşi, ya da eş TRUSTED_PROXIES'teki bir reverse proxy ise X-Forwarded-For'daki istemci
+// (bkz. internal/clientip — başlığa başka hiç kimseden güvenilmez, yoksa herkes sınırlayıcıyı atlatırdı). Router
+// dışından çağrılırsa (context'te yoksa) TCP eşine düşer.
 func remoteIP(r *http.Request) string {
+	if ip, ok := clientIPFromContext(r.Context()); ok {
+		return ip
+	}
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		return r.RemoteAddr

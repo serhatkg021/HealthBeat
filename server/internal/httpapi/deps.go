@@ -12,6 +12,7 @@ import (
 
 	"healthbeat-server/internal/alertengine"
 	"healthbeat-server/internal/authsvc"
+	"healthbeat-server/internal/clientip"
 	"healthbeat-server/internal/ratelimit"
 	"healthbeat-server/internal/secretbox"
 	"healthbeat-server/internal/store"
@@ -22,6 +23,9 @@ type Deps struct {
 	tokenSvc *authsvc.TokenService
 
 	agentPolicy AgentPolicy
+
+	// clientIPs, istemci IP'sini TRUSTED_PROXIES'e göre belirler; nil = her zaman TCP eşi (bkz. remoteIP).
+	clientIPs *clientip.Resolver
 
 	users         *store.Users
 	organizations *store.Organizations
@@ -78,6 +82,9 @@ type AgentPolicy struct {
 
 // SetAgentPolicy, GET /api/v1/meta'nın döndürdüğü sürüm politikasını ayarlar.
 func (d *Deps) SetAgentPolicy(p AgentPolicy) { d.agentPolicy = p }
+
+// SetClientIPResolver, istemci IP'sinin güvenilir proxy'lerin X-Forwarded-For'undan okunmasını açar (bkz. clientip).
+func (d *Deps) SetClientIPResolver(r *clientip.Resolver) { d.clientIPs = r }
 
 func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *alertengine.Engine, limits RateLimits, secrets *secretbox.Box) *Deps {
 	return &Deps{

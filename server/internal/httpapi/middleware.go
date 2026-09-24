@@ -131,6 +131,14 @@ func (d *Deps) requireHostAuth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// resolveClientIP, istemci IP'sini istek başına bir kez belirleyip context'e koyar; remoteIP (hız sınırları, denetim
+// kaydı) onu okur. Güvenilir proxy yoksa TCP eşidir (bkz. clientip.Resolver.ClientIP).
+func (d *Deps) resolveClientIP(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(withClientIP(r.Context(), d.clientIPs.ClientIP(r))))
+	})
+}
+
 type statusRecorder struct {
 	http.ResponseWriter
 	status int

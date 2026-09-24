@@ -71,6 +71,10 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
       # Boş bırakılanlar server'ın varsayılanını kullanır.
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      # Panel /api/'yi server'a proxy'ler; server gerçek istemci IP'sini (hız sınırları, denetim kaydı) yalnızca
+      # panel container'ından gelen X-Forwarded-For'dan okur. Docker adı periyodik çözülür (container IP'si değişebilir).
+      # Panel proxy'lemiyorsa (API_PROXY_URL boş) zararsızdır; kapatmak için .env'de TRUSTED_PROXIES= (boş).
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES-panel}
       PULL_CA_CERT_FILE: ${PULL_CA_CERT_FILE:-}
       METRICS_RETENTION_DAYS: ${METRICS_RETENTION_DAYS:-}
       LATEST_AGENT_VERSION: ${LATEST_AGENT_VERSION:-}

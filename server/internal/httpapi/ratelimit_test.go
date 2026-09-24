@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"healthbeat-server/internal/clientip"
 )
 
 // Bu testler bilerek nil havuzlu bir Deps kullanır: vurdukları her yol herhangi bir veritabanı
@@ -92,6 +94,53 @@ func TestLoginAndIngestFailureBudgetsAreSeparate(t *testing.T) {
 	rec := do(h, "POST", "/api/v1/auth/login", "203.0.113.7:1234", nil, `{}`)
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("login status = %d, want 400 (not throttled)", rec.Code)
+	}
+}
+
+// Varsayılan compose kurulumunda panel /api/'yi server'a proxy'ler: TCP eşi her kullanıcı için panel container'ıdır.
+// Güvenilir proxy tanımlıyken başarısız girişler X-Forwarded-For'daki istemci başına sayılmalı; aksi halde tek bir
+// kişinin hatalı girişleri herkesi kilitlerdi.
+func TestLoginFailuresAreCountedPerClientBehindTrustedProxy(t *testing.T) {
+	d := newLimitedDeps()
+	proxies, err := clientip.ParseProxies("172.18.0.5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.SetClientIPResolver(clientip.New(proxies))
+	h := d.Router()
+	const panel = "172.18.0.5:40000"
+
+	for i := 0; i < authFailureBurst; i++ {
+		d.loginFailures.Allow("85.1.1.1") // Ali'nin hatalı girişleri
+	}
+	rec := do(h, "POST", "/api/v1/auth/login", panel, map[string]string{"X-Forwarded-For": "85.1.1.1"}, `{"email":"a@b.c","password":"x"}`)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("throttled client via proxy: status = %d, want 429", rec.Code)
+	}
+	rec = do(h, "POST", "/api/v1/auth/login", panel, map[string]string{"X-Forwarded-For": "91.2.2.2"}, `{}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("other client via the same proxy: status = %d, want 400 (not throttled)", rec.Code)
+	}
+
+	// Server'a doğrudan bağlanan biri sahte X-Forwarded-For ile kendi bütçesinden kaçamaz.
+	for i := 0; i < authFailureBurst; i++ {
+		d.loginFailures.Allow("66.6.6.6")
+	}
+	rec = do(h, "POST", "/api/v1/auth/login", "66.6.6.6:5000", map[string]string{"X-Forwarded-For": "1.2.3.4"}, `{}`)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("direct peer with spoofed header: status = %d, want 429", rec.Code)
+	}
+}
+
+func TestForwardedForIgnoredWithoutTrustedProxies(t *testing.T) {
+	d := newLimitedDeps()
+	h := d.Router()
+	for i := 0; i < authFailureBurst; i++ {
+		d.loginFailures.Allow("172.18.0.5")
+	}
+	rec := do(h, "POST", "/api/v1/auth/login", "172.18.0.5:40000", map[string]string{"X-Forwarded-For": "91.2.2.2"}, `{}`)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429: without TRUSTED_PROXIES the TCP peer is the client", rec.Code)
 	}
 }
 

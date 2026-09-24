@@ -14,6 +14,7 @@ const (
 	ctxKeyEmail
 	ctxKeyHostID
 	ctxKeyHostOrgID
+	ctxKeyClientIP
 )
 
 func withUser(ctx context.Context, userID uuid.UUID, email, role string) context.Context {
@@ -55,4 +56,14 @@ func hostIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 func hostOrgIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	id, ok := ctx.Value(ctxKeyHostOrgID).(uuid.UUID)
 	return id, ok
+}
+
+// withClientIP, istek başına bir kez belirlenen istemci IP'sini taşır (bkz. Deps.resolveClientIP).
+func withClientIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, ctxKeyClientIP, ip)
+}
+
+func clientIPFromContext(ctx context.Context) (string, bool) {
+	ip, ok := ctx.Value(ctxKeyClientIP).(string)
+	return ip, ok
 }

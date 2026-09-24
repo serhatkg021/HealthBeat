@@ -4,8 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-24 — Değişiklik günlüğüne "İç değişiklikler (davranış değişmedi)" başlığı kuralı eklendi
-(`CONTRIBUTING.md` §3, PR şablonu): server refactor serisinde görünür etkisi olmayan PR'lar bu başlığa yazılıyor.
+**Son güncelleme:** 2026-09-24 — Proxy arkasında gerçek istemci IP'si: `TRUSTED_PROXIES` (compose'da `panel`) eklendi;
+hız sınırları ve denetim kaydı artık panel container'ının değil kullanıcının IP'sini kullanıyor. Aynı gün değişiklik günlüğüne
+"İç değişiklikler (davranış değişmedi)" başlığı kuralı eklendi (`CONTRIBUTING.md` §3, PR şablonu).
 
 ## Durum
 

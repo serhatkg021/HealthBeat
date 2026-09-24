@@ -31,6 +31,7 @@ flowchart LR
 | `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | ilk kurulumda | **İlk super_admin'i** oluşturur — yalnızca hiç super_admin yokken, yani her açılışta güvenle bırakılabilir; ilk açılıştan sonra ortamdan **kaldır**. İkisi birlikte verilmeli; şifre en az 12 karakter. Hesap **ilk girişte yeni bir şifre belirlemek zorundadır**. Hiç super_admin yoksa ve bunlar da verilmemişse server açılır ama log'a `WARNING: no super_admin exists` yazar (kimse panele giremez). |
 | `SECRETS_ENCRYPTION_KEY` | evet | `pull_secret`'ları şifreler. `openssl rand -base64 32`. **Yedekle** — kaybolursa saklı pull secret'lar çözülemez (etkilenen agent'ların credential'ı yenilenir). |
 | `CORS_ALLOWED_ORIGINS` | panel ayrı origin'deyse | Virgülle ayrılmış tam origin listesi, örn. `https://panel.example.com`. `*`, path ve sondaki `/` **reddedilir** (server başlamaz). Boşsa hiç CORS başlığı gönderilmez. |
+| `TRUSTED_PROXIES` | proxy arkasındaysa | Server'ın `X-Forwarded-For` başlığına güvendiği reverse proxy'ler: virgülle ayrılmış IP, CIDR ya da **host adı** (host adları 30 sn'de bir, çözülemedikleri sürece 2 sn'de bir ve tanınmayan bir eşten `X-Forwarded-For`'lu istek gelince hemen yeniden çözülür; docker'da container IP'si değişebilir). İstemci IP'si (hız sınırları, denetim kaydı) yalnızca istek bunlardan birinden geldiğinde başlıktan okunur; aksi halde TCP eşidir. Docker Compose varsayılanı `panel`; bare-metal'de boş (başlık hiç okunmaz). `0.0.0.0/0` ve geçersiz girdiler **reddedilir** (server başlamaz). Bkz. "Hız sınırları ve istemci IP'si". |
 | `METRICS_RETENTION_DAYS` | hayır | Metrik örneklerinin saklanma süresi (gün); varsayılan `30`, `0` = sonsuza kadar sakla. Eski örnekler saatlik bir işle silinir. |
 | `LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION` | hayır | Panelin agent'ları "güncel / güncelleme var / desteklenmiyor" diye sınıflandırdığı sürüm politikası (SemVer, örn. `1.2.0`). Varsayılan: latest = bu server derlemesinin bildiği en güncel **agent** sürümü (server'ın kendi sürümü değil; bkz. `docs/DISTRIBUTION.md`, iki sürüm hattı), min = boş (hiçbiri "desteklenmiyor" olmaz). **Yalnızca bilgilendirir**, hiçbir agent reddedilmez. Bkz. `docs/COMPATIBILITY.md`. |
 | `AUTO_MIGRATE` | hayır | Açılışta bekleyen veritabanı migration'larını uygula (varsayılan `true`). `false` ise uygulamaz, şema geriyse açılmaz. Bkz. "Veritabanı migration'ları". |
@@ -67,10 +68,25 @@ oturumu en fazla 30 sn sürer; kuyruk (256) dolarsa yeni bildirimler düşürül
 boşaltılır. **Zaman aşımları:** API sunucusu okuma tarafında sıkıdır (header 10 sn, gövde 30 sn),
 boşta kalan bağlantıları 120 sn sonra kapatır.
 
-Rate limiter süreç içidir: birden fazla server kopyası çalıştırırsan her biri kendi
-sayacını tutar. Server bir reverse proxy'nin arkasına konursa `X-Forwarded-For`'a
-**güvenilmez** (şu an IP'ler doğrudan TCP eşinden alınır); proxy arkasında çalıştırmadan
-önce `httpapi.remoteIP` bir trusted-proxy ayarıyla genişletilmelidir.
+### Hız sınırları ve istemci IP'si
+
+Rate limiter süreç içidir: birden fazla server kopyası çalıştırırsan her biri kendi sayacını tutar.
+
+Başarısız giriş/yenileme ve şifre sıfırlama sınırları **istemci IP'si** başına sayılır; denetim kaydı da bu IP'yi yazar.
+İstemci IP'si normalde TCP eşidir. Server bir reverse proxy'nin arkasındaysa eş proxy'nin kendisidir — Docker Compose'da
+panel `/api/`'yi server'a proxy'lediği için bütün panel kullanıcıları tek IP (panel container'ı) görünürdü ve tek bir
+kişinin hatalı girişleri herkesi kilitlerdi. Bu yüzden `TRUSTED_PROXIES`'teki proxy'lerden gelen isteklerde istemci IP'si
+`X-Forwarded-For`'dan okunur: başlık **sağdan sola** okunur ve güvenilir proxy olmayan ilk adres alınır. Başlığa başka
+hiç kimseden güvenilmez — aksi halde server'a doğrudan bağlanan biri her istekte başka bir sahte IP yazarak sınırları
+atlatırdı. Push agent'lar server'a doğrudan bağlandığı için onlar için her zaman TCP eşi kullanılır.
+
+Compose'da varsayılan `TRUSTED_PROXIES=panel`'dir (docker adı; panel server'dan sonra açıldığı için açılışta çözülemez,
+2 sn'de bir yeniden denenir; container yeniden oluşup IP'si değişirse yeni adresten gelen ilk istek yeniden çözümü tetikler.
+Ad çözülene kadar panelden gelen istekler panelin IP'siyle sayılır — güvenli taraf). Docker ağının tamamına
+güvenilmez, çünkü host'tan (ve bazı kurulumlarda dışarıdan) gelen bağlantılar ağ geçidi adresiyle görünebilir. Server'ın
+önüne kendi reverse proxy'ni koyarsan (yük dengeleyici vb.) onun adresini ekle ve proxy'nin `X-Forwarded-For`'u **ezdiğinden
+ya da sonuna eklediğinden** emin ol (panelin nginx'i `$remote_addr` ile ezer). Açılışta log, hangi proxy'lere güvenildiğini
+(`client IPs: …`) ve host adlarının çözüldüğü adresleri (`trusted proxy "panel" resolved to …`) yazar.
 
 ### Veritabanı
 
@@ -258,6 +274,8 @@ olmadığından CORS'tan etkilenmez.
 - [ ] Birden çok kopya ve otomatik migration kullanılacaksa `AUTO_MIGRATE` kararı verildi (ör. üretimde `false` + dağıtım adımında `migrate up`)
 - [ ] API için CA imzalı sertifika + otomatik yenileme (certbot) kurulu
 - [ ] `CORS_ALLOWED_ORIGINS` yalnızca panel origin'ini içeriyor
+- [ ] Server bir proxy arkasındaysa `TRUSTED_PROXIES` yalnızca o proxy'yi içeriyor; iki farklı istemciden giriş yapılıp
+      denetim kaydında (`/audit`) iki farklı IP görüldü
 - [ ] Panel gerçek bir sertifika sunuyor (kendinden imzalı değil) — bkz. "Gerçek sertifika kullanmak"
 - [ ] `SMTP_*` ayarlandı ve bir test alert'iyle e-postanın gittiği görüldü
 - [ ] "Şifremi unuttum" isteniyorsa `PANEL_BASE_URL` da ayarlandı ve bir hesapla sıfırlama e-postası uçtan uca denendi

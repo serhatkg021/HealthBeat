@@ -84,5 +84,5 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/dashboard/summary", d.requirePermission("dashboard.view", d.handleDashboardSummary))
 	mux.HandleFunc("GET /api/v1/dashboard/overview", d.requirePermission("dashboard.view", d.handleDashboardOverview))
 
-	return loggingMiddleware(mux)
+	return d.resolveClientIP(loggingMiddleware(mux))
 }
