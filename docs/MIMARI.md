@@ -172,6 +172,22 @@ GET    /api/v1/alerts?status=open               POST /api/v1/alerts/:id/acknowle
 GET    /api/v1/audit-logs | /dashboard/summary | /dashboard/overview
 ```
 
+### Hata yanıtları
+
+Her hata yanıtı aynı biçimdedir ve her yanıt `X-Request-ID` başlığını taşır:
+
+```json
+{"error": "sunucu bulunamadı", "code": "not_found", "request_id": "4b453012-…", "fields": {"title": "boş olamaz"}}
+```
+
+- `error`: kullanıcıya gösterilen Türkçe mesaj; istemciler karar için buna **bakmaz**.
+- `code`: makine-okur kod. Genel kodlar durum kodundan gelir: `validation_failed` (400 ve diğer 4xx), `unauthorized` (401),
+  `forbidden` (403), `not_found` (404), `conflict` (409), `rate_limited` (429, `Retry-After` ile), `internal` (5xx). Özel
+  kodlar bunların yerine geçer: `password_change_required` (403), `reset_link_invalid` (400). Yeni kod eklenebilir, var
+  olanın anlamı değişmez.
+- `request_id`: o isteğin log satırlarındaki kimlik (`docs/DEPLOYMENT.md`, "Loglama"). Panel onu yalnızca `5xx`'te gösterir.
+- `fields`: yalnızca doğrulama hatalarında, alan adı → sorun.
+
 Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
 
 ---

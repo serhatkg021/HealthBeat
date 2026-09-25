@@ -92,7 +92,7 @@ func TestPanicReturnsJSON500AndLogsStack(t *testing.T) {
 		t.Fatalf("body is not JSON: %s", rr.Body.String())
 	}
 	id := rr.Header().Get(HeaderRequestID)
-	if body["request_id"] != id || body["error"] == "" {
+	if body["request_id"] != id || body["error"] == "" || body["code"] != errorCodeInternal {
 		t.Fatalf("body = %v, want error and request_id %q", body, id)
 	}
 

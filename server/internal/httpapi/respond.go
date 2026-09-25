@@ -19,20 +19,75 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	}
 }
 
-type errorResponse struct {
-	Error string `json:"error"`
+// apiError, API'nin hata yanıtıdır: {"error": "…", "code": "…", "request_id": "…", "fields": {…}}.
+//
+// Message kullanıcıya gösterilen Türkçe metindir; Code istemcinin mesaja bakmadan karar vermesi içindir (yeni
+// kodlar eklenebilir, var olanların anlamı değişmez); RequestID o isteğin log satırlarını bulmayı sağlar (bkz.
+// withRequestID); Fields, doğrulama hatasında alan adı → sorun eşlemesidir.
+type apiError struct {
+	Status    int               `json:"-"`
+	Message   string            `json:"error"`
+	Code      string            `json:"code"`
+	RequestID string            `json:"request_id,omitempty"`
+	Fields    map[string]string `json:"fields,omitempty"`
 }
 
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, errorResponse{Error: message})
-}
+func (e *apiError) Error() string { return e.Message }
+
+// Genel hata kodları; writeError onları durum kodundan türetir.
+const (
+	errorCodeValidationFailed = "validation_failed"
+	errorCodeUnauthorized     = "unauthorized"
+	errorCodeForbidden        = "forbidden"
+	errorCodeNotFound         = "not_found"
+	errorCodeConflict         = "conflict"
+	errorCodeRateLimited      = "rate_limited"
+	errorCodeInternal         = "internal"
+)
 
 // errorCodePasswordChangeRequired, bir istemcinin "önce şifrenizi değiştirmelisiniz"i sıradan
 // bir 403'ten ayırt etmesini sağlar.
 const errorCodePasswordChangeRequired = "password_change_required"
 
+// codeForStatus, özel bir kod verilmemiş hatanın kodudur.
+func codeForStatus(status int) string {
+	switch {
+	case status == http.StatusUnauthorized:
+		return errorCodeUnauthorized
+	case status == http.StatusForbidden:
+		return errorCodeForbidden
+	case status == http.StatusNotFound:
+		return errorCodeNotFound
+	case status == http.StatusConflict:
+		return errorCodeConflict
+	case status == http.StatusTooManyRequests:
+		return errorCodeRateLimited
+	case status >= 500:
+		return errorCodeInternal
+	default:
+		// 400 ve diğer 4xx'ler (ör. 413 gövde çok büyük): istek geçersiz.
+		return errorCodeValidationFailed
+	}
+}
+
+// writeAPIError, e'yi yazar; kod boşsa durum kodundan türetilir. İstek kimliği, withRequestID'nin yanıt başlığına
+// koyduğu değerdir: handler'ın r'yi taşımasına gerek kalmaz.
+func writeAPIError(w http.ResponseWriter, e *apiError) {
+	if e.Code == "" {
+		e.Code = codeForStatus(e.Status)
+	}
+	if e.RequestID == "" {
+		e.RequestID = w.Header().Get(HeaderRequestID)
+	}
+	writeJSON(w, e.Status, e)
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeAPIError(w, &apiError{Status: status, Message: message})
+}
+
 func writeErrorCode(w http.ResponseWriter, status int, message, code string) {
-	writeJSON(w, status, map[string]string{"error": message, "code": code})
+	writeAPIError(w, &apiError{Status: status, Message: message, Code: code})
 }
 
 // maxListLimit, sayfalanabilir listelerde (kullanıcılar, bir organizasyonun sunucuları,
