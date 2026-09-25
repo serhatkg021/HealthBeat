@@ -128,9 +128,10 @@ func serveRecovering(w *responseRecorder, r *http.Request, next http.Handler) {
 			w.status = http.StatusInternalServerError
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error":      "beklenmeyen bir hata oluştu",
-			"request_id": logging.RequestID(r.Context()),
+		writeAPIError(w, &apiError{
+			Status:    http.StatusInternalServerError,
+			Message:   "beklenmeyen bir hata oluştu",
+			RequestID: logging.RequestID(r.Context()),
 		})
 	}()
 	next.ServeHTTP(w, r)

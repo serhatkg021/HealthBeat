@@ -55,7 +55,7 @@ func TestCORSActualRequestFromAllowedOrigin(t *testing.T) {
 	if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "https://panel.example.com" {
 		t.Errorf("Allow-Origin = %q", got)
 	}
-	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "Retry-After, X-Total-Count" {
+	if got := rec.Header().Get("Access-Control-Expose-Headers"); got != "Retry-After, X-Total-Count, X-Request-ID" {
 		t.Errorf("Expose-Headers = %q", got)
 	}
 }

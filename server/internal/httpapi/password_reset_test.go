@@ -251,8 +251,8 @@ func TestResetErrorCodeSeparatesDeadLinksFromFixableMistakes(t *testing.T) {
 	if dead["code"] != "reset_link_invalid" {
 		t.Fatalf("a dead link needs code reset_link_invalid, got %v", dead)
 	}
-	if weak["code"] != "" {
-		t.Fatalf("a weak password is fixable on the same page and must not signal a dead link, got %v", weak)
+	if weak["code"] != "validation_failed" {
+		t.Fatalf("a weak password is fixable on the same page and must not signal a dead link (want validation_failed), got %v", weak)
 	}
 }
 

@@ -26,6 +26,13 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   geçen alanlar `[REDACTED]` olur, `Authorization`/`Cookie` hiç yazılmaz. Gövdeler e-posta gibi kişisel veri içerebilir.
 - **`LOG_LEVEL`** (`debug|info|warn|error`, varsayılan `info`) ve **`LOG_FORMAT`** (`text|json`, varsayılan `text`).
   Docker Compose ikisini ve `LOG_ERROR_BODY_BYTES`'ı `.env`'den aktarır. Ayrıntı: `docs/DEPLOYMENT.md`, "Loglama".
+- **Hata yanıtlarında makine-okur `code` ve `request_id`:** her hata yanıtı artık `{"error", "code", "request_id"}` taşıyor
+  (`fields` doğrulama hataları için ayrıldı). Kod durum kodundan gelir (`validation_failed`, `unauthorized`, `forbidden`,
+  `not_found`, `conflict`, `rate_limited`, `internal`); mevcut özel kodlar (`password_change_required`, `reset_link_invalid`)
+  aynen kaldı. Eklemeli: `error` alanı değişmedi. CORS `X-Request-ID`'yi açığa çıkarıyor (ayrı origin'deki panel okuyabilir).
+  Biçim: `docs/MIMARI.md` §7, "Hata yanıtları".
+- **Panel: sunucu hatalarında (5xx) hata kimliği gösteriliyor:** mesajın sonunda `(hata kimliği: …)`; kullanıcı onu
+  yöneticiye iletir, yönetici logda o kimlikle ayrıntıyı bulur. Kullanıcının düzeltebileceği 4xx hatalarında gösterilmez.
 - **Panic kurtarma:** bir istekteki beklenmeyen hata artık bağlantıyı düşürmek yerine `500` ve `request_id`'li JSON yanıt
   döndürüyor, yığın izi loga yazılıyor. Arka plan işleri (pull scheduler, offline izleyici, retention, token temizliği,
   istemci IP çözücüsü) panic'lerse loglanıp 5 sn sonra yeniden başlatılıyor; alert e-postası ya da tek bir host'un poll'u

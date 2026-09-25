@@ -97,3 +97,28 @@ test('an expired access token is refreshed and the request retried once', async 
   assert.equal(store.get('healthbeat_refresh_token'), 'r2')
   assert.equal(store.has('healthbeat_user'), true)
 })
+
+test('a server error shows its request id so the operator can find it in the log', async () => {
+  store.set('healthbeat_access_token', 't')
+  responder = () => ({ status: 500, body: { error: 'sunucu kaydedilemedi', code: 'internal', request_id: 'req-123' } })
+
+  await assert.rejects(apiRequest('/api/v1/hosts'), (err: unknown) => {
+    assert.ok(err instanceof ApiError)
+    assert.equal(err.message, 'sunucu kaydedilemedi (hata kimliği: req-123)')
+    assert.equal(err.code, 'internal')
+    assert.equal(err.requestId, 'req-123')
+    return true
+  })
+})
+
+test('a client error keeps its message without the request id', async () => {
+  store.set('healthbeat_access_token', 't')
+  responder = () => ({ status: 400, body: { error: 'başlık boş olamaz', code: 'validation_failed', request_id: 'req-456' } })
+
+  await assert.rejects(apiRequest('/api/v1/hosts'), (err: unknown) => {
+    assert.ok(err instanceof ApiError)
+    assert.equal(err.message, 'başlık boş olamaz')
+    assert.equal(err.requestId, 'req-456')
+    return true
+  })
+})

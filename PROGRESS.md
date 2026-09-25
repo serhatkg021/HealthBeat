@@ -4,11 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-26 — Server logu `log/slog`'a geçti: `LOG_LEVEL`/`LOG_FORMAT`, her istekte `X-Request-ID` ve
-log satırlarında `request_id`/`user_id`/`host_id`/`ip`; hata alan isteklerin query/başlık/gövde/yanıtı maskeli olarak
-yazılıyor (`LOG_ERROR_BODY_BYTES`, varsayılan açık); istek ve arka plan goroutine'lerinde panic kurtarma. `httpapi` ve
-`cmd/server` göç etti; `alertengine`, `pullscheduler` vb. hâlâ `log.Printf` (slog köprüsüyle aynı biçimde, INFO) —
-seviyelendirmeleri sonraki PR'da.
+**Son güncelleme:** 2026-09-26 — Hata yanıtları `{"error","code","request_id"}` biçimine geçti (kod durum kodundan
+türetiliyor, özel kodlar korunuyor; `fields` B2'deki doğrulama için ayrıldı); panel 5xx'te "hata kimliği"ni gösteriyor,
+CORS `X-Request-ID`'yi açığa çıkarıyor. Handler'ların `apiError` döndürmesi (B1) ve alan bazlı doğrulama (B2) sonraki adımlar.
+Önceki adım: server logu `log/slog`'a geçti, `X-Request-ID`, maskeli hata ayrıntısı, panic kurtarma (#12); `alertengine`,
+`pullscheduler` vb. hâlâ `log.Printf` (A2b).
 
 ## Durum
 

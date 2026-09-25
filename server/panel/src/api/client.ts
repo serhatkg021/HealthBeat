@@ -51,10 +51,15 @@ export class ApiError extends Error {
   // Sunucunun makine tarafından okunabilir hata kodu (varsa), ör. "reset_link_invalid"; mesaj metnine bağlı kalmadan
   // karar vermek içindir.
   code?: string
-  constructor(status: number, message: string, code?: string) {
-    super(message)
+  // İsteğin sunucu logundaki kimliği (X-Request-ID). Sunucu hatalarında (5xx) mesajın sonuna eklenir: kullanıcı onu
+  // yöneticiye iletir, yönetici logda bu kimlikle hatanın ayrıntısını bulur. 4xx'te kullanıcının düzeltebileceği bir
+  // sorun olduğu için gösterilmez.
+  requestId?: string
+  constructor(status: number, message: string, code?: string, requestId?: string) {
+    super(status >= 500 && requestId ? `${message} (hata kimliği: ${requestId})` : message)
     this.status = status
     this.code = code
+    this.requestId = requestId
   }
 }
 
@@ -155,7 +160,11 @@ async function rawRequest(path: string, opts: RequestOptions, retry: boolean): P
     const message =
       data && typeof data === 'object' && 'error' in data ? String((data as { error: unknown }).error) : resp.statusText
     const code = data && typeof data === 'object' && typeof (data as { code?: unknown }).code === 'string' ? (data as { code: string }).code : undefined
-    throw new ApiError(resp.status, message, code)
+    const requestId =
+      data && typeof data === 'object' && typeof (data as { request_id?: unknown }).request_id === 'string'
+        ? (data as { request_id: string }).request_id
+        : (resp.headers.get('X-Request-ID') ?? undefined)
+    throw new ApiError(resp.status, message, code, requestId)
   }
 
   return { data, headers: resp.headers }
