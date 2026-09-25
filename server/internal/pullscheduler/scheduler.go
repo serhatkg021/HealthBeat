@@ -27,7 +27,8 @@ import (
 
 // dueCheckInterval, kendi interval_seconds süresi dolmuş host'lar için ne sıklıkla tarama
 // yaptığımızdır. Etkin poll ayrıntısı için bir tabandır — bundan küçük interval_seconds ile
-// yapılandırılmış bir host o kadar sık poll edilmez. v1 için yeterli; bkz. PROGRESS.md kararları.
+// yapılandırılmış bir host o kadar sık poll edilmez. Bilinçli bir sadeleştirmedir: host başına
+// zamanlayıcı yerine tek ticker, izleme için gereken çözünürlükten fazlasını zaten sağlar.
 const dueCheckInterval = 5 * time.Second
 
 type Scheduler struct {

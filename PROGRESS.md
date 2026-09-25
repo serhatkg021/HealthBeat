@@ -4,10 +4,8 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-25 — Onaylanan alert "sustur ama izle" oldu: çözülene kadar aktif kalıyor (yeni alert/e-posta
-açılmıyor), eşik altına inince çözülüyor; seviye yükselince onay kalkıyor. Migration `000002` (tek aktif alert index'i) —
-baseline'dan sonraki ilk migration; bu yüzden geri alma belgeleri düzeltildi: eski binary yeni şemayla açılmaz, geri dönüş
-`.down.sql` ya da yedekle (`docs/DISTRIBUTION.md` §8.3).
+**Son güncelleme:** 2026-09-26 — Server/panel kod yorumlarındaki eskimiş atıflar düzeltildi (kaldırılmış migration'lar,
+bu dosyada artık bulunmayan "kararlar"); gerekçeler yorumların kendisine taşındı. Davranış değişmedi.
 
 ## Durum
 

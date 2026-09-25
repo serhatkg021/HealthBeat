@@ -383,9 +383,9 @@ const (
 	AlertTypeDiskMissing = "disk_missing"
 )
 
-// ValidThresholdMetricType bilerek AlertTypeHostOffline'ı dışarıda bırakır — docker_restart'ın
-// burada geçerli bir eşik türü olarak kabul edilmesine rağmen neden henüz gerçek alert'e
-// bağlanmadığı için bkz. PROGRESS.md kararları.
+// ValidThresholdMetricType bilerek AlertTypeHostOffline ve AlertTypeDiskMissing'i dışarıda
+// bırakır: ikisi de eşiği olmayan, yalnızca alert türleridir. docker_restart ise container
+// başına restart sayısı eşiğidir (bkz. alertengine.EvaluateDocker).
 func ValidThresholdMetricType(metricType string) bool {
 	switch metricType {
 	case MetricTypeCPU, MetricTypeRAM, MetricTypeDisk, MetricTypeDockerRestart:
