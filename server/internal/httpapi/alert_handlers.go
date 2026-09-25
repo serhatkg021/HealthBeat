@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -41,13 +41,13 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 				return
 			}
-			log.Printf("list alerts: lookup host: %v", err)
+			slog.ErrorContext(r.Context(), "list alerts: lookup host", "err", err)
 			writeError(w, http.StatusInternalServerError, "alert'ler listelenemedi")
 			return
 		}
 		allowed, err := d.requireHostViewAccess(r, host)
 		if err != nil {
-			log.Printf("list alerts: check access: %v", err)
+			slog.ErrorContext(r.Context(), "list alerts: check access", "err", err)
 			writeError(w, http.StatusInternalServerError, "alert'ler listelenemedi")
 			return
 		}
@@ -57,7 +57,7 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 		}
 		alerts, total, err := d.alerts.ListForHosts(r.Context(), status, []uuid.UUID{hostID}, p)
 		if err != nil {
-			log.Printf("list alerts: %v", err)
+			slog.ErrorContext(r.Context(), "list alerts", "err", err)
 			writeError(w, http.StatusInternalServerError, "alert'ler listelenemedi")
 			return
 		}
@@ -72,7 +72,7 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 	if role == model.RoleSuperAdmin {
 		alerts, total, err := d.alerts.List(r.Context(), status, p)
 		if err != nil {
-			log.Printf("list alerts: %v", err)
+			slog.ErrorContext(r.Context(), "list alerts", "err", err)
 			writeError(w, http.StatusInternalServerError, "alert'ler listelenemedi")
 			return
 		}
@@ -94,14 +94,14 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) {
 		hostIDs, err2 = d.userHosts.ListHostIDs(r.Context(), userID)
 	}
 	if err2 != nil {
-		log.Printf("list alerts: resolve scope: %v", err2)
+		slog.ErrorContext(r.Context(), "list alerts: resolve scope", "err", err2)
 		writeError(w, http.StatusInternalServerError, "alert'ler listelenemedi")
 		return
 	}
 
 	alerts, total, err := d.alerts.ListForHosts(r.Context(), status, hostIDs, p)
 	if err != nil {
-		log.Printf("list alerts: %v", err)
+		slog.ErrorContext(r.Context(), "list alerts", "err", err)
 		writeError(w, http.StatusInternalServerError, "alert'ler listelenemedi")
 		return
 	}
@@ -122,20 +122,20 @@ func (d *Deps) handleAcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "alert bulunamadı")
 			return
 		}
-		log.Printf("acknowledge alert: lookup alert: %v", err)
+		slog.ErrorContext(r.Context(), "acknowledge alert: lookup alert", "err", err)
 		writeError(w, http.StatusInternalServerError, "alert onaylanamadı")
 		return
 	}
 
 	host, err := d.hosts.GetByID(r.Context(), alert.HostID)
 	if err != nil {
-		log.Printf("acknowledge alert: lookup host: %v", err)
+		slog.ErrorContext(r.Context(), "acknowledge alert: lookup host", "err", err)
 		writeError(w, http.StatusInternalServerError, "alert onaylanamadı")
 		return
 	}
 	allowed, err := d.requireHostViewAccess(r, host)
 	if err != nil {
-		log.Printf("acknowledge alert: check access: %v", err)
+		slog.ErrorContext(r.Context(), "acknowledge alert: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "alert onaylanamadı")
 		return
 	}
@@ -151,7 +151,7 @@ func (d *Deps) handleAcknowledgeAlert(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, "alert açık değil")
 			return
 		}
-		log.Printf("acknowledge alert: %v", err)
+		slog.ErrorContext(r.Context(), "acknowledge alert", "err", err)
 		writeError(w, http.StatusInternalServerError, "alert onaylanamadı")
 		return
 	}

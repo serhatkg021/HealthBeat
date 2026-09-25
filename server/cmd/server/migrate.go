@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"strconv"
 	"time"
 
@@ -35,7 +36,7 @@ func prepareSchema(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) er
 		return explain(err)
 	}
 	if len(applied) > 0 {
-		log.Printf("database migrated: %d migration(s) applied (now at %06d)", len(applied), applied[len(applied)-1].Version)
+		slog.Info("database migrated", "applied", len(applied), "version", fmt.Sprintf("%06d", applied[len(applied)-1].Version))
 	}
 	return nil
 }

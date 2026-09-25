@@ -4,8 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-26 — Server/panel kod yorumlarındaki eskimiş atıflar düzeltildi (kaldırılmış migration'lar,
-bu dosyada artık bulunmayan "kararlar"); gerekçeler yorumların kendisine taşındı. Davranış değişmedi.
+**Son güncelleme:** 2026-09-26 — Server logu `log/slog`'a geçti: `LOG_LEVEL`/`LOG_FORMAT`, her istekte `X-Request-ID` ve
+log satırlarında `request_id`/`user_id`/`host_id`/`ip`; hata alan isteklerin query/başlık/gövde/yanıtı maskeli olarak
+yazılıyor (`LOG_ERROR_BODY_BYTES`, varsayılan açık); istek ve arka plan goroutine'lerinde panic kurtarma. `httpapi` ve
+`cmd/server` göç etti; `alertengine`, `pullscheduler` vb. hâlâ `log.Printf` (slog köprüsüyle aynı biçimde, INFO) —
+seviyelendirmeleri sonraki PR'da.
 
 ## Durum
 

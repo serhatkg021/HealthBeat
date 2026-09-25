@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"healthbeat-server/internal/alertengine"
+	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/secretbox"
 	"healthbeat-server/internal/store"
@@ -132,6 +133,8 @@ func (s *Scheduler) pollDueHosts(ctx context.Context) {
 					delete(s.inFlight, c.ID)
 					s.mu.Unlock()
 				}()
+				// Bir host'un poll'undaki panic yalnızca o turu düşürür; host inFlight'tan çıkar ve sonraki turda yeniden denenir.
+				defer logging.Recover(ctx, "pull poll "+c.ID.String())
 				s.pollOne(ctx, c)
 			}(c)
 		}

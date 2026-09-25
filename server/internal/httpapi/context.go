@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+
+	"healthbeat-server/internal/logging"
 )
 
 type ctxKey int
@@ -18,6 +20,7 @@ const (
 )
 
 func withUser(ctx context.Context, userID uuid.UUID, email, role string) context.Context {
+	logging.RequestInfoFrom(ctx).SetUser(userID.String())
 	ctx = context.WithValue(ctx, ctxKeyUserID, userID)
 	ctx = context.WithValue(ctx, ctxKeyEmail, email)
 	ctx = context.WithValue(ctx, ctxKeyRole, role)
@@ -44,6 +47,7 @@ func roleFromContext(ctx context.Context) (string, bool) {
 // docs/MIMARI.md bölüm 5). orgID onunla birlikte taşınır; böylece alert engine ikinci
 // bir sorgu olmadan org/global eşiklerini çözebilir.
 func withHostID(ctx context.Context, hostID, orgID uuid.UUID) context.Context {
+	logging.RequestInfoFrom(ctx).SetHost(hostID.String())
 	ctx = context.WithValue(ctx, ctxKeyHostID, hostID)
 	return context.WithValue(ctx, ctxKeyHostOrgID, orgID)
 }

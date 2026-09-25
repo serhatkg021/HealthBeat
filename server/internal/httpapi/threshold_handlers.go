@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -28,7 +28,7 @@ func (d *Deps) handleListThresholds(w http.ResponseWriter, r *http.Request) {
 	if role == model.RoleSuperAdmin {
 		thresholds, err := d.thresholds.List(r.Context())
 		if err != nil {
-			log.Printf("list thresholds: %v", err)
+			slog.ErrorContext(r.Context(), "list thresholds", "err", err)
 			writeError(w, http.StatusInternalServerError, "eşikler listelenemedi")
 			return
 		}
@@ -48,13 +48,13 @@ func (d *Deps) handleListThresholds(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		log.Printf("list thresholds: list user organizations: %v", err)
+		slog.ErrorContext(r.Context(), "list thresholds: list user organizations", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşikler listelenemedi")
 		return
 	}
 	thresholds, err := d.thresholds.ListForOrganizations(r.Context(), orgIDs)
 	if err != nil {
-		log.Printf("list thresholds: %v", err)
+		slog.ErrorContext(r.Context(), "list thresholds", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşikler listelenemedi")
 		return
 	}
@@ -91,7 +91,7 @@ func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
 			return
 		}
-		log.Printf("create threshold: check access: %v", err)
+		slog.ErrorContext(r.Context(), "create threshold: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik oluşturulamadı")
 		return
 	}
@@ -115,7 +115,7 @@ func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("create threshold: %v", err)
+		slog.ErrorContext(r.Context(), "create threshold", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik oluşturulamadı")
 		return
 	}
@@ -142,14 +142,14 @@ func (d *Deps) handleGetThreshold(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "eşik bulunamadı")
 			return
 		}
-		log.Printf("get threshold: %v", err)
+		slog.ErrorContext(r.Context(), "get threshold", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik alınamadı")
 		return
 	}
 
 	allowed, err := d.requireThresholdAccess(r, threshold)
 	if err != nil {
-		log.Printf("get threshold: check access: %v", err)
+		slog.ErrorContext(r.Context(), "get threshold: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik alınamadı")
 		return
 	}
@@ -179,13 +179,13 @@ func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "eşik bulunamadı")
 			return
 		}
-		log.Printf("update threshold: lookup: %v", err)
+		slog.ErrorContext(r.Context(), "update threshold: lookup", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik güncellenemedi")
 		return
 	}
 	allowed, err := d.requireThresholdAccess(r, existing)
 	if err != nil {
-		log.Printf("update threshold: check access: %v", err)
+		slog.ErrorContext(r.Context(), "update threshold: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik güncellenemedi")
 		return
 	}
@@ -225,7 +225,7 @@ func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("update threshold: %v", err)
+		slog.ErrorContext(r.Context(), "update threshold", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik güncellenemedi")
 		return
 	}
@@ -251,13 +251,13 @@ func (d *Deps) handleDeleteThreshold(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "eşik bulunamadı")
 			return
 		}
-		log.Printf("delete threshold: lookup: %v", err)
+		slog.ErrorContext(r.Context(), "delete threshold: lookup", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik silinemedi")
 		return
 	}
 	allowed, err := d.requireThresholdAccess(r, existing)
 	if err != nil {
-		log.Printf("delete threshold: check access: %v", err)
+		slog.ErrorContext(r.Context(), "delete threshold: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik silinemedi")
 		return
 	}
@@ -271,7 +271,7 @@ func (d *Deps) handleDeleteThreshold(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "eşik bulunamadı")
 			return
 		}
-		log.Printf("delete threshold: %v", err)
+		slog.ErrorContext(r.Context(), "delete threshold", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşik silinemedi")
 		return
 	}

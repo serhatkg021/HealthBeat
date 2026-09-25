@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -27,13 +27,13 @@ func (d *Deps) handleGetHostMetrics(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("get host metrics: lookup host: %v", err)
+		slog.ErrorContext(r.Context(), "get host metrics: lookup host", "err", err)
 		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
 		return
 	}
 	allowed, err := d.requireHostViewAccess(r, host)
 	if err != nil {
-		log.Printf("get host metrics: check access: %v", err)
+		slog.ErrorContext(r.Context(), "get host metrics: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
 		return
 	}
@@ -67,7 +67,7 @@ func (d *Deps) handleGetHostMetrics(w http.ResponseWriter, r *http.Request) {
 
 	points, err := d.metrics.ListByHostAndRange(r.Context(), id, from, to)
 	if err != nil {
-		log.Printf("get host metrics: %v", err)
+		slog.ErrorContext(r.Context(), "get host metrics", "err", err)
 		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
 		return
 	}
@@ -90,13 +90,13 @@ func (d *Deps) handleGetHostLatestMetric(w http.ResponseWriter, r *http.Request)
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("get host latest metric: lookup host: %v", err)
+		slog.ErrorContext(r.Context(), "get host latest metric: lookup host", "err", err)
 		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
 		return
 	}
 	allowed, err := d.requireHostViewAccess(r, host)
 	if err != nil {
-		log.Printf("get host latest metric: check access: %v", err)
+		slog.ErrorContext(r.Context(), "get host latest metric: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
 		return
 	}
@@ -111,7 +111,7 @@ func (d *Deps) handleGetHostLatestMetric(w http.ResponseWriter, r *http.Request)
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
-		log.Printf("get host latest metric: %v", err)
+		slog.ErrorContext(r.Context(), "get host latest metric", "err", err)
 		writeError(w, http.StatusInternalServerError, "metrikler alınamadı")
 		return
 	}
@@ -133,13 +133,13 @@ func (d *Deps) handleGetHostDocker(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("get host docker: lookup host: %v", err)
+		slog.ErrorContext(r.Context(), "get host docker: lookup host", "err", err)
 		writeError(w, http.StatusInternalServerError, "Docker container'ları alınamadı")
 		return
 	}
 	allowed, err := d.requireHostViewAccess(r, host)
 	if err != nil {
-		log.Printf("get host docker: check access: %v", err)
+		slog.ErrorContext(r.Context(), "get host docker: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "Docker container'ları alınamadı")
 		return
 	}
@@ -150,7 +150,7 @@ func (d *Deps) handleGetHostDocker(w http.ResponseWriter, r *http.Request) {
 
 	containers, err := d.metrics.LatestDockerContainers(r.Context(), id)
 	if err != nil {
-		log.Printf("get host docker: %v", err)
+		slog.ErrorContext(r.Context(), "get host docker", "err", err)
 		writeError(w, http.StatusInternalServerError, "Docker container'ları alınamadı")
 		return
 	}

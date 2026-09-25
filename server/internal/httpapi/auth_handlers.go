@@ -3,7 +3,7 @@ package httpapi
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -52,7 +52,7 @@ func (d *Deps) handleLogin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, "e-posta veya şifre hatalı")
 			return
 		}
-		log.Printf("login: lookup user: %v", err)
+		slog.ErrorContext(r.Context(), "login: lookup user", "err", err)
 		writeError(w, http.StatusInternalServerError, "giriş yapılamadı")
 		return
 	}
@@ -65,18 +65,18 @@ func (d *Deps) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	pair, err := d.issueTokenPair(r.Context(), user, uuid.New()) // yeni giriş = yeni token ailesi
 	if err != nil {
-		log.Printf("login: issue tokens: %v", err)
+		slog.ErrorContext(r.Context(), "login: issue tokens", "err", err)
 		writeError(w, http.StatusInternalServerError, "giriş yapılamadı")
 		return
 	}
 
 	if err := d.users.TouchLastLogin(r.Context(), user.ID); err != nil {
-		log.Printf("login: touch last_login_at: %v", err)
+		slog.ErrorContext(r.Context(), "login: touch last_login_at", "err", err)
 	}
 
 	targetID := user.ID.String()
 	if err := d.audit.Write(r.Context(), &user.ID, user.Email, "auth.login", "user", &targetID, nil, remoteIP(r)); err != nil {
-		log.Printf("audit log write failed: %v", err)
+		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 
 	user.PasswordHash = ""
@@ -151,10 +151,10 @@ func (d *Deps) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	consumed, err := d.refreshTokens.Consume(r.Context(), jti, refreshTokenGrace)
 	switch {
 	case errors.Is(err, store.ErrTokenReuse):
-		log.Printf("SECURITY: refresh token reuse detected for user=%s from %s; token family revoked", claims.UserID, ip)
+		slog.WarnContext(r.Context(), "SECURITY: refresh token reuse detected; token family revoked", "token_user_id", claims.UserID.String())
 		targetID := claims.UserID.String()
 		if err := d.audit.Write(r.Context(), &claims.UserID, claims.Email, "auth.token_reuse_detected", "user", &targetID, map[string]any{"ip": ip}, remoteIP(r)); err != nil {
-			log.Printf("audit log write failed: %v", err)
+			slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 		}
 		deny()
 		return
@@ -162,7 +162,7 @@ func (d *Deps) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		deny()
 		return
 	case err != nil:
-		log.Printf("refresh: consume token: %v", err)
+		slog.ErrorContext(r.Context(), "refresh: consume token", "err", err)
 		writeError(w, http.StatusInternalServerError, "token yenilenemedi")
 		return
 	}
@@ -177,7 +177,7 @@ func (d *Deps) handleRefresh(w http.ResponseWriter, r *http.Request) {
 
 	pair, err := d.issueTokenPair(r.Context(), user, consumed.FamilyID)
 	if err != nil {
-		log.Printf("refresh: issue tokens: %v", err)
+		slog.ErrorContext(r.Context(), "refresh: issue tokens", "err", err)
 		writeError(w, http.StatusInternalServerError, "token yenilenemedi")
 		return
 	}
@@ -207,7 +207,7 @@ func (d *Deps) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 	if jti, err := uuid.Parse(claims.ID); err == nil {
 		if err := d.refreshTokens.RevokeFamilyOf(r.Context(), jti); err != nil {
-			log.Printf("logout: revoke token family: %v", err)
+			slog.ErrorContext(r.Context(), "logout: revoke token family", "err", err)
 			writeError(w, http.StatusInternalServerError, "çıkış yapılamadı")
 			return
 		}
@@ -215,7 +215,7 @@ func (d *Deps) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 	targetID := claims.UserID.String()
 	if err := d.audit.Write(r.Context(), &claims.UserID, claims.Email, "auth.logout", "user", &targetID, nil, remoteIP(r)); err != nil {
-		log.Printf("audit log write failed: %v", err)
+		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -268,30 +268,30 @@ func (d *Deps) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 
 	hash, err := authsvc.HashPassword(req.NewPassword)
 	if err != nil {
-		log.Printf("change password: hash: %v", err)
+		slog.ErrorContext(r.Context(), "change password: hash", "err", err)
 		writeError(w, http.StatusInternalServerError, "şifre değiştirilemedi")
 		return
 	}
 	if err := d.users.SetOwnPassword(r.Context(), userID, hash); err != nil {
-		log.Printf("change password: store: %v", err)
+		slog.ErrorContext(r.Context(), "change password: store", "err", err)
 		writeError(w, http.StatusInternalServerError, "şifre değiştirilemedi")
 		return
 	}
 	if err := d.refreshTokens.RevokeAllForUser(r.Context(), userID); err != nil {
-		log.Printf("change password: revoke sessions: %v", err)
+		slog.ErrorContext(r.Context(), "change password: revoke sessions", "err", err)
 		writeError(w, http.StatusInternalServerError, "şifre değişti ancak mevcut oturumlar sonlandırılamadı")
 		return
 	}
 
 	targetID := userID.String()
 	if err := d.audit.Write(r.Context(), &userID, user.Email, "auth.password_changed", "user", &targetID, nil, remoteIP(r)); err != nil {
-		log.Printf("audit log write failed: %v", err)
+		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 
 	user.MustChangePassword = false
 	pair, err := d.issueTokenPair(r.Context(), user, uuid.New())
 	if err != nil {
-		log.Printf("change password: issue tokens: %v", err)
+		slog.ErrorContext(r.Context(), "change password: issue tokens", "err", err)
 		writeError(w, http.StatusInternalServerError, "şifre değişti; lütfen yeniden giriş yapın")
 		return
 	}

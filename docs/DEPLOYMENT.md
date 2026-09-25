@@ -28,7 +28,7 @@ flowchart LR
 | `DATABASE_URL` | evet | PostgreSQL bağlantı adresi. Üretimde `sslmode=require` (ya da `verify-full`) kullan. |
 | `TLS_CERT_FILE`, `TLS_KEY_FILE` | evet | PEM sertifika zinciri ve özel anahtar. Değişiklikler yeniden başlatmadan algılanır (bölüm 3). |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | evet | Her biri **en az 32 bayt** ve birbirinden **farklı** olmalı (`openssl rand -base64 48`); aksi halde server başlamaz. |
-| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | ilk kurulumda | **İlk super_admin'i** oluşturur — yalnızca hiç super_admin yokken, yani her açılışta güvenle bırakılabilir; ilk açılıştan sonra ortamdan **kaldır**. İkisi birlikte verilmeli; şifre en az 12 karakter. Hesap **ilk girişte yeni bir şifre belirlemek zorundadır**. Hiç super_admin yoksa ve bunlar da verilmemişse server açılır ama log'a `WARNING: no super_admin exists` yazar (kimse panele giremez). |
+| `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD` | ilk kurulumda | **İlk super_admin'i** oluşturur — yalnızca hiç super_admin yokken, yani her açılışta güvenle bırakılabilir; ilk açılıştan sonra ortamdan **kaldır**. İkisi birlikte verilmeli; şifre en az 12 karakter. Hesap **ilk girişte yeni bir şifre belirlemek zorundadır**. Hiç super_admin yoksa ve bunlar da verilmemişse server açılır ama log'a `level=WARN msg="no super_admin exists …"` yazar (kimse panele giremez). |
 | `SECRETS_ENCRYPTION_KEY` | evet | `pull_secret`'ları şifreler. `openssl rand -base64 32`. **Yedekle** — kaybolursa saklı pull secret'lar çözülemez (etkilenen agent'ların credential'ı yenilenir). |
 | `CORS_ALLOWED_ORIGINS` | panel ayrı origin'deyse | Virgülle ayrılmış tam origin listesi, örn. `https://panel.example.com`. `*`, path ve sondaki `/` **reddedilir** (server başlamaz). Boşsa hiç CORS başlığı gönderilmez. |
 | `TRUSTED_PROXIES` | proxy arkasındaysa | Server'ın `X-Forwarded-For` başlığına güvendiği reverse proxy'ler: virgülle ayrılmış IP, CIDR ya da **host adı** (host adları 30 sn'de bir, çözülemedikleri sürece 2 sn'de bir ve tanınmayan bir eşten `X-Forwarded-For`'lu istek gelince hemen yeniden çözülür; docker'da container IP'si değişebilir). İstemci IP'si (hız sınırları, denetim kaydı) yalnızca istek bunlardan birinden geldiğinde başlıktan okunur; aksi halde TCP eşidir. Docker Compose varsayılanı `panel`; bare-metal'de boş (başlık hiç okunmaz). `0.0.0.0/0` ve geçersiz girdiler **reddedilir** (server başlamaz). Bkz. "Hız sınırları ve istemci IP'si". |
@@ -40,6 +40,9 @@ flowchart LR
 | `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL` | hayır | Varsayılan `15m` / `168h`. |
 | `RATE_LIMIT_AUTH_FAILURES_PER_MINUTE` | hayır | IP başına başarısız login/agent-auth bütçesi, varsayılan `10`, `0` = kapalı. |
 | `RATE_LIMIT_INGEST_PER_MINUTE` | hayır | Doğrulanmış push agent başına, varsayılan `120`, `0` = kapalı. |
+| `LOG_LEVEL` | hayır | `debug`, `info` (varsayılan), `warn`, `error`. Başarılı agent raporları ve `/healthz` yalnızca `debug`'da loglanır. Bkz. "Loglama". |
+| `LOG_FORMAT` | hayır | `text` (varsayılan, `key=value`) ya da `json` (log toplayıcılar için). |
+| `LOG_ERROR_BODY_BYTES` | hayır | Hata alan (4xx/5xx) isteklerde loga yazılan istek/yanıt gövdesinin azami boyutu, varsayılan `4096`, `0` = gövde yazılmaz, en fazla `1048576`. Hassas alanlar her zaman maskelenir. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | hayır | Alert e-postaları. `SMTP_HOST` boşsa yalnızca log'a yazılır (e-posta **gitmez**). **Port 465 = implicit TLS**; diğer portlarda (587 vb.) sunucu STARTTLS sunuyorsa kullanılır. Kullanıcı adı/şifre yalnızca TLS üzerinden (ya da localhost'a) gönderilir. |
 | `PANEL_BASE_URL` | şifre sıfırlama için | Panelin kullanıcıya görünen adresi (`scheme://host[:port]`, yol ve sondaki `/` yok), örn. `https://panel.example.com`. **"Şifremi unuttum" e-postalarındaki bağlantının kökü** olur; isteğin `Host` başlığından türetilmez (başlık enjeksiyonuyla bağlantının saldırgan bir alan adına yöneltilmesini önler). Geçersizse server başlamaz; boşsa e-posta ile şifre sıfırlama kapalıdır. |
 
@@ -67,6 +70,27 @@ oturumu en fazla 30 sn sürer; kuyruk (256) dolarsa yeni bildirimler düşürül
 (alert yine de veritabanında ve panelde görünür). Sunucu kapanırken kuyruk 10 sn'ye kadar
 boşaltılır. **Zaman aşımları:** API sunucusu okuma tarafında sıkıdır (header 10 sn, gövde 30 sn),
 boşta kalan bağlantıları 120 sn sonra kapatır.
+
+### Loglama
+
+Server logu stderr'e yazar (Docker'da `docker compose logs server`); her satırın seviyesi (`level=`) vardır. Biçim
+`LOG_FORMAT` ile `text` (`key=value`) ya da `json` seçilir.
+
+- **İstek kimliği:** her isteğe bir `X-Request-ID` verilir (istekte geçerli bir tane gelirse — ör. önündeki reverse proxy'den —
+  o korunur) ve yanıt başlığında döner. O isteğin bütün log satırları `request_id=` taşır; bir kullanıcının aldığı hatayı
+  logda bulmak için yanıttaki kimliği ara. İstek satırlarında ayrıca `user_id` (panel kullanıcısı), `host_id` (agent) ve
+  `ip` bulunur.
+- **İstek satırları:** `5xx` → `ERROR`, `4xx` → `WARN`, diğerleri `INFO`; başarılı agent raporları (`POST /api/v1/metrics`)
+  ve `/healthz` yalnızca `LOG_LEVEL=debug`'da görünür (150+ agent ~30 sn'de bir rapor verir).
+- **Hata ayrıntısı:** hata alan isteklerde veriyle ilgili sorunlar yeniden üretmeden incelenebilsin diye `query`, izin
+  listesindeki başlıklar (`req_headers`: Content-Type, User-Agent, agent sürümü vb.), istek gövdesi (`req_body`) ve
+  hata yanıtı (`resp_body`) de yazılır; en fazla `LOG_ERROR_BODY_BYTES` bayt (kesilirse `req_body_truncated=true`).
+  Adında `password`, `token`, `secret` geçen alanlar `[REDACTED]` olur; `Authorization` ve `Cookie` başlıkları hiç
+  yazılmaz. Gövdeler e-posta adresi gibi kişisel veri içerebilir: log erişimini buna göre sınırla ya da
+  `LOG_ERROR_BODY_BYTES=0` ile kapat.
+- **Beklenmeyen hata (panic):** istek `500` ve `request_id`'li bir JSON yanıtla biter, log'a yığın iziyle
+  `msg="panic recovered"` yazılır; server çalışmaya devam eder. Arka plan işleri (pull scheduler, offline izleyici,
+  retention vb.) panic'lerse loglanıp birkaç saniye sonra yeniden başlatılır.
 
 ### Hız sınırları ve istemci IP'si
 
@@ -338,4 +362,4 @@ de ayrıca güvenli bir yerde tut.
 **Güncelleme:** `git pull && docker compose up -d --build` — server açılışta bekleyen
 migration'ları kendisi uygular (`AUTO_MIGRATE`, bölüm 2).
 
-**Log'lar:** `docker compose logs -f server` (ya da `panel`, `db`).
+**Log'lar:** `docker compose logs -f server` (ya da `panel`, `db`). Seviye, biçim ve hata ayrıntısı: bölüm 2, "Loglama".

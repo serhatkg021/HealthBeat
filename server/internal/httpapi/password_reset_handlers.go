@@ -8,12 +8,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
 	"healthbeat-server/internal/authsvc"
+	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/store"
 )
@@ -101,8 +102,9 @@ func (d *Deps) sendMailAsync(to, subject, body string) {
 		defer d.mailWG.Done()
 		ctx, cancel := context.WithTimeout(context.Background(), mailSendTimeout)
 		defer cancel()
+		defer logging.Recover(ctx, "password reset mail")
 		if err := d.mailer.Send(ctx, []string{to}, subject, body); err != nil {
-			log.Printf("password reset: send mail to user failed: %v", err)
+			slog.ErrorContext(ctx, "password reset: send mail to user failed", "err", err)
 		}
 	}()
 }
@@ -143,7 +145,7 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	respond := func() { w.WriteHeader(http.StatusNoContent) }
 
 	if !d.passwordResetEnabled() {
-		log.Printf("password reset requested but not available: set SMTP_HOST and PANEL_BASE_URL to enable it")
+		slog.WarnContext(r.Context(), "password reset requested but not available: set SMTP_HOST and PANEL_BASE_URL to enable it")
 		respond()
 		return
 	}
@@ -155,7 +157,7 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	user, err := d.users.GetByEmail(r.Context(), email)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			log.Printf("password reset: lookup user: %v", err)
+			slog.ErrorContext(r.Context(), "password reset: lookup user", "err", err)
 		}
 		respond()
 		return
@@ -163,19 +165,19 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 
 	token, err := newResetToken()
 	if err != nil {
-		log.Printf("password reset: generate token: %v", err)
+		slog.ErrorContext(r.Context(), "password reset: generate token", "err", err)
 		respond()
 		return
 	}
 	if err := d.resets.Issue(r.Context(), user.ID, hashResetToken(token), time.Now().Add(passwordResetTTL)); err != nil {
-		log.Printf("password reset: store token: %v", err)
+		slog.ErrorContext(r.Context(), "password reset: store token", "err", err)
 		respond()
 		return
 	}
 
 	targetID := user.ID.String()
 	if err := d.audit.Write(r.Context(), &user.ID, user.Email, "auth.password_reset_requested", "user", &targetID, nil, remoteIP(r)); err != nil {
-		log.Printf("audit log write failed: %v", err)
+		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 
 	d.sendMailAsync(user.Email, resetMailSubject, resetMailBody(user.Email, fmt.Sprintf(resetLinkPathFmt, d.panelBaseURL, token), passwordResetTTL))
@@ -205,7 +207,7 @@ func (d *Deps) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := authsvc.HashPassword(req.NewPassword)
 	if err != nil {
-		log.Printf("password reset: hash: %v", err)
+		slog.ErrorContext(r.Context(), "password reset: hash", "err", err)
 		writeError(w, http.StatusInternalServerError, "şifre değiştirilemedi")
 		return
 	}
@@ -217,14 +219,14 @@ func (d *Deps) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 			writeErrorCode(w, http.StatusBadRequest, "sıfırlama bağlantısı geçersiz ya da süresi dolmuş; yeni bir bağlantı isteyin", errorCodeResetLinkInvalid)
 			return
 		}
-		log.Printf("password reset: complete: %v", err)
+		slog.ErrorContext(r.Context(), "password reset: complete", "err", err)
 		writeError(w, http.StatusInternalServerError, "şifre değiştirilemedi")
 		return
 	}
 
 	targetID := user.ID.String()
 	if err := d.audit.Write(r.Context(), &user.ID, user.Email, "auth.password_reset", "user", &targetID, nil, remoteIP(r)); err != nil {
-		log.Printf("audit log write failed: %v", err)
+		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 	if d.mailer != nil && d.mailer.Enabled() {
 		d.sendMailAsync(user.Email, resetDoneSubject, resetDoneMailBody(user.Email))

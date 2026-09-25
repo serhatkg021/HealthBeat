@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -32,20 +32,20 @@ func (d *Deps) handleDashboardSummary(w http.ResponseWriter, r *http.Request) {
 
 	hostIDs, err := d.dashboardScope(r.Context(), role, userID)
 	if err != nil {
-		log.Printf("dashboard summary: resolve scope: %v", err)
+		slog.ErrorContext(r.Context(), "dashboard summary: resolve scope", "err", err)
 		writeError(w, http.StatusInternalServerError, "özet oluşturulamadı")
 		return
 	}
 
 	online, offline, err := d.hosts.CountByStatus(r.Context(), hostIDs)
 	if err != nil {
-		log.Printf("dashboard summary: count hosts: %v", err)
+		slog.ErrorContext(r.Context(), "dashboard summary: count hosts", "err", err)
 		writeError(w, http.StatusInternalServerError, "özet oluşturulamadı")
 		return
 	}
 	critical, warning, err := d.alerts.CountOpenByLevel(r.Context(), hostIDs)
 	if err != nil {
-		log.Printf("dashboard summary: count alerts: %v", err)
+		slog.ErrorContext(r.Context(), "dashboard summary: count alerts", "err", err)
 		writeError(w, http.StatusInternalServerError, "özet oluşturulamadı")
 		return
 	}
@@ -114,7 +114,7 @@ func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromContext(r.Context())
 
 	fail := func(step string, err error) {
-		log.Printf("dashboard overview: %s: %v", step, err)
+		slog.ErrorContext(r.Context(), "dashboard overview: "+step, "err", err)
 		writeError(w, http.StatusInternalServerError, "özet oluşturulamadı")
 	}
 

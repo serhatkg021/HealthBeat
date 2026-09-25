@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -37,7 +37,7 @@ func (d *Deps) handleListOrganizationRoutes(w http.ResponseWriter, r *http.Reque
 	}
 	routes, err := d.notifs.ListByOrganization(r.Context(), orgID)
 	if err != nil {
-		log.Printf("list org routes: %v", err)
+		slog.ErrorContext(r.Context(), "list org routes", "err", err)
 		writeError(w, http.StatusInternalServerError, "bildirim kuralları alınamadı")
 		return
 	}
@@ -51,7 +51,7 @@ func (d *Deps) handleListHostRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 	routes, err := d.notifs.ListByHost(r.Context(), host.ID)
 	if err != nil {
-		log.Printf("list host routes: %v", err)
+		slog.ErrorContext(r.Context(), "list host routes", "err", err)
 		writeError(w, http.StatusInternalServerError, "bildirim kuralları alınamadı")
 		return
 	}
@@ -66,7 +66,7 @@ func (d *Deps) handleOrganizationRecipientCandidates(w http.ResponseWriter, r *h
 	}
 	cands, err := d.notifs.Candidates(r.Context(), orgID, nil)
 	if err != nil {
-		log.Printf("recipient candidates: %v", err)
+		slog.ErrorContext(r.Context(), "recipient candidates", "err", err)
 		writeError(w, http.StatusInternalServerError, "alıcılar alınamadı")
 		return
 	}
@@ -80,7 +80,7 @@ func (d *Deps) handleHostRecipientCandidates(w http.ResponseWriter, r *http.Requ
 	}
 	cands, err := d.notifs.Candidates(r.Context(), host.OrganizationID, &host.ID)
 	if err != nil {
-		log.Printf("recipient candidates: %v", err)
+		slog.ErrorContext(r.Context(), "recipient candidates", "err", err)
 		writeError(w, http.StatusInternalServerError, "alıcılar alınamadı")
 		return
 	}
@@ -136,7 +136,7 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 				return
 			}
-			log.Printf("create route: host: %v", err)
+			slog.ErrorContext(r.Context(), "create route: host", "err", err)
 			writeError(w, http.StatusInternalServerError, "kural oluşturulamadı")
 			return
 		}
@@ -148,14 +148,14 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
 				return
 			}
-			log.Printf("create route: organization: %v", err)
+			slog.ErrorContext(r.Context(), "create route: organization", "err", err)
 			writeError(w, http.StatusInternalServerError, "kural oluşturulamadı")
 			return
 		}
 	}
 	allowed, err := d.requireOrgAccess(r, scopeOrg)
 	if err != nil {
-		log.Printf("create route: check access: %v", err)
+		slog.ErrorContext(r.Context(), "create route: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "kural oluşturulamadı")
 		return
 	}
@@ -167,7 +167,7 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 	// Alıcı bu kapsam için seçilebilir olmalı.
 	cands, err := d.notifs.Candidates(r.Context(), scopeOrg, scopeHost)
 	if err != nil {
-		log.Printf("create route: candidates: %v", err)
+		slog.ErrorContext(r.Context(), "create route: candidates", "err", err)
 		writeError(w, http.StatusInternalServerError, "kural oluşturulamadı")
 		return
 	}
@@ -188,7 +188,7 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) {
 		Channel: req.Channel, MinLevel: req.MinLevel,
 	})
 	if err != nil {
-		d.writeRouteError(w, err, "kural oluşturulamadı")
+		d.writeRouteError(w, r, err, "kural oluşturulamadı")
 		return
 	}
 	targetID := route.ID.String()
@@ -224,7 +224,7 @@ func (d *Deps) handleUpdateRoute(w http.ResponseWriter, r *http.Request) {
 	}
 	route, err := d.notifs.Update(r.Context(), existing.ID, req.Channel, req.MinLevel)
 	if err != nil {
-		d.writeRouteError(w, err, "kural güncellenemedi")
+		d.writeRouteError(w, r, err, "kural güncellenemedi")
 		return
 	}
 	targetID := route.ID.String()
@@ -238,7 +238,7 @@ func (d *Deps) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := d.notifs.Delete(r.Context(), existing.ID); err != nil {
-		d.writeRouteError(w, err, "kural silinemedi")
+		d.writeRouteError(w, r, err, "kural silinemedi")
 		return
 	}
 	targetID := existing.ID.String()
@@ -246,14 +246,14 @@ func (d *Deps) handleDeleteRoute(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (d *Deps) writeRouteError(w http.ResponseWriter, err error, failure string) {
+func (d *Deps) writeRouteError(w http.ResponseWriter, r *http.Request, err error, failure string) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "kayıt bulunamadı")
 	case errors.Is(err, store.ErrConflict):
 		writeError(w, http.StatusConflict, err.Error())
 	default:
-		log.Printf("%s: %v", failure, err)
+		slog.ErrorContext(r.Context(), "save notification route", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 	}
 }
@@ -271,7 +271,7 @@ func (d *Deps) routeFromPath(w http.ResponseWriter, r *http.Request, failure str
 			writeError(w, http.StatusNotFound, "kural bulunamadı")
 			return model.NotificationRoute{}, false
 		}
-		log.Printf("%s: %v", failure, err)
+		slog.ErrorContext(r.Context(), "lookup notification route", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 		return model.NotificationRoute{}, false
 	}
@@ -281,7 +281,7 @@ func (d *Deps) routeFromPath(w http.ResponseWriter, r *http.Request, failure str
 	} else if route.HostID != nil {
 		host, err := d.hosts.GetByID(r.Context(), *route.HostID)
 		if err != nil {
-			log.Printf("%s: host: %v", failure, err)
+			slog.ErrorContext(r.Context(), "lookup notification route host", "failure", failure, "err", err)
 			writeError(w, http.StatusInternalServerError, failure)
 			return model.NotificationRoute{}, false
 		}
@@ -289,7 +289,7 @@ func (d *Deps) routeFromPath(w http.ResponseWriter, r *http.Request, failure str
 	}
 	allowed, err := d.requireOrgAccess(r, orgID)
 	if err != nil {
-		log.Printf("%s: check access: %v", failure, err)
+		slog.ErrorContext(r.Context(), "check notification route access", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 		return model.NotificationRoute{}, false
 	}

@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -70,7 +70,7 @@ func (d *Deps) handleListContacts(w http.ResponseWriter, r *http.Request) {
 	}
 	contacts, err := d.contacts.ListByOrganization(r.Context(), orgID)
 	if err != nil {
-		log.Printf("list contacts: %v", err)
+		slog.ErrorContext(r.Context(), "list contacts", "err", err)
 		writeError(w, http.StatusInternalServerError, "iletişim kişileri alınamadı")
 		return
 	}
@@ -94,7 +94,7 @@ func (d *Deps) handleCreateContact(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := d.contacts.Create(r.Context(), orgID, in)
 	if err != nil {
-		d.writeContactError(w, err, "iletişim kişisi oluşturulamadı")
+		d.writeContactError(w, r, err, "iletişim kişisi oluşturulamadı")
 		return
 	}
 	targetID := c.ID.String()
@@ -119,7 +119,7 @@ func (d *Deps) handleUpdateContact(w http.ResponseWriter, r *http.Request) {
 	}
 	c, err := d.contacts.Update(r.Context(), existing.ID, in)
 	if err != nil {
-		d.writeContactError(w, err, "iletişim kişisi güncellenemedi")
+		d.writeContactError(w, r, err, "iletişim kişisi güncellenemedi")
 		return
 	}
 	targetID := c.ID.String()
@@ -137,7 +137,7 @@ func (d *Deps) handleDeleteContact(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "iletişim kişisi bulunamadı")
 			return
 		}
-		log.Printf("delete contact: %v", err)
+		slog.ErrorContext(r.Context(), "delete contact", "err", err)
 		writeError(w, http.StatusInternalServerError, "iletişim kişisi silinemedi")
 		return
 	}
@@ -146,14 +146,14 @@ func (d *Deps) handleDeleteContact(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (d *Deps) writeContactError(w http.ResponseWriter, err error, failure string) {
+func (d *Deps) writeContactError(w http.ResponseWriter, r *http.Request, err error, failure string) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		writeError(w, http.StatusNotFound, "kayıt bulunamadı")
 	case errors.Is(err, store.ErrConflict):
 		writeError(w, http.StatusBadRequest, err.Error())
 	default:
-		log.Printf("%s: %v", failure, err)
+		slog.ErrorContext(r.Context(), "save contact", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 	}
 }
@@ -170,13 +170,13 @@ func (d *Deps) orgFromPath(w http.ResponseWriter, r *http.Request, failure strin
 			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
 			return uuid.Nil, false
 		}
-		log.Printf("%s: %v", failure, err)
+		slog.ErrorContext(r.Context(), "lookup organization", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 		return uuid.Nil, false
 	}
 	allowed, err := d.requireOrgAccess(r, orgID)
 	if err != nil {
-		log.Printf("%s: check org access: %v", failure, err)
+		slog.ErrorContext(r.Context(), "check organization access", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 		return uuid.Nil, false
 	}
@@ -200,13 +200,13 @@ func (d *Deps) contactFromPath(w http.ResponseWriter, r *http.Request, failure s
 			writeError(w, http.StatusNotFound, "iletişim kişisi bulunamadı")
 			return model.OrganizationContact{}, false
 		}
-		log.Printf("%s: %v", failure, err)
+		slog.ErrorContext(r.Context(), "lookup contact", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 		return model.OrganizationContact{}, false
 	}
 	allowed, err := d.requireOrgAccess(r, c.OrganizationID)
 	if err != nil {
-		log.Printf("%s: check org access: %v", failure, err)
+		slog.ErrorContext(r.Context(), "check organization access", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 		return model.OrganizationContact{}, false
 	}

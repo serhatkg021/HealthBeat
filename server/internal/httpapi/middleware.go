@@ -2,14 +2,14 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
 
 	"healthbeat-server/internal/authsvc"
+	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/rbac"
 	"healthbeat-server/internal/store"
@@ -64,7 +64,7 @@ func (d *Deps) requirePermission(permKey string, next http.HandlerFunc) http.Han
 
 		ok, err := rbac.HasPermission(r.Context(), d.pool, role, permKey)
 		if err != nil {
-			log.Printf("permission check error: %v", err)
+			slog.ErrorContext(r.Context(), "permission check error", "err", err)
 			writeError(w, http.StatusInternalServerError, "yetki denetimi başarısız")
 			return
 		}
@@ -110,7 +110,7 @@ func (d *Deps) requireHostAuth(next http.HandlerFunc) http.HandlerFunc {
 		mode, orgID, apiTokenHash, err := d.hosts.GetAuthByID(r.Context(), hostID)
 		if err != nil {
 			if !errors.Is(err, store.ErrNotFound) {
-				log.Printf("host auth: lookup host: %v", err)
+				slog.ErrorContext(r.Context(), "host auth: lookup host", "err", err)
 			}
 			reject("geçersiz sunucu kimlik bilgisi")
 			return
@@ -135,25 +135,8 @@ func (d *Deps) requireHostAuth(next http.HandlerFunc) http.HandlerFunc {
 // kaydı) onu okur. Güvenilir proxy yoksa TCP eşidir (bkz. clientip.Resolver.ClientIP).
 func (d *Deps) resolveClientIP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r.WithContext(withClientIP(r.Context(), d.clientIPs.ClientIP(r))))
-	})
-}
-
-type statusRecorder struct {
-	http.ResponseWriter
-	status int
-}
-
-func (r *statusRecorder) WriteHeader(status int) {
-	r.status = status
-	r.ResponseWriter.WriteHeader(status)
-}
-
-func loggingMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
-		next.ServeHTTP(rec, r)
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, rec.status, time.Since(start))
+		ip := d.clientIPs.ClientIP(r)
+		logging.RequestInfoFrom(r.Context()).SetIP(ip)
+		next.ServeHTTP(w, r.WithContext(withClientIP(r.Context(), ip)))
 	})
 }

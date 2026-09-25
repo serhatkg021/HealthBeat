@@ -1,7 +1,7 @@
 package httpapi
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -20,6 +20,6 @@ func (d *Deps) logAudit(r *http.Request, action, targetType string, targetID *st
 	}
 
 	if err := d.audit.Write(r.Context(), actorUserID, email, action, targetType, targetID, details, remoteIP(r)); err != nil {
-		log.Printf("audit log write failed: %v", err)
+		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 }

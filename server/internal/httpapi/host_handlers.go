@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -107,13 +107,13 @@ func (d *Deps) handleCreateHost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
 			return
 		}
-		log.Printf("create host: lookup organization: %v", err)
+		slog.ErrorContext(r.Context(), "create host: lookup organization", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu oluşturulamadı")
 		return
 	}
 	allowed, err := d.requireOrgAccess(r, req.OrganizationID)
 	if err != nil {
-		log.Printf("create host: check org access: %v", err)
+		slog.ErrorContext(r.Context(), "create host: check org access", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu oluşturulamadı")
 		return
 	}
@@ -124,7 +124,7 @@ func (d *Deps) handleCreateHost(w http.ResponseWriter, r *http.Request) {
 	if overrides.HasCustom() || mountOverrides.HasCustom() || containerOverrides.HasCustom() {
 		mayEdit, err := d.canEditThresholds(r)
 		if err != nil {
-			log.Printf("create host: check threshold.edit: %v", err)
+			slog.ErrorContext(r.Context(), "create host: check threshold.edit", "err", err)
 			writeError(w, http.StatusInternalServerError, "sunucu oluşturulamadı")
 			return
 		}
@@ -152,7 +152,7 @@ func (d *Deps) handleCreateHost(w http.ResponseWriter, r *http.Request) {
 	case model.HostModePush:
 		plainToken, err = authsvc.GenerateOpaqueSecret()
 		if err != nil {
-			log.Printf("create host: generate api token: %v", err)
+			slog.ErrorContext(r.Context(), "create host: generate api token", "err", err)
 			writeError(w, http.StatusInternalServerError, "sunucu oluşturulamadı")
 			return
 		}
@@ -169,7 +169,7 @@ func (d *Deps) handleCreateHost(w http.ResponseWriter, r *http.Request) {
 		}
 		plainSecret, err = authsvc.GenerateOpaqueSecret()
 		if err != nil {
-			log.Printf("create host: generate pull secret: %v", err)
+			slog.ErrorContext(r.Context(), "create host: generate pull secret", "err", err)
 			writeError(w, http.StatusInternalServerError, "sunucu oluşturulamadı")
 			return
 		}
@@ -188,7 +188,7 @@ func (d *Deps) handleCreateHost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("create host: %v", err)
+		slog.ErrorContext(r.Context(), "create host", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu oluşturulamadı")
 		return
 	}
@@ -245,14 +245,14 @@ func (d *Deps) handleGetHost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("get host: %v", err)
+		slog.ErrorContext(r.Context(), "get host", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu alınamadı")
 		return
 	}
 
 	allowed, err := d.requireHostViewAccess(r, host)
 	if err != nil {
-		log.Printf("get host: check access: %v", err)
+		slog.ErrorContext(r.Context(), "get host: check access", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu alınamadı")
 		return
 	}
@@ -263,7 +263,7 @@ func (d *Deps) handleGetHost(w http.ResponseWriter, r *http.Request) {
 
 	resp := hostResponse{Host: host}
 	if same, err := d.hosts.SameMachineHosts(r.Context(), host.ID); err != nil {
-		log.Printf("get host: same machine lookup: %v", err) // uyarı tamamlayıcıdır; yokluğu yanıtı bozmamalı
+		slog.WarnContext(r.Context(), "get host: same machine lookup", "err", err) // uyarı tamamlayıcıdır; yokluğu yanıtı bozmamalı
 	} else {
 		// Yalnızca çağıranın görebildiği sunucular (başka organizasyonun makinesi sızmasın).
 		for _, ref := range same {
@@ -299,7 +299,7 @@ func (d *Deps) handleListOrganizationHosts(w http.ResponseWriter, r *http.Reques
 	case model.RoleOrgAdmin:
 		allowed, err := d.userOrgs.IsAssigned(r.Context(), userID, orgID)
 		if err != nil {
-			log.Printf("list organization hosts: check org access: %v", err)
+			slog.ErrorContext(r.Context(), "list organization hosts: check org access", "err", err)
 			writeError(w, http.StatusInternalServerError, "sunucular listelenemedi")
 			return
 		}
@@ -310,13 +310,13 @@ func (d *Deps) handleListOrganizationHosts(w http.ResponseWriter, r *http.Reques
 	case model.RoleOperator:
 		hostIDs, err := d.userHosts.ListHostIDs(r.Context(), userID)
 		if err != nil {
-			log.Printf("list organization hosts: list assigned hosts: %v", err)
+			slog.ErrorContext(r.Context(), "list organization hosts: list assigned hosts", "err", err)
 			writeError(w, http.StatusInternalServerError, "sunucular listelenemedi")
 			return
 		}
 		hosts, total, err := d.hosts.ListByOrganizationFiltered(r.Context(), orgID, hostIDs, p)
 		if err != nil {
-			log.Printf("list organization hosts: %v", err)
+			slog.ErrorContext(r.Context(), "list organization hosts", "err", err)
 			writeError(w, http.StatusInternalServerError, "sunucular listelenemedi")
 			return
 		}
@@ -330,7 +330,7 @@ func (d *Deps) handleListOrganizationHosts(w http.ResponseWriter, r *http.Reques
 
 	hosts, total, err := d.hosts.ListByOrganization(r.Context(), orgID, p)
 	if err != nil {
-		log.Printf("list organization hosts: %v", err)
+		slog.ErrorContext(r.Context(), "list organization hosts", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucular listelenemedi")
 		return
 	}
@@ -357,13 +357,13 @@ func (d *Deps) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("update host: lookup: %v", err)
+		slog.ErrorContext(r.Context(), "update host: lookup", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu güncellenemedi")
 		return
 	}
 	allowed, err := d.requireOrgAccess(r, existing.OrganizationID)
 	if err != nil {
-		log.Printf("update host: check org access: %v", err)
+		slog.ErrorContext(r.Context(), "update host: check org access", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu güncellenemedi")
 		return
 	}
@@ -400,7 +400,7 @@ func (d *Deps) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("update host: %v", err)
+		slog.ErrorContext(r.Context(), "update host", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu güncellenemedi")
 		return
 	}
@@ -423,13 +423,13 @@ func (d *Deps) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("delete host: lookup: %v", err)
+		slog.ErrorContext(r.Context(), "delete host: lookup", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu silinemedi")
 		return
 	}
 	allowed, err := d.requireOrgAccess(r, existing.OrganizationID)
 	if err != nil {
-		log.Printf("delete host: check org access: %v", err)
+		slog.ErrorContext(r.Context(), "delete host: check org access", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu silinemedi")
 		return
 	}
@@ -443,7 +443,7 @@ func (d *Deps) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("delete host: %v", err)
+		slog.ErrorContext(r.Context(), "delete host", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu silinemedi")
 		return
 	}
@@ -470,13 +470,13 @@ func (d *Deps) handleRotateHostCredentials(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("rotate host credentials: lookup: %v", err)
+		slog.ErrorContext(r.Context(), "rotate host credentials: lookup", "err", err)
 		writeError(w, http.StatusInternalServerError, "kimlik bilgisi yenilenemedi")
 		return
 	}
 	allowed, err := d.requireOrgAccess(r, existing.OrganizationID)
 	if err != nil {
-		log.Printf("rotate host credentials: check org access: %v", err)
+		slog.ErrorContext(r.Context(), "rotate host credentials: check org access", "err", err)
 		writeError(w, http.StatusInternalServerError, "kimlik bilgisi yenilenemedi")
 		return
 	}
@@ -487,7 +487,7 @@ func (d *Deps) handleRotateHostCredentials(w http.ResponseWriter, r *http.Reques
 
 	secret, err := authsvc.GenerateOpaqueSecret()
 	if err != nil {
-		log.Printf("rotate host credentials: generate: %v", err)
+		slog.ErrorContext(r.Context(), "rotate host credentials: generate", "err", err)
 		writeError(w, http.StatusInternalServerError, "kimlik bilgisi yenilenemedi")
 		return
 	}
@@ -497,7 +497,7 @@ func (d *Deps) handleRotateHostCredentials(w http.ResponseWriter, r *http.Reques
 	case model.HostModePush:
 		hash := authsvc.HashOpaqueSecret(secret)
 		if err := d.hosts.UpdateAPITokenHash(r.Context(), id, hash); err != nil {
-			log.Printf("rotate host credentials: update token hash: %v", err)
+			slog.ErrorContext(r.Context(), "rotate host credentials: update token hash", "err", err)
 			writeError(w, http.StatusInternalServerError, "kimlik bilgisi yenilenemedi")
 			return
 		}
@@ -506,7 +506,7 @@ func (d *Deps) handleRotateHostCredentials(w http.ResponseWriter, r *http.Reques
 		// Push token'ından farklı olarak hash'lenemez — server bu secret'ı her poll'da host'a
 		// sunar; bu yüzden store onu at-rest şifreler (hosts.pull_secret_enc).
 		if err := d.hosts.UpdatePullSecret(r.Context(), id, secret); err != nil {
-			log.Printf("rotate host credentials: update pull secret: %v", err)
+			slog.ErrorContext(r.Context(), "rotate host credentials: update pull secret", "err", err)
 			writeError(w, http.StatusInternalServerError, "kimlik bilgisi yenilenemedi")
 			return
 		}

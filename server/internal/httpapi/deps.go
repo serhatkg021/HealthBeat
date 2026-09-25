@@ -4,7 +4,7 @@ package httpapi
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -59,6 +59,10 @@ type Deps struct {
 	// resetIPs sıfırlama isteklerini kaynak IP başına, resetEmails hedef e-posta başına sınırlar (posta bombası önlemi).
 	resetIPs    *ratelimit.Limiter
 	resetEmails *ratelimit.Limiter
+
+	// errorBodyBytes, hata alan (4xx/5xx) bir isteğin loga yazılan istek/yanıt gövdesinin azami boyutudur; 0 gövde
+	// yazmaz. Bkz. requestlog.go.
+	errorBodyBytes int
 }
 
 // RateLimits, API'nin sınırlayıcılarını yapılandırır (dakikada; 0 kapatır).
@@ -86,6 +90,10 @@ func (d *Deps) SetAgentPolicy(p AgentPolicy) { d.agentPolicy = p }
 // SetClientIPResolver, istemci IP'sinin güvenilir proxy'lerin X-Forwarded-For'undan okunmasını açar (bkz. clientip).
 func (d *Deps) SetClientIPResolver(r *clientip.Resolver) { d.clientIPs = r }
 
+// SetErrorBodyLogging, hata alan isteklerin loga yazılan gövdelerinin azami boyutunu ayarlar (LOG_ERROR_BODY_BYTES);
+// 0 gövde yazmaz. Gövdeler her zaman maskelenir (bkz. requestlog.go).
+func (d *Deps) SetErrorBodyLogging(maxBytes int) { d.errorBodyBytes = maxBytes }
+
 func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *alertengine.Engine, limits RateLimits, secrets *secretbox.Box) *Deps {
 	return &Deps{
 		pool:        pool,
@@ -111,6 +119,8 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 		alerts:        store.NewAlerts(pool),
 		refreshTokens: store.NewRefreshTokens(pool),
 		resets:        store.NewPasswordResets(pool),
+
+		errorBodyBytes: DefaultErrorBodyBytes,
 	}
 }
 
@@ -125,14 +135,14 @@ func (d *Deps) RunTokenPurge(ctx context.Context) {
 			return
 		case <-ticker.C:
 			if n, err := d.refreshTokens.PurgeExpired(ctx); err != nil {
-				log.Printf("purge refresh tokens: %v", err)
+				slog.ErrorContext(ctx, "purge refresh tokens", "err", err)
 			} else if n > 0 {
-				log.Printf("purged %d expired refresh token record(s)", n)
+				slog.InfoContext(ctx, "purged expired refresh tokens", "count", n)
 			}
 			if n, err := d.resets.PurgeExpired(ctx); err != nil {
-				log.Printf("purge password reset tokens: %v", err)
+				slog.ErrorContext(ctx, "purge password reset tokens", "err", err)
 			} else if n > 0 {
-				log.Printf("purged %d expired password reset record(s)", n)
+				slog.InfoContext(ctx, "purged expired password reset records", "count", n)
 			}
 		}
 	}
