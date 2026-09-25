@@ -17,8 +17,8 @@ import (
 
 // requireOrgAccess (organization_handlers.go'da tanımlı) organizasyon kimliğine göre
 // super_admin/org_admin kapsam denetimini zaten uygular — host'lar onu yeniden kullanır,
-// çünkü host.create/update/delete yalnızca bu iki role verilir (bkz.
-// migrations/000013_seed_role_permissions).
+// çünkü host.create/update/delete yalnızca bu iki role verilir (bkz. migrations/000001_baseline,
+// role_permissions tohumu).
 
 type createHostRequest struct {
 	OrganizationID uuid.UUID `json:"organization_id"`
@@ -503,8 +503,8 @@ func (d *Deps) handleRotateHostCredentials(w http.ResponseWriter, r *http.Reques
 		}
 		resp.APIToken = &secret
 	case model.HostModePull:
-		// Hash'lenmeden düz metin olarak saklanır — server bu secret'ı her poll'da host'a
-		// sunar (bkz. migrations/000016).
+		// Push token'ından farklı olarak hash'lenemez — server bu secret'ı her poll'da host'a
+		// sunar; bu yüzden store onu at-rest şifreler (hosts.pull_secret_enc).
 		if err := d.hosts.UpdatePullSecret(r.Context(), id, secret); err != nil {
 			log.Printf("rotate host credentials: update pull secret: %v", err)
 			writeError(w, http.StatusInternalServerError, "kimlik bilgisi yenilenemedi")

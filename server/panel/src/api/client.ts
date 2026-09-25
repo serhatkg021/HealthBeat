@@ -1,7 +1,7 @@
 // İnce bir fetch sarmalayıcısı: bearer access token'ı ekler, 401'de bir kez saydam biçimde
-// yeniler ve hataları normalleştirir. Token'lar localStorage'da yaşar — v1'de dahili bir
-// yönetim paneli için kabul edilebilir, ama Faz 7'de yeniden ele alınmaya değer bilinen bir
-// XSS maruziyeti takasıdır (bkz. PROGRESS.md).
+// yeniler ve hataları normalleştirir. Token'lar localStorage'da yaşar — dahili bir yönetim
+// paneli için kabul edilebilir, ama bilinen bir XSS maruziyeti takasıdır: bir XSS açığı
+// token'ları okuyabilir (httpOnly çereze geçiş, CSRF korumasıyla birlikte ileride ele alınabilir).
 
 import { apiUrl } from '../config.ts'
 

@@ -13,7 +13,7 @@ export default defineConfig({
     proxy: {
       // API çağrılarını Go backend'ine yönlendirir; böylece tarayıcı kendinden imzalı sertifikasıyla
       // asla doğrudan konuşmaz (elle "bu sertifikaya güven" adımından ve server'da herhangi bir
-      // CORS ayarından kaçınır — bkz. PROGRESS.md kararları).
+      // CORS ayarından kaçınır — geliştirmede CORS_ALLOWED_ORIGINS gerekmez).
       '/api/v1': {
         target: 'https://localhost:8443',
         changeOrigin: true,

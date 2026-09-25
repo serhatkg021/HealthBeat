@@ -69,6 +69,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   Artık panel güvenilir proxy (`TRUSTED_PROXIES=panel`) olarak tanımlı ve gerçek istemci IP'si kullanılıyor; server'a
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
+### İç değişiklikler (davranış değişmedi)
+- Kod yorumlarındaki eskimiş atıflar düzeltildi: artık var olmayan migration'lar (`000013`, `000016`) ve `PROGRESS.md`
+  kararları yerine gerekçe yorumun kendisine yazıldı; pull secret'ın "düz metin saklanır" ve docker_restart'ın "alert'e
+  bağlanmadı" ifadeleri güncel davranışa göre düzeltildi.
+
 ## [1.0.0] - 2026-09-22
 
 İlk kararlı sürüm. Şema tek bir baseline migration'dır (`000001_baseline`); tasarımı `docs/VERITABANI.md`'de.
