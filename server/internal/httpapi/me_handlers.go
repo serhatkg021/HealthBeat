@@ -1,7 +1,7 @@
 package httpapi
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 )
 
@@ -15,7 +15,7 @@ func (d *Deps) handleGetMe(w http.ResponseWriter, r *http.Request) {
 
 	user, err := d.users.GetByID(r.Context(), userID)
 	if err != nil {
-		log.Printf("get me: %v", err)
+		slog.ErrorContext(r.Context(), "get me", "err", err)
 		writeError(w, http.StatusInternalServerError, "kullanıcı bilgisi alınamadı")
 		return
 	}
@@ -28,14 +28,14 @@ func (d *Deps) handleGetMyHosts(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := d.userHosts.ListHostIDs(r.Context(), userID)
 	if err != nil {
-		log.Printf("get my hosts: list ids: %v", err)
+		slog.ErrorContext(r.Context(), "get my hosts: list ids", "err", err)
 		writeError(w, http.StatusInternalServerError, "atanmış sunucular alınamadı")
 		return
 	}
 
 	hosts, err := d.hosts.ListByIDs(r.Context(), ids)
 	if err != nil {
-		log.Printf("get my hosts: %v", err)
+		slog.ErrorContext(r.Context(), "get my hosts", "err", err)
 		writeError(w, http.StatusInternalServerError, "atanmış sunucular alınamadı")
 		return
 	}

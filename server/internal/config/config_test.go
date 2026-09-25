@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"log/slog"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -118,6 +119,27 @@ func TestLoadTrustedProxies(t *testing.T) {
 	t.Setenv("TRUSTED_PROXIES", "0.0.0.0/0")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXIES") {
 		t.Fatalf("trust everyone: err=%v, want it to name TRUSTED_PROXIES", err)
+	}
+}
+
+func TestLoadLogSettings(t *testing.T) {
+	setRequired(t)
+	cfg, err := Load()
+	if err != nil || cfg.LogLevel != slog.LevelInfo || cfg.LogFormat != "text" || cfg.LogErrorBodyBytes != 4096 {
+		t.Fatalf("defaults: level=%v format=%q body=%d err=%v", cfg.LogLevel, cfg.LogFormat, cfg.LogErrorBodyBytes, err)
+	}
+	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("LOG_FORMAT", "json")
+	t.Setenv("LOG_ERROR_BODY_BYTES", "0")
+	if cfg, err = Load(); err != nil || cfg.LogLevel != slog.LevelDebug || cfg.LogFormat != "json" || cfg.LogErrorBodyBytes != 0 {
+		t.Fatalf("set: level=%v format=%q body=%d err=%v", cfg.LogLevel, cfg.LogFormat, cfg.LogErrorBodyBytes, err)
+	}
+	for key, bad := range map[string]string{"LOG_LEVEL": "verbose", "LOG_FORMAT": "xml", "LOG_ERROR_BODY_BYTES": "2000000"} {
+		t.Setenv(key, bad)
+		if _, err := Load(); err == nil || !strings.Contains(err.Error(), key) {
+			t.Fatalf("%s=%s: err=%v, want it to name %s", key, bad, err, key)
+		}
+		t.Setenv(key, "")
 	}
 }
 

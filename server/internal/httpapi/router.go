@@ -85,5 +85,6 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/dashboard/summary", d.requirePermission("dashboard.view", d.handleDashboardSummary))
 	mux.HandleFunc("GET /api/v1/dashboard/overview", d.requirePermission("dashboard.view", d.handleDashboardOverview))
 
-	return d.resolveClientIP(loggingMiddleware(mux))
+	// Dıştan içe: istek kimliği → istemci IP'si → istek logu (panic kurtarma ve hata ayrıntısı dahil) → rotalar.
+	return withRequestID(d.resolveClientIP(d.requestLog(mux)))
 }

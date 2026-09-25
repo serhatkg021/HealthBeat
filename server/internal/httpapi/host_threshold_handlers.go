@@ -3,7 +3,7 @@ package httpapi
 import (
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"sort"
 
@@ -169,7 +169,7 @@ func (d *Deps) handleGetHostThresholds(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := d.hostThresholds(r, host)
 	if err != nil {
-		log.Printf("get host thresholds: %v", err)
+		slog.ErrorContext(r.Context(), "get host thresholds", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu eşikleri alınamadı")
 		return
 	}
@@ -194,13 +194,13 @@ func (d *Deps) handleSetHostThresholds(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("set host thresholds: lookup: %v", err)
+		slog.ErrorContext(r.Context(), "set host thresholds: lookup", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu eşikleri güncellenemedi")
 		return
 	}
 	allowed, err := d.requireOrgAccess(r, host.OrganizationID)
 	if err != nil {
-		log.Printf("set host thresholds: check org access: %v", err)
+		slog.ErrorContext(r.Context(), "set host thresholds: check org access", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu eşikleri güncellenemedi")
 		return
 	}
@@ -245,7 +245,7 @@ func (d *Deps) handleSetHostThresholds(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("set host thresholds: %v", err)
+		slog.ErrorContext(r.Context(), "set host thresholds", "err", err)
 		writeError(w, http.StatusInternalServerError, "sunucu eşikleri güncellenemedi")
 		return
 	}
@@ -255,7 +255,7 @@ func (d *Deps) handleSetHostThresholds(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := d.hostThresholds(r, host)
 	if err != nil {
-		log.Printf("set host thresholds: reload: %v", err)
+		slog.ErrorContext(r.Context(), "set host thresholds: reload", "err", err)
 		writeError(w, http.StatusInternalServerError, "eşikler kaydedildi ancak geri okunamadı")
 		return
 	}

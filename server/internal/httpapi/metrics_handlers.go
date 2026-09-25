@@ -1,7 +1,7 @@
 package httpapi
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -49,7 +49,7 @@ func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := d.metrics.Insert(r.Context(), hostID, req.CPUUsagePct, req.RAMUsagePct, req.Disk); err != nil {
-		log.Printf("ingest metrics: insert: %v", err)
+		slog.ErrorContext(r.Context(), "ingest metrics: insert", "err", err)
 		writeError(w, http.StatusInternalServerError, "metrikler kaydedilemedi")
 		return
 	}
@@ -57,11 +57,11 @@ func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) {
 	// Hatalı biçimli bir container raporu (ör. tanınmayan bir durum değeri) tüm alımı başarısız
 	// kılmamalı — CPU/RAM/disk zaten kalıcı olarak saklandı.
 	if err := d.metrics.ReplaceDockerContainers(r.Context(), hostID, req.DockerContainers); err != nil {
-		log.Printf("ingest metrics: insert docker containers: %v", err)
+		slog.ErrorContext(r.Context(), "ingest metrics: insert docker containers", "err", err)
 	}
 
 	if err := d.hosts.MarkOnline(r.Context(), hostID, req.Hardware(), agentInfoFromRequest(r, unknown)); err != nil {
-		log.Printf("ingest metrics: mark online: %v", err)
+		slog.ErrorContext(r.Context(), "ingest metrics: mark online", "err", err)
 	}
 
 	d.alertEngine.ResolveOffline(r.Context(), hostID, orgID)

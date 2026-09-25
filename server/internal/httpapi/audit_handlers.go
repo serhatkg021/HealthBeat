@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -76,7 +76,7 @@ func (d *Deps) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 	logs, err := d.audit.List(r.Context(), f)
 	if err != nil {
-		log.Printf("list audit logs: %v", err)
+		slog.ErrorContext(r.Context(), "list audit logs", "err", err)
 		writeError(w, http.StatusInternalServerError, "denetim kayıtları listelenemedi")
 		return
 	}

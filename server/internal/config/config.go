@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"healthbeat-server/internal/clientip"
+	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/secretbox"
 	"healthbeat-server/internal/version"
@@ -90,7 +92,18 @@ type Config struct {
 	// reddedilmez.
 	LatestAgentVersion       string
 	MinSupportedAgentVersion string
+
+	// LogLevel (LOG_LEVEL: debug|info|warn|error, varsayılan info) ve LogFormat (LOG_FORMAT: text|json, varsayılan
+	// text) server logunu ayarlar. Başarılı ingest ve /healthz istekleri yalnızca debug'da görünür.
+	LogLevel  slog.Level
+	LogFormat string
+	// LogErrorBodyBytes (LOG_ERROR_BODY_BYTES, varsayılan 4096), hata alan (4xx/5xx) bir isteğin loga yazılan
+	// istek/yanıt gövdesinin azami boyutudur; 0 gövde yazmaz. Şifre/token/secret alanları her zaman maskelenir.
+	LogErrorBodyBytes int
 }
+
+// maxLogErrorBodyBytes, LOG_ERROR_BODY_BYTES'ın üst sınırıdır: API zaten 1 MiB'tan büyük gövde kabul etmez.
+const maxLogErrorBodyBytes = 1 << 20
 
 func Load() (*Config, error) {
 	loadDotEnv(".env")
@@ -191,6 +204,18 @@ func Load() (*Config, error) {
 	}
 	if cfg.IngestPerMinute, err = getIntDefault("RATE_LIMIT_INGEST_PER_MINUTE", 120); err != nil {
 		return nil, err
+	}
+	if cfg.LogLevel, err = logging.ParseLevel(os.Getenv("LOG_LEVEL")); err != nil {
+		return nil, fmt.Errorf("invalid LOG_LEVEL: %w", err)
+	}
+	if cfg.LogFormat, err = logging.ParseFormat(os.Getenv("LOG_FORMAT")); err != nil {
+		return nil, fmt.Errorf("invalid LOG_FORMAT: %w", err)
+	}
+	if cfg.LogErrorBodyBytes, err = getIntDefault("LOG_ERROR_BODY_BYTES", 4096); err != nil {
+		return nil, err
+	}
+	if cfg.LogErrorBodyBytes > maxLogErrorBodyBytes {
+		return nil, fmt.Errorf("invalid LOG_ERROR_BODY_BYTES: must be at most %d", maxLogErrorBodyBytes)
 	}
 
 	return cfg, nil

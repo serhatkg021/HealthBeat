@@ -18,8 +18,24 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   `panel`. `0.0.0.0/0` gibi herkese güvenen aralıklar reddedilir. Ayrıntı: `docs/DEPLOYMENT.md`, "Hız sınırları ve istemci IP'si".
 - **`GET /hosts/:id/metrics/latest`:** host'un en son ham metrik örneği (`/metrics` dizisinin bir elemanıyla aynı biçim;
   host hiç rapor vermediyse `204`). Aynı izin (`host.view`) ve erişim kuralı.
+- **İstek kimliği (`X-Request-ID`):** her yanıt bir istek kimliği taşır (istekte geçerli bir tane gelirse korunur); o isteğin
+  bütün log satırlarında `request_id` olarak yer alır, ayrıca `user_id`/`host_id`/`ip`. Kullanıcının gördüğü bir hata logda
+  kimlikle bulunabilir.
+- **Hata alan isteklerin ayrıntısı loga yazılıyor:** `4xx`/`5xx` yanıtlarda query, izin listesindeki başlıklar, istek gövdesi ve
+  hata yanıtı; en fazla `LOG_ERROR_BODY_BYTES` bayt (varsayılan `4096`, `0` = kapalı). Adında `password`/`token`/`secret`
+  geçen alanlar `[REDACTED]` olur, `Authorization`/`Cookie` hiç yazılmaz. Gövdeler e-posta gibi kişisel veri içerebilir.
+- **`LOG_LEVEL`** (`debug|info|warn|error`, varsayılan `info`) ve **`LOG_FORMAT`** (`text|json`, varsayılan `text`).
+  Docker Compose ikisini ve `LOG_ERROR_BODY_BYTES`'ı `.env`'den aktarır. Ayrıntı: `docs/DEPLOYMENT.md`, "Loglama".
+- **Panic kurtarma:** bir istekteki beklenmeyen hata artık bağlantıyı düşürmek yerine `500` ve `request_id`'li JSON yanıt
+  döndürüyor, yığın izi loga yazılıyor. Arka plan işleri (pull scheduler, offline izleyici, retention, token temizliği,
+  istemci IP çözücüsü) panic'lerse loglanıp 5 sn sonra yeniden başlatılıyor; alert e-postası ya da tek bir host'un poll'u
+  panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Log biçimi değişti:** satırlar artık seviyeli ve yapılandırılmış (`time=… level=INFO msg="…" key=value`, ya da
+  `LOG_FORMAT=json`). İstek satırında durum koduna göre seviye (`5xx` ERROR, `4xx` WARN); başarılı agent raporları
+  (`POST /api/v1/metrics`) ve `/healthz` artık yalnızca `LOG_LEVEL=debug`'da görünüyor. Log metinlerini arayan betik ya da
+  alarm kuralların varsa güncelle (ör. `WARNING: no super_admin exists` → `level=WARN msg="no super_admin exists …"`).
 - **Panel: sunucu detayının "Genel" sekmesi artık yalnızca son okumayı indiriyor** (`/metrics/latest`). Önceden anlık kartlar
   için son 24 saatin bütün ham satırlarını (30 sn aralıkta ~2.900, 10 sn'de ~8.600 satır, her biri disk listesiyle) indirip
   yalnızca sonuncusunu kullanıyordu. Geçmiş grafiği ("Detay") değişmedi.

@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"sort"
 
@@ -38,7 +38,7 @@ func (d *Deps) handleGetDiskAlerts(w http.ResponseWriter, r *http.Request) {
 	}
 	settings, err := d.diskAlertSettings(r, host)
 	if err != nil {
-		log.Printf("get disk alerts: %v", err)
+		slog.ErrorContext(r.Context(), "get disk alerts", "err", err)
 		writeError(w, http.StatusInternalServerError, "disk alert ayarları alınamadı")
 		return
 	}
@@ -60,13 +60,13 @@ func (d *Deps) handleSetDiskAlerts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("set disk alerts: lookup: %v", err)
+		slog.ErrorContext(r.Context(), "set disk alerts: lookup", "err", err)
 		writeError(w, http.StatusInternalServerError, "disk alert ayarları güncellenemedi")
 		return
 	}
 	allowed, err := d.requireOrgAccess(r, host.OrganizationID)
 	if err != nil {
-		log.Printf("set disk alerts: check org access: %v", err)
+		slog.ErrorContext(r.Context(), "set disk alerts: check org access", "err", err)
 		writeError(w, http.StatusInternalServerError, "disk alert ayarları güncellenemedi")
 		return
 	}
@@ -103,7 +103,7 @@ func (d *Deps) handleSetDiskAlerts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return
 		}
-		log.Printf("set disk alerts: %v", err)
+		slog.ErrorContext(r.Context(), "set disk alerts", "err", err)
 		writeError(w, http.StatusInternalServerError, "disk alert ayarları güncellenemedi")
 		return
 	}
@@ -114,7 +114,7 @@ func (d *Deps) handleSetDiskAlerts(w http.ResponseWriter, r *http.Request) {
 	host.AllMountsAlert, host.CustomAlertMounts = *req.AllMountsAlert, mounts
 	settings, err := d.diskAlertSettings(r, host)
 	if err != nil {
-		log.Printf("set disk alerts: reload: %v", err)
+		slog.ErrorContext(r.Context(), "set disk alerts: reload", "err", err)
 		writeError(w, http.StatusInternalServerError, "ayarlar kaydedildi ancak geri okunamadı")
 		return
 	}
@@ -135,13 +135,13 @@ func (d *Deps) loadHostForView(w http.ResponseWriter, r *http.Request, failure s
 			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
 			return model.Host{}, false
 		}
-		log.Printf("%s: lookup host: %v", failure, err)
+		slog.ErrorContext(r.Context(), "lookup host", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 		return model.Host{}, false
 	}
 	allowed, err := d.requireHostViewAccess(r, host)
 	if err != nil {
-		log.Printf("%s: check access: %v", failure, err)
+		slog.ErrorContext(r.Context(), "check host access", "failure", failure, "err", err)
 		writeError(w, http.StatusInternalServerError, failure)
 		return model.Host{}, false
 	}

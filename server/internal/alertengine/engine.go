@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/notify"
 	"healthbeat-server/internal/store"
@@ -509,9 +510,12 @@ func (e *Engine) enqueue(job mailJob) {
 
 // deliver, kendi süre sınırıyla bir işçide çalışır: alert'i açan istek genellikle bu noktada
 // bitmiş (ve context'ini iptal etmiş) olur.
+//
+// Bir panic yalnızca o e-postayı düşürür; işçi kuyruğu tüketmeye devam eder.
 func (e *Engine) deliver(job mailJob) {
 	ctx, cancel := context.WithTimeout(context.Background(), mailDeliveryTimeout)
 	defer cancel()
+	defer logging.Recover(ctx, "alert mail delivery")
 	orgID, alert := job.orgID, job.alert
 
 	recipients, err := e.notifs.ResolveRecipients(ctx, alert.HostID, orgID, alert.Level)

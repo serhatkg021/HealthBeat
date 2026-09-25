@@ -2,7 +2,7 @@ package httpapi
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,7 +27,7 @@ func (d *Deps) handleListUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, total, err := d.users.List(r.Context(), p)
 	if err != nil {
-		log.Printf("list users: %v", err)
+		slog.ErrorContext(r.Context(), "list users", "err", err)
 		writeError(w, http.StatusInternalServerError, "kullanıcılar listelenemedi")
 		return
 	}
@@ -119,7 +119,7 @@ func (d *Deps) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	passwordHash, err := authsvc.HashPassword(req.Password)
 	if err != nil {
-		log.Printf("create user: hash password: %v", err)
+		slog.ErrorContext(r.Context(), "create user: hash password", "err", err)
 		writeError(w, http.StatusInternalServerError, "kullanıcı oluşturulamadı")
 		return
 	}
@@ -130,7 +130,7 @@ func (d *Deps) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("create user: %v", err)
+		slog.ErrorContext(r.Context(), "create user", "err", err)
 		writeError(w, http.StatusInternalServerError, "kullanıcı oluşturulamadı")
 		return
 	}
@@ -154,7 +154,7 @@ func (d *Deps) handleGetUser(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "kullanıcı bulunamadı")
 			return
 		}
-		log.Printf("get user: %v", err)
+		slog.ErrorContext(r.Context(), "get user", "err", err)
 		writeError(w, http.StatusInternalServerError, "kullanıcı alınamadı")
 		return
 	}
@@ -218,7 +218,7 @@ func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("update user: %v", err)
+		slog.ErrorContext(r.Context(), "update user", "err", err)
 		writeError(w, http.StatusInternalServerError, "kullanıcı güncellenemedi")
 		return
 	}
@@ -233,7 +233,7 @@ func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusConflict, err.Error())
 				return
 			}
-			log.Printf("update user: profile: %v", err)
+			slog.ErrorContext(r.Context(), "update user: profile", "err", err)
 			writeError(w, http.StatusInternalServerError, "kullanıcı güncellenemedi")
 			return
 		}
@@ -242,19 +242,19 @@ func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	if req.Password != nil {
 		hash, err := authsvc.HashPassword(*req.Password)
 		if err != nil {
-			log.Printf("update user: hash password: %v", err)
+			slog.ErrorContext(r.Context(), "update user: hash password", "err", err)
 			writeError(w, http.StatusInternalServerError, "kullanıcı güncellenemedi")
 			return
 		}
 		if err := d.users.UpdatePassword(r.Context(), id, hash); err != nil {
-			log.Printf("update user: update password: %v", err)
+			slog.ErrorContext(r.Context(), "update user: update password", "err", err)
 			writeError(w, http.StatusInternalServerError, "kullanıcı güncellenemedi")
 			return
 		}
 		// Şifre değişikliği mevcut oturumları sonlandırmalı — genellikle bu yüzden değiştirilir.
 		// (Zaten verilmiş access token'lar kısa TTL'lerini doldurur; tek tek iptal edilemezler.)
 		if err := d.refreshTokens.RevokeAllForUser(r.Context(), id); err != nil {
-			log.Printf("update user: revoke sessions: %v", err)
+			slog.ErrorContext(r.Context(), "update user: revoke sessions", "err", err)
 			writeError(w, http.StatusInternalServerError, "şifre değişti ancak mevcut oturumlar sonlandırılamadı")
 			return
 		}
@@ -288,7 +288,7 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("delete user: %v", err)
+		slog.ErrorContext(r.Context(), "delete user", "err", err)
 		writeError(w, http.StatusInternalServerError, "kullanıcı silinemedi")
 		return
 	}
@@ -306,13 +306,13 @@ func (d *Deps) handleGetUserOrganizations(w http.ResponseWriter, r *http.Request
 	}
 	ids, err := d.userOrgs.ListOrganizationIDs(r.Context(), id)
 	if err != nil {
-		log.Printf("list user organizations: %v", err)
+		slog.ErrorContext(r.Context(), "list user organizations", "err", err)
 		writeError(w, http.StatusInternalServerError, "atamalar alınamadı")
 		return
 	}
 	orgs, err := d.organizations.ListByIDs(r.Context(), ids)
 	if err != nil {
-		log.Printf("list organizations by ids: %v", err)
+		slog.ErrorContext(r.Context(), "list organizations by ids", "err", err)
 		writeError(w, http.StatusInternalServerError, "atamalar alınamadı")
 		return
 	}
@@ -341,7 +341,7 @@ func (d *Deps) handleSetUserOrganizations(w http.ResponseWriter, r *http.Request
 			writeError(w, http.StatusBadRequest, "kullanıcı ya da organizasyonlardan biri yok")
 			return
 		}
-		log.Printf("set user organizations: %v", err)
+		slog.ErrorContext(r.Context(), "set user organizations", "err", err)
 		writeError(w, http.StatusInternalServerError, "atamalar güncellenemedi")
 		return
 	}
@@ -359,7 +359,7 @@ func (d *Deps) handleGetUserHosts(w http.ResponseWriter, r *http.Request) {
 	}
 	ids, err := d.userHosts.ListHostIDs(r.Context(), id)
 	if err != nil {
-		log.Printf("list user hosts: %v", err)
+		slog.ErrorContext(r.Context(), "list user hosts", "err", err)
 		writeError(w, http.StatusInternalServerError, "atamalar alınamadı")
 		return
 	}
@@ -390,7 +390,7 @@ func (d *Deps) handleSetUserHosts(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "kullanıcı ya da sunuculardan biri yok")
 			return
 		}
-		log.Printf("set user hosts: %v", err)
+		slog.ErrorContext(r.Context(), "set user hosts", "err", err)
 		writeError(w, http.StatusInternalServerError, "atamalar güncellenemedi")
 		return
 	}
@@ -422,7 +422,7 @@ func (d *Deps) handleAddUserHostsByOrganization(w http.ResponseWriter, r *http.R
 
 	added, err := d.userHosts.AddByOrganization(r.Context(), id, req.OrganizationID)
 	if err != nil {
-		log.Printf("add user hosts by organization: %v", err)
+		slog.ErrorContext(r.Context(), "add user hosts by organization", "err", err)
 		writeError(w, http.StatusInternalServerError, "atamalar güncellenemedi")
 		return
 	}

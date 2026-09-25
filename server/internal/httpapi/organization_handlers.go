@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -20,7 +20,7 @@ func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) {
 	if role == model.RoleSuperAdmin {
 		orgs, err := d.organizations.List(r.Context())
 		if err != nil {
-			log.Printf("list organizations: %v", err)
+			slog.ErrorContext(r.Context(), "list organizations", "err", err)
 			writeError(w, http.StatusInternalServerError, "organizasyonlar listelenemedi")
 			return
 		}
@@ -36,19 +36,19 @@ func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromContext(r.Context())
 	fullIDs, err := d.userOrgs.ListOrganizationIDs(r.Context(), userID)
 	if err != nil {
-		log.Printf("list user organizations: %v", err)
+		slog.ErrorContext(r.Context(), "list user organizations", "err", err)
 		writeError(w, http.StatusInternalServerError, "organizasyonlar listelenemedi")
 		return
 	}
 	contextIDs, err := d.userOrgs.ListContextIDs(r.Context(), userID)
 	if err != nil {
-		log.Printf("list user context organizations: %v", err)
+		slog.ErrorContext(r.Context(), "list user context organizations", "err", err)
 		writeError(w, http.StatusInternalServerError, "organizasyonlar listelenemedi")
 		return
 	}
 	orgs, err := d.organizations.ListByIDs(r.Context(), append(append([]uuid.UUID{}, fullIDs...), contextIDs...))
 	if err != nil {
-		log.Printf("list organizations by ids: %v", err)
+		slog.ErrorContext(r.Context(), "list organizations by ids", "err", err)
 		writeError(w, http.StatusInternalServerError, "organizasyonlar listelenemedi")
 		return
 	}
@@ -121,7 +121,7 @@ func (d *Deps) handleCreateOrganization(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("create organization: %v", err)
+		slog.ErrorContext(r.Context(), "create organization", "err", err)
 		writeError(w, http.StatusInternalServerError, "organizasyon oluşturulamadı")
 		return
 	}
@@ -173,7 +173,7 @@ func (d *Deps) handleGetOrganization(w http.ResponseWriter, r *http.Request) {
 
 	access, err := d.orgAccessLevel(r, id)
 	if err != nil {
-		log.Printf("check org access: %v", err)
+		slog.ErrorContext(r.Context(), "check org access", "err", err)
 		writeError(w, http.StatusInternalServerError, "organizasyon alınamadı")
 		return
 	}
@@ -188,7 +188,7 @@ func (d *Deps) handleGetOrganization(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
 			return
 		}
-		log.Printf("get organization: %v", err)
+		slog.ErrorContext(r.Context(), "get organization", "err", err)
 		writeError(w, http.StatusInternalServerError, "organizasyon alınamadı")
 		return
 	}
@@ -261,7 +261,7 @@ func (d *Deps) handleUpdateOrganization(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("update organization: %v", err)
+		slog.ErrorContext(r.Context(), "update organization", "err", err)
 		writeError(w, http.StatusInternalServerError, "organizasyon güncellenemedi")
 		return
 	}
@@ -288,7 +288,7 @@ func (d *Deps) handleDeleteOrganization(w http.ResponseWriter, r *http.Request) 
 			writeError(w, http.StatusConflict, err.Error())
 			return
 		}
-		log.Printf("delete organization: %v", err)
+		slog.ErrorContext(r.Context(), "delete organization", "err", err)
 		writeError(w, http.StatusInternalServerError, "organizasyon silinemedi")
 		return
 	}
