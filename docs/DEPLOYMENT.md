@@ -83,7 +83,8 @@ Server logu stderr'e yazar (Docker'da `docker compose logs server`); her satır�
   o korunur) ve yanıt başlığında döner. O isteğin bütün log satırları `request_id=` taşır; bir kullanıcının aldığı hatayı
   logda bulmak için yanıttaki kimliği ara. İstek satırlarında ayrıca `user_id` (panel kullanıcısı), `host_id` (agent) ve
   `ip` bulunur.
-- **İstek satırları:** `5xx` → `ERROR`, `4xx` → `WARN`, diğerleri `INFO`; başarılı agent raporları (`POST /api/v1/metrics`)
+- **İstek satırları:** metot, yol, durum ve süre (`duration_ms`, milisaniye; ör. `duration_ms > 500` ile yavaş istekler
+  süzülür). `5xx` → `ERROR`, `4xx` → `WARN`, diğerleri `INFO`; başarılı agent raporları (`POST /api/v1/metrics`)
   ve `/healthz` yalnızca `LOG_LEVEL=debug`'da görünür (150+ agent ~30 sn'de bir rapor verir).
 - **Hata ayrıntısı:** hata alan isteklerde veriyle ilgili sorunlar yeniden üretmeden incelenebilsin diye `query`, izin
   listesindeki başlıklar (`req_headers`: Content-Type, User-Agent, agent sürümü vb.), istek gövdesi (`req_body`) ve
@@ -91,6 +92,11 @@ Server logu stderr'e yazar (Docker'da `docker compose logs server`); her satır�
   Adında `password`, `token`, `secret` geçen alanlar `[REDACTED]` olur; `Authorization` ve `Cookie` başlıkları hiç
   yazılmaz. Gövdeler e-posta adresi gibi kişisel veri içerebilir: log erişimini buna göre sınırla ya da
   `LOG_ERROR_BODY_BYTES=0` ile kapat.
+- **Arka plan işleri:** alert motoru, pull scheduler, offline izleyici ve retention da seviyeli ve alanlı yazar
+  (`host_id`, `alert_id`, `metric` …): veritabanı hataları ve gönderilemeyen e-postalar `ERROR`, beklenen operasyonel
+  durumlar (ulaşılamayan pull agent, dolan e-posta kuyruğu) `WARN`. Bir agent raporu sırasında yazılan alert motoru
+  satırları o isteğin `request_id`'sini, bir pull poll'u sırasında yazılanlar `poll-…` kimliğini taşır; alert'i açan
+  isteğin kimliği, e-posta daha sonra gönderilemezse o satırda da görünür.
 - **Beklenmeyen hata (panic):** istek `500` ve `request_id`'li bir JSON yanıtla biter, log'a yığın iziyle
   `msg="panic recovered"` yazılır; server çalışmaya devam eder. Arka plan işleri (pull scheduler, offline izleyici,
   retention vb.) panic'lerse loglanıp birkaç saniye sonra yeniden başlatılır.
@@ -146,7 +152,7 @@ Ad çözülene kadar panelden gelen istekler panelin IP'siyle sayılır — güv
 güvenilmez, çünkü host'tan (ve bazı kurulumlarda dışarıdan) gelen bağlantılar ağ geçidi adresiyle görünebilir. Server'ın
 önüne kendi reverse proxy'ni koyarsan (yük dengeleyici vb.) onun adresini ekle ve proxy'nin `X-Forwarded-For`'u **ezdiğinden
 ya da sonuna eklediğinden** emin ol (panelin nginx'i `$remote_addr` ile ezer). Açılışta log, hangi proxy'lere güvenildiğini
-(`client IPs: …`) ve host adlarının çözüldüğü adresleri (`trusted proxy "panel" resolved to …`) yazar.
+(`client IPs: …`) ve host adlarının çözüldüğü adresleri (`msg="trusted proxy resolved" proxy=panel addrs=[…]`) yazar.
 
 ### Veritabanı
 

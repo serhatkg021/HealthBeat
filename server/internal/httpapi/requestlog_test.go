@@ -203,6 +203,13 @@ func TestSuccessfulRequestLogsNoBodyAndIngestIsDebug(t *testing.T) {
 	if recs[0]["level"] != "INFO" || recs[1]["level"] != "DEBUG" {
 		t.Fatalf("levels = %v, %v; want INFO, DEBUG", recs[0]["level"], recs[1]["level"])
 	}
+	// Süre iki biçimde de aynı sayı: milisaniye (JSON'da nanosaniye tam sayısı değil).
+	if ms, ok := recs[0]["duration_ms"].(float64); !ok || ms < 0 || ms > 10_000 {
+		t.Fatalf("duration_ms = %v (%T)", recs[0]["duration_ms"], recs[0]["duration_ms"])
+	}
+	if _, ok := recs[0]["duration"]; ok {
+		t.Fatalf("the old duration field must be gone: %v", recs[0])
+	}
 }
 
 func TestErrorBodyLoggingCanBeDisabledAndTruncates(t *testing.T) {

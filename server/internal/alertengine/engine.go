@@ -9,7 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
@@ -49,6 +49,9 @@ type Engine struct {
 type mailJob struct {
 	orgID uuid.UUID
 	alert model.Alert
+	// logInfo, alert'i doğuran isteğin log kimlikleridir (varsa): teslim satırları o isteğin request_id'sini taşır,
+	// böylece "e-posta gitmedi" satırı alert'i açan agent raporuna bağlanır.
+	logInfo *logging.RequestInfo
 }
 
 const (
@@ -137,7 +140,7 @@ func (e *Engine) evaluateDisks(ctx context.Context, hostID, orgID uuid.UUID, dis
 	}
 	thresholds, err := e.thresholds.ResolveSubjects(ctx, hostID, orgID, model.MetricTypeDisk)
 	if err != nil {
-		log.Printf("alert engine: resolve disk thresholds for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: resolve disk thresholds", "host_id", hostID.String(), "err", err)
 		return
 	}
 	if thresholds.Base == nil && len(thresholds.PerSubject) == 0 {
@@ -145,7 +148,7 @@ func (e *Engine) evaluateDisks(ctx context.Context, hostID, orgID uuid.UUID, dis
 	}
 	allMounts, selection, err := e.hosts.DiskAlertMounts(ctx, hostID)
 	if err != nil {
-		log.Printf("alert engine: read disk alert mounts for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: read disk alert mounts", "host_id", hostID.String(), "err", err)
 		return // seçim olmadan hangi mount'ların istendiğini bilemeyiz; tahmin etmek yerine hiçbir şey yapma
 	}
 	var selected map[string]struct{} // nil = raporlanan tüm mount'lar
@@ -175,7 +178,7 @@ func (e *Engine) evaluateDisks(ctx context.Context, hostID, orgID uuid.UUID, dis
 
 	open, err := e.alerts.ListActive(ctx, hostID, model.MetricTypeDisk)
 	if err != nil {
-		log.Printf("alert engine: list open disk alerts for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: list open disk alerts", "host_id", hostID.String(), "err", err)
 		return
 	}
 	for _, a := range open {
@@ -227,12 +230,12 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 	}
 	expected, err := e.expectedMounts(ctx, hostID)
 	if err != nil {
-		log.Printf("alert engine: read expected mounts for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: read expected mounts", "host_id", hostID.String(), "err", err)
 		return
 	}
 	open, err := e.alerts.ListActive(ctx, hostID, model.AlertTypeDiskMissing)
 	if err != nil {
-		log.Printf("alert engine: list open disk_missing alerts for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: list open disk_missing alerts", "host_id", hostID.String(), "err", err)
 		return
 	}
 
@@ -259,7 +262,7 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 	}
 	history, err := e.metrics.RecentReportedMounts(ctx, hostID, missingMountReports)
 	if err != nil {
-		log.Printf("alert engine: read recent reports for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: read recent reports", "host_id", hostID.String(), "err", err)
 		return
 	}
 	if len(history) < missingMountReports {
@@ -278,7 +281,7 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 		}
 		alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, model.AlertTypeDiskMissing, m, model.AlertLevelCritical, nil, nil)
 		if err != nil {
-			log.Printf("alert engine: create disk_missing alert for host=%s mount=%q: %v", hostID, m, err)
+			slog.ErrorContext(ctx, "alert engine: create disk_missing alert", "host_id", hostID.String(), "mount", m, "err", err)
 			continue
 		}
 		if created {
@@ -290,7 +293,7 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 func (e *Engine) evaluate(ctx context.Context, hostID, orgID uuid.UUID, metricType string, value float64) {
 	threshold, found, err := e.thresholds.Resolve(ctx, hostID, orgID, metricType)
 	if err != nil {
-		log.Printf("alert engine: resolve threshold for host=%s metric=%s: %v", hostID, metricType, err)
+		slog.ErrorContext(ctx, "alert engine: resolve threshold", "host_id", hostID.String(), "metric", metricType, "err", err)
 		return
 	}
 	if !found {
@@ -316,7 +319,7 @@ func (e *Engine) EvaluateDocker(ctx context.Context, hostID, orgID uuid.UUID, co
 	}
 	thresholds, err := e.thresholds.ResolveSubjects(ctx, hostID, orgID, model.MetricTypeDockerRestart)
 	if err != nil {
-		log.Printf("alert engine: resolve docker_restart thresholds for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: resolve docker_restart thresholds", "host_id", hostID.String(), "err", err)
 		return
 	}
 	if thresholds.Base == nil && len(thresholds.PerSubject) == 0 {
@@ -337,7 +340,7 @@ func (e *Engine) EvaluateDocker(ctx context.Context, hostID, orgID uuid.UUID, co
 
 	open, err := e.alerts.ListActive(ctx, hostID, model.MetricTypeDockerRestart)
 	if err != nil {
-		log.Printf("alert engine: list open docker_restart alerts for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: list open docker_restart alerts", "host_id", hostID.String(), "err", err)
 		return
 	}
 	for _, a := range open {
@@ -355,7 +358,7 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 	existing, err := e.alerts.GetActiveSubject(ctx, hostID, metricType, subject)
 	hasActive := err == nil
 	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		log.Printf("alert engine: get active alert for host=%s metric=%s subject=%q: %v", hostID, metricType, subject, err)
+		slog.ErrorContext(ctx, "alert engine: get active alert", "host_id", hostID.String(), "metric", metricType, "subject", subject, "err", err)
 		return
 	}
 
@@ -396,7 +399,7 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 			// YÜKSELİRSE onay da kalkar (durum ciddileşti, biri yeniden sahiplenmeli); düşüşte onay korunur.
 			reopen := reopensOnLevelChange(existing, level)
 			if err := e.alerts.UpdateLevel(ctx, existing.ID, level, valuePtr, triggerPtr, reopen); err != nil {
-				log.Printf("alert engine: update alert %s level: %v", existing.ID, err)
+				slog.ErrorContext(ctx, "alert engine: update alert level", "alert_id", existing.ID.String(), "err", err)
 				return
 			}
 			existing.Level, existing.Value, existing.Threshold = level, valuePtr, triggerPtr
@@ -410,7 +413,7 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 
 	alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, metricType, subject, level, valuePtr, triggerPtr)
 	if err != nil {
-		log.Printf("alert engine: create alert for host=%s metric=%s subject=%q: %v", hostID, metricType, subject, err)
+		slog.ErrorContext(ctx, "alert engine: create alert", "host_id", hostID.String(), "metric", metricType, "subject", subject, "err", err)
 		return
 	}
 	if !created {
@@ -418,7 +421,7 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 		// biz yalnızca seviyesinin güncel olduğundan emin oluruz.
 		if active, err := e.alerts.GetActiveSubject(ctx, hostID, metricType, subject); err == nil && active.Level != level {
 			if err := e.alerts.UpdateLevel(ctx, active.ID, level, valuePtr, triggerPtr, reopensOnLevelChange(active, level)); err != nil {
-				log.Printf("alert engine: update alert %s level: %v", active.ID, err)
+				slog.ErrorContext(ctx, "alert engine: update alert level", "alert_id", active.ID.String(), "err", err)
 			}
 		}
 		return
@@ -441,10 +444,10 @@ func (e *Engine) ResolveOffline(ctx context.Context, hostID, orgID uuid.UUID) {
 		if errors.Is(err, store.ErrNotFound) {
 			return // aktif değildi
 		}
-		log.Printf("alert engine: resolve offline alert for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: resolve offline alert", "host_id", hostID.String(), "err", err)
 		return
 	}
-	e.enqueue(mailJob{orgID: orgID, alert: alert})
+	e.enqueue(ctx, mailJob{orgID: orgID, alert: alert})
 }
 
 // RaiseOffline, bir host sessizleştiğinde offline monitor tarafından çağrılır.
@@ -454,13 +457,13 @@ func (e *Engine) RaiseOffline(ctx context.Context, hostID, orgID uuid.UUID) {
 		return // zaten aktif (açık ya da onaylanmış) — tekrar bildirimi önle
 	}
 	if !errors.Is(err, store.ErrNotFound) {
-		log.Printf("alert engine: check open offline alert for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: check open offline alert", "host_id", hostID.String(), "err", err)
 		return
 	}
 
 	alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, model.AlertTypeHostOffline, "", model.AlertLevelCritical, nil, nil)
 	if err != nil {
-		log.Printf("alert engine: create offline alert for host=%s: %v", hostID, err)
+		slog.ErrorContext(ctx, "alert engine: create offline alert", "host_id", hostID.String(), "err", err)
 		return
 	}
 	if !created {
@@ -470,8 +473,8 @@ func (e *Engine) RaiseOffline(ctx context.Context, hostID, orgID uuid.UUID) {
 }
 
 // notify alert e-postasını kuyruğa alır. Asla bloklamaz ve çağıranı asla başarısız kılmaz.
-func (e *Engine) notify(_ context.Context, orgID uuid.UUID, alert model.Alert) {
-	e.enqueue(mailJob{orgID: orgID, alert: alert})
+func (e *Engine) notify(ctx context.Context, orgID uuid.UUID, alert model.Alert) {
+	e.enqueue(ctx, mailJob{orgID: orgID, alert: alert})
 }
 
 // resolveAndNotify bir alert'i çözer ve gerçekten değiştiyse (daha önce zaten çözülmemişse) "çözüldü"
@@ -484,14 +487,15 @@ func (e *Engine) resolveAndNotify(ctx context.Context, id, orgID uuid.UUID, valu
 		if errors.Is(err, store.ErrNotFound) {
 			return
 		}
-		log.Printf("alert engine: resolve alert %s: %v", id, err)
+		slog.ErrorContext(ctx, "alert engine: resolve alert", "alert_id", id.String(), "err", err)
 		return
 	}
-	e.enqueue(mailJob{orgID: orgID, alert: alert})
+	e.enqueue(ctx, mailJob{orgID: orgID, alert: alert})
 }
 
-func (e *Engine) enqueue(job mailJob) {
+func (e *Engine) enqueue(ctx context.Context, job mailJob) {
 	alert := job.alert
+	job.logInfo = logging.RequestInfoFrom(ctx)
 	e.mailMu.RLock()
 	defer e.mailMu.RUnlock()
 	if e.closed {
@@ -503,8 +507,8 @@ func (e *Engine) enqueue(job mailJob) {
 	case e.mailQueue <- job:
 	default:
 		e.pending.Done()
-		log.Printf("alert engine: mail queue full, dropping notification for alert %s (%s/%s); it is still visible in the panel",
-			alert.ID, alert.AlertType, alert.Level)
+		slog.WarnContext(ctx, "alert engine: mail queue full, dropping notification; it is still visible in the panel",
+			"alert_id", alert.ID.String(), "alert_type", alert.AlertType, "level", alert.Level)
 	}
 }
 
@@ -515,12 +519,15 @@ func (e *Engine) enqueue(job mailJob) {
 func (e *Engine) deliver(job mailJob) {
 	ctx, cancel := context.WithTimeout(context.Background(), mailDeliveryTimeout)
 	defer cancel()
+	if job.logInfo != nil {
+		ctx = logging.WithRequestInfo(ctx, job.logInfo)
+	}
 	defer logging.Recover(ctx, "alert mail delivery")
 	orgID, alert := job.orgID, job.alert
 
 	recipients, err := e.notifs.ResolveRecipients(ctx, alert.HostID, orgID, alert.Level)
 	if err != nil {
-		log.Printf("alert engine: resolve recipients for host=%s: %v", alert.HostID, err)
+		slog.ErrorContext(ctx, "alert engine: resolve recipients", "alert_id", alert.ID.String(), "host_id", alert.HostID.String(), "err", err)
 		return
 	}
 	var emails []string
@@ -530,7 +537,7 @@ func (e *Engine) deliver(job mailJob) {
 			continue
 		}
 		// Diğer kanallar (sms, slack…) şemada hazır ama henüz uygulanmadı; API bunlara kural yazdırmaz.
-		log.Printf("alert engine: channel %q is not implemented, skipping recipient %q for alert %s", r.Channel, r.Name, alert.ID)
+		slog.WarnContext(ctx, "alert engine: channel is not implemented, skipping recipient", "channel", r.Channel, "recipient", r.Name, "alert_id", alert.ID.String())
 	}
 	if len(emails) == 0 {
 		return
@@ -595,7 +602,7 @@ func (e *Engine) deliver(job mailJob) {
 	}
 
 	if err := e.mailer.Send(ctx, emails, subject, body.String()); err != nil {
-		log.Printf("alert engine: send email for alert %s: %v", alert.ID, err)
+		slog.ErrorContext(ctx, "alert engine: send email", "alert_id", alert.ID.String(), "err", err)
 	}
 }
 

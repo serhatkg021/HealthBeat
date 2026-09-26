@@ -10,7 +10,7 @@ package clientip
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/netip"
@@ -195,7 +195,7 @@ func (r *Resolver) Refresh(ctx context.Context) {
 		switch {
 		case err != nil:
 			if !r.failing[host] {
-				log.Printf("trusted proxy %q cannot be resolved (X-Forwarded-For from it is ignored until it can): %v", host, err)
+				slog.WarnContext(ctx, "trusted proxy cannot be resolved (X-Forwarded-For from it is ignored until it can)", "proxy", host, "err", err)
 			}
 			r.failing[host] = true
 		default:
@@ -204,7 +204,7 @@ func (r *Resolver) Refresh(ctx context.Context) {
 			}
 			slices.SortFunc(addrs, func(a, b netip.Addr) int { return a.Compare(b) })
 			if r.failing[host] || !slices.Equal(r.resolved[host], addrs) {
-				log.Printf("trusted proxy %q resolved to %v", host, addrs)
+				slog.InfoContext(ctx, "trusted proxy resolved", "proxy", host, "addrs", fmt.Sprint(addrs))
 			}
 			r.resolved[host] = addrs
 			r.failing[host] = false

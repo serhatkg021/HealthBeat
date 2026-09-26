@@ -45,6 +45,14 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Arka plan loglarına seviye ve alan:** alert motoru, pull scheduler, offline izleyici, retention, TLS yenileme ve istemci
+  IP çözücüsünün satırları artık hepsi INFO değil: veritabanı hataları ve gönderilemeyen alert e-postaları `ERROR`,
+  ulaşılamayan pull agent / dolan e-posta kuyruğu / uygulanmamış kanal `WARN` (önceden `LOG_LEVEL=warn`'da kayboluyordu).
+  Metne gömülü değerler alanlara ayrıldı (`host_id`, `alert_id`, `metric`, `subject`, `mount`). Ingest sırasında yazılan
+  alert motoru satırları o isteğin `request_id`'sini, pull poll'undakiler `poll-…` kimliğini taşıyor; gönderilemeyen bir
+  alert e-postasının satırı alert'i açan isteğin kimliğini taşıyor. Pull agent'ın hata yanıtından loga en fazla 1 KB yazılıyor.
+- **İstek satırında `duration` → `duration_ms`:** süre artık milisaniye (üç ondalık) olarak yazılıyor; önceden JSON'da
+  nanosaniye tam sayısı, text'te `58.367201ms` gibi bir metindi. Bu alanı okuyan sorgu ya da alarm kuralın varsa güncelle.
 - **Docker Compose: `docker compose logs`'un kopyasına boyut sınırı.** Docker'ın varsayılan `json-file` sürücüsü container
   logunu hiç döndürmüyordu; disk zamanla dolabilirdi. Artık `db`, `server`, `panel` ve `mailpit` için servis başına en fazla
   `HB_DOCKER_LOG_MAX_FILE` × `HB_DOCKER_LOG_MAX_SIZE` (varsayılan 3 × 10 MB, eskiler gzip'li) tutuluyor; daha eski satırlar

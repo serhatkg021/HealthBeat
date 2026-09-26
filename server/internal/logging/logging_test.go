@@ -169,3 +169,18 @@ func TestRunLoopReturnsWhenFnReturns(t *testing.T) {
 		t.Fatalf("fn called %d times, want 1", calls)
 	}
 }
+
+func TestContextAttrsDoNotDuplicateKeysTheRecordAlreadyHas(t *testing.T) {
+	buf := captureDefault(t)
+	info := &RequestInfo{ID: "req-1"}
+	info.SetHost("host-from-context")
+	slog.InfoContext(WithRequestInfo(context.Background(), info), "evaluated", "host_id", "host-explicit")
+
+	line := strings.TrimSpace(buf.String())
+	if n := strings.Count(line, `"host_id"`); n != 1 || !strings.Contains(line, `"host_id":"host-explicit"`) {
+		t.Fatalf("want exactly the explicit host_id once: %s", line)
+	}
+	if !strings.Contains(line, `"request_id":"req-1"`) {
+		t.Fatalf("other context attrs must still be added: %s", line)
+	}
+}

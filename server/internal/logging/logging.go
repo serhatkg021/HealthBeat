@@ -59,7 +59,8 @@ func New(w io.Writer, level slog.Level, format string) *slog.Logger {
 }
 
 // Setup, New'in logger'ını varsayılan yapar. slog.SetDefault standart log paketini de ona
-// yönlendirir: henüz göç etmemiş log.Printf çağrıları aynı biçimde, INFO seviyesinde çıkar.
+// yönlendirir: standart kütüphanenin kendi logları (ör. net/http'nin TLS el sıkışma hataları) aynı biçimde, INFO
+// seviyesinde çıkar.
 func Setup(w io.Writer, level slog.Level, format string) {
 	slog.SetDefault(New(w, level, format))
 }
@@ -128,12 +129,22 @@ func (i *RequestInfo) attrs() []slog.Attr {
 	return attrs
 }
 
-// contextHandler, kaydı iç handler'a vermeden önce ctx'teki RequestInfo alanlarını ekler.
+// contextHandler, kaydı iç handler'a vermeden önce ctx'teki RequestInfo alanlarını ekler. Kayıt aynı anahtarı zaten
+// taşıyorsa (ör. alert motoru host_id'yi kendisi yazar) bağlamdaki eklenmez: JSON'da bir anahtar iki kez yazılmaz.
 type contextHandler struct{ slog.Handler }
 
 func (h contextHandler) Handle(ctx context.Context, r slog.Record) error {
 	if info := RequestInfoFrom(ctx); info != nil {
-		r.AddAttrs(info.attrs()...)
+		present := make(map[string]bool, r.NumAttrs())
+		r.Attrs(func(a slog.Attr) bool {
+			present[a.Key] = true
+			return true
+		})
+		for _, a := range info.attrs() {
+			if !present[a.Key] {
+				r.AddAttrs(a)
+			}
+		}
 	}
 	return h.Handler.Handle(ctx, r)
 }

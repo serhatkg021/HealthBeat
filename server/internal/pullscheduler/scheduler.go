@@ -10,7 +10,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -84,9 +84,9 @@ func New(pool *pgxpool.Pool, engine *alertengine.Engine, box *secretbox.Box, roo
 
 func (s *Scheduler) Run(ctx context.Context) {
 	if s.verifiesTLS {
-		log.Printf("pull scheduler: verifying pull hosts' TLS certificates against PULL_CA_CERT_FILE")
+		slog.InfoContext(ctx, "pull scheduler: verifying pull hosts' TLS certificates against PULL_CA_CERT_FILE")
 	} else {
-		log.Printf("pull scheduler: pull hosts' TLS certificates are NOT verified (PULL_CA_CERT_FILE is not set); they are authenticated by the shared secret and the agent's IP allow-list")
+		slog.WarnContext(ctx, "pull scheduler: pull hosts' TLS certificates are NOT verified (PULL_CA_CERT_FILE is not set); they are authenticated by the shared secret and the agent's IP allow-list")
 	}
 	ticker := time.NewTicker(dueCheckInterval)
 	defer ticker.Stop()
@@ -105,7 +105,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 func (s *Scheduler) pollDueHosts(ctx context.Context) {
 	pullHosts, err := s.hosts.ListPullHosts(ctx)
 	if err != nil {
-		log.Printf("pull scheduler: list pull hosts: %v", err)
+		slog.ErrorContext(ctx, "pull scheduler: list pull hosts", "err", err)
 		return
 	}
 
@@ -151,13 +151,19 @@ func (s *Scheduler) pollDueHosts(ctx context.Context) {
 }
 
 func (s *Scheduler) pollOne(ctx context.Context, c store.PullHostInfo) {
+	// Her poll'un kendi korelasyon kimliği vardır (push'taki request_id gibi): bu poll sırasında alert motorunun yazdığı
+	// satırlar da aynı kimliği taşır.
+	info := &logging.RequestInfo{ID: "poll-" + uuid.NewString()}
+	info.SetHost(c.ID.String())
+	ctx = logging.WithRequestInfo(ctx, info)
+
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
 	url := fmt.Sprintf("https://%s:%d%s", c.IP, c.PullPort, c.PullEndpoint)
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 	if err != nil {
-		log.Printf("pull scheduler: build request for host %s: %v", c.ID, err)
+		slog.ErrorContext(ctx, "pull scheduler: build request", "host_id", c.ID.String(), "err", err)
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+c.PullSecret)
@@ -166,41 +172,42 @@ func (s *Scheduler) pollOne(ctx context.Context, c store.PullHostInfo) {
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		log.Printf("pull scheduler: request to host %s failed: %v", c.ID, err)
+		slog.WarnContext(ctx, "pull scheduler: request to host failed", "host_id", c.ID.String(), "err", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		log.Printf("pull scheduler: host %s returned %d: %s", c.ID, resp.StatusCode, string(body))
+		// Bozuk ya da kötü niyetli bir agent logu şişirmesin: gövdenin yalnızca başı yazılır.
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		slog.WarnContext(ctx, "pull scheduler: host returned an error", "host_id", c.ID.String(), "status", resp.StatusCode, "body", string(body))
 		return
 	}
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxPullResponseBytes))
 	if err != nil {
-		log.Printf("pull scheduler: read response from host %s: %v", c.ID, err)
+		slog.WarnContext(ctx, "pull scheduler: read response", "host_id", c.ID.String(), "err", err)
 		return
 	}
 	payload, unknown, err := model.ParseMetricsIngest(body)
 	if err != nil {
-		log.Printf("pull scheduler: decode response from host %s: %v", c.ID, err)
+		slog.WarnContext(ctx, "pull scheduler: decode response", "host_id", c.ID.String(), "err", err)
 		return
 	}
 	if err := payload.Validate(); err != nil {
-		log.Printf("pull scheduler: rejecting report from host %s: %v", c.ID, err)
+		slog.WarnContext(ctx, "pull scheduler: rejecting report", "host_id", c.ID.String(), "err", err)
 		return
 	}
 
 	if err := s.metrics.Insert(ctx, c.ID, payload.CPUUsagePct, payload.RAMUsagePct, payload.Disk); err != nil {
-		log.Printf("pull scheduler: store metrics for host %s: %v", c.ID, err)
+		slog.ErrorContext(ctx, "pull scheduler: store metrics", "host_id", c.ID.String(), "err", err)
 		return
 	}
 	if err := s.metrics.ReplaceDockerContainers(ctx, c.ID, payload.DockerContainers); err != nil {
-		log.Printf("pull scheduler: store docker containers for host %s: %v", c.ID, err)
+		slog.ErrorContext(ctx, "pull scheduler: store docker containers", "host_id", c.ID.String(), "err", err)
 	}
 	if err := s.hosts.MarkOnline(ctx, c.ID, payload.Hardware(), agentInfo(resp.Header, unknown)); err != nil {
-		log.Printf("pull scheduler: mark host %s online: %v", c.ID, err)
+		slog.ErrorContext(ctx, "pull scheduler: mark host online", "host_id", c.ID.String(), "err", err)
 	}
 
 	s.engine.ResolveOffline(ctx, c.ID, c.OrganizationID)
