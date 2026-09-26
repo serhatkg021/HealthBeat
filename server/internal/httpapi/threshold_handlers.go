@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -22,18 +21,17 @@ func (d *Deps) requireThresholdAccess(r *http.Request, t model.ThresholdConfig) 
 	return role == model.RoleSuperAdmin, nil
 }
 
-func (d *Deps) handleListThresholds(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleListThresholds(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("eşikler listelenemedi")
 	role, _ := roleFromContext(r.Context())
 
 	if role == model.RoleSuperAdmin {
 		thresholds, err := d.thresholds.List(r.Context())
 		if err != nil {
-			slog.ErrorContext(r.Context(), "list thresholds", "err", err)
-			writeError(w, http.StatusInternalServerError, "eşikler listelenemedi")
-			return
+			return fail("list thresholds", err)
 		}
 		writeJSON(w, http.StatusOK, thresholds)
-		return
+		return nil
 	}
 
 	// Kendi dalının eşiklerine ek olarak üst zincirin eşikleri de (salt okunur bağlam) döner: sunucuya uygulanan geçerli
@@ -48,17 +46,14 @@ func (d *Deps) handleListThresholds(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list thresholds: list user organizations", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşikler listelenemedi")
-		return
+		return fail("list thresholds: list user organizations", err)
 	}
 	thresholds, err := d.thresholds.ListForOrganizations(r.Context(), orgIDs)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list thresholds", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşikler listelenemedi")
-		return
+		return fail("list thresholds", err)
 	}
 	writeJSON(w, http.StatusOK, thresholds)
+	return nil
 }
 
 type thresholdRequest struct {
@@ -70,34 +65,27 @@ type thresholdRequest struct {
 	CriticalLevel  float64    `json:"critical_level"`
 }
 
-func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) {
-	var req thresholdRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
-	}
+func (req *thresholdRequest) Validate() error {
 	if !model.ValidThresholdMetricType(req.MetricType) {
-		writeError(w, http.StatusBadRequest, "metric_type cpu, ram, disk veya docker_restart olmalı")
-		return
+		return errors.New("metric_type cpu, ram, disk veya docker_restart olmalı")
 	}
-	if err := model.ValidateThresholdLevels(req.MetricType, req.WarningLevel, req.CriticalLevel); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	scoped := model.ThresholdConfig{OrganizationID: req.OrganizationID}
-	allowed, err := d.requireThresholdAccess(r, scoped)
+	return model.ValidateThresholdLevels(req.MetricType, req.WarningLevel, req.CriticalLevel)
+}
+
+func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("eşik oluşturulamadı")
+	req, err := bind[thresholdRequest](r)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "create threshold: check access", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik oluşturulamadı")
-		return
+		return err
 	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return
+	allowed, err := d.requireThresholdAccess(r, model.ThresholdConfig{OrganizationID: req.OrganizationID})
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return notFound("organizasyon bulunamadı")
+	case err != nil:
+		return fail("create threshold: check access", err)
+	case !allowed:
+		return forbidden()
 	}
 
 	threshold, err := d.thresholds.Create(r.Context(), store.CreateThresholdParams{
@@ -106,18 +94,13 @@ func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) {
 		WarningLevel:   req.WarningLevel,
 		CriticalLevel:  req.CriticalLevel,
 	})
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
-			return
-		}
-		if errors.Is(err, store.ErrConflict) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		slog.ErrorContext(r.Context(), "create threshold", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik oluşturulamadı")
-		return
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return notFound("organizasyon bulunamadı")
+	case errors.Is(err, store.ErrConflict):
+		return conflict(err.Error())
+	case err != nil:
+		return fail("create threshold", err)
 	}
 
 	targetID := threshold.ID.String()
@@ -127,38 +110,54 @@ func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) {
 		"critical_level": threshold.CriticalLevel,
 	})
 	writeJSON(w, http.StatusCreated, threshold)
+	return nil
 }
 
-func (d *Deps) handleGetThreshold(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleGetThreshold(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("eşik alınamadı")
+	id, err := pathID(r, "geçersiz eşik kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz eşik kimliği")
-		return
+		return err
 	}
 
 	threshold, err := d.thresholds.GetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		return notFound("eşik bulunamadı")
+	}
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "eşik bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "get threshold", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik alınamadı")
-		return
+		return fail("get threshold", err)
 	}
 
 	allowed, err := d.requireThresholdAccess(r, threshold)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "get threshold: check access", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik alınamadı")
-		return
+		return fail("get threshold: check access", err)
 	}
 	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return
+		return forbidden()
 	}
 
 	writeJSON(w, http.StatusOK, threshold)
+	return nil
+}
+
+// managedThreshold, id'li varsayılan eşiği yükler ve çağıranın onu düzenleyebildiğini denetler (bkz.
+// requireThresholdAccess). Beklenmeyen hatalar fail ile op öneki taşıyarak loglanır.
+func (d *Deps) managedThreshold(r *http.Request, id uuid.UUID, op string, fail failFunc) (model.ThresholdConfig, error) {
+	threshold, err := d.thresholds.GetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		return model.ThresholdConfig{}, notFound("eşik bulunamadı")
+	}
+	if err != nil {
+		return model.ThresholdConfig{}, fail(op+": lookup", err)
+	}
+	allowed, err := d.requireThresholdAccess(r, threshold)
+	if err != nil {
+		return model.ThresholdConfig{}, fail(op+": check access", err)
+	}
+	if !allowed {
+		return model.ThresholdConfig{}, forbidden()
+	}
+	return threshold, nil
 }
 
 type updateThresholdRequest struct {
@@ -166,38 +165,20 @@ type updateThresholdRequest struct {
 	CriticalLevel *float64 `json:"critical_level"`
 }
 
-func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("eşik güncellenemedi")
+	id, err := pathID(r, "geçersiz eşik kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz eşik kimliği")
-		return
+		return err
+	}
+	existing, err := d.managedThreshold(r, id, "update threshold", fail)
+	if err != nil {
+		return err
 	}
 
-	existing, err := d.thresholds.GetByID(r.Context(), id)
+	req, err := bind[updateThresholdRequest](r)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "eşik bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "update threshold: lookup", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik güncellenemedi")
-		return
-	}
-	allowed, err := d.requireThresholdAccess(r, existing)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "update threshold: check access", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik güncellenemedi")
-		return
-	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return
-	}
-
-	var req updateThresholdRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
+		return err
 	}
 	// Seviyeleri GÜNCELLEMEDEN SONRAKİ hâlleriyle doğrula, ama yalnızca istek onları değiştiriyorsa:
 	// ilgisiz bir düzenleme eski verilerde başarısız olmamalı.
@@ -210,24 +191,18 @@ func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) {
 			critical = *req.CriticalLevel
 		}
 		if err := model.ValidateThresholdLevels(existing.MetricType, warning, critical); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+			return badRequest(err.Error())
 		}
 	}
 
 	threshold, err := d.thresholds.Update(r.Context(), id, req.WarningLevel, req.CriticalLevel)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "eşik bulunamadı")
-			return
-		}
-		if errors.Is(err, store.ErrConflict) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		slog.ErrorContext(r.Context(), "update threshold", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik güncellenemedi")
-		return
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return notFound("eşik bulunamadı")
+	case errors.Is(err, store.ErrConflict):
+		return conflict(err.Error())
+	case err != nil:
+		return fail("update threshold", err)
 	}
 
 	targetID := threshold.ID.String()
@@ -236,47 +211,29 @@ func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) {
 		"critical_level": threshold.CriticalLevel,
 	})
 	writeJSON(w, http.StatusOK, threshold)
+	return nil
 }
 
-func (d *Deps) handleDeleteThreshold(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleDeleteThreshold(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("eşik silinemedi")
+	id, err := pathID(r, "geçersiz eşik kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz eşik kimliği")
-		return
+		return err
+	}
+	if _, err := d.managedThreshold(r, id, "delete threshold", fail); err != nil {
+		return err
 	}
 
-	existing, err := d.thresholds.GetByID(r.Context(), id)
+	err = d.thresholds.Delete(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		return notFound("eşik bulunamadı")
+	}
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "eşik bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "delete threshold: lookup", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik silinemedi")
-		return
-	}
-	allowed, err := d.requireThresholdAccess(r, existing)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "delete threshold: check access", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik silinemedi")
-		return
-	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return
-	}
-
-	if err := d.thresholds.Delete(r.Context(), id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "eşik bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "delete threshold", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşik silinemedi")
-		return
+		return fail("delete threshold", err)
 	}
 
 	targetID := id.String()
 	d.logAudit(r, "threshold.delete", "threshold", &targetID, nil)
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }

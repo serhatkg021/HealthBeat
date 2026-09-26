@@ -2,11 +2,8 @@ package httpapi
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 	"sort"
-
-	"github.com/google/uuid"
 
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/store"
@@ -31,123 +28,74 @@ func (d *Deps) diskAlertSettings(r *http.Request, host model.Host) (diskAlertSet
 }
 
 // handleGetDiskAlerts, GET /api/v1/hosts/:id/disk-alerts'i sunar.
-func (d *Deps) handleGetDiskAlerts(w http.ResponseWriter, r *http.Request) {
-	host, ok := d.loadHostForView(w, r, "disk alert ayarları alınamadı")
-	if !ok {
-		return
+func (d *Deps) handleGetDiskAlerts(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("disk alert ayarları alınamadı")
+	host, err := d.viewableHost(r, "get disk alerts", fail)
+	if err != nil {
+		return err
 	}
 	settings, err := d.diskAlertSettings(r, host)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "get disk alerts", "err", err)
-		writeError(w, http.StatusInternalServerError, "disk alert ayarları alınamadı")
-		return
+		return fail("get disk alerts", err)
 	}
 	writeJSON(w, http.StatusOK, settings)
+	return nil
 }
 
-// handleSetDiskAlerts, PUT /api/v1/hosts/:id/disk-alerts'i sunar. Gövde "all_mounts_alert" (true: raporlanan her
-// mount; false: yalnızca custom_alert_mounts) içermeli; anahtarı atlamak hatadır, çünkü "gönderilmedi" ile "tüm
-// mount'lar" aksi halde ayırt edilemez ve tek bir yazım hatası neyin alert vereceğini değiştirirdi.
-func (d *Deps) handleSetDiskAlerts(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz sunucu kimliği")
-		return
-	}
-	host, err := d.hosts.GetByID(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "set disk alerts: lookup", "err", err)
-		writeError(w, http.StatusInternalServerError, "disk alert ayarları güncellenemedi")
-		return
-	}
-	allowed, err := d.requireOrgAccess(r, host.OrganizationID)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "set disk alerts: check org access", "err", err)
-		writeError(w, http.StatusInternalServerError, "disk alert ayarları güncellenemedi")
-		return
-	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return
-	}
+type setDiskAlertsRequest struct {
+	AllMountsAlert    *bool    `json:"all_mounts_alert"`
+	CustomAlertMounts []string `json:"custom_alert_mounts"`
+}
 
-	var req struct {
-		AllMountsAlert    *bool    `json:"all_mounts_alert"`
-		CustomAlertMounts []string `json:"custom_alert_mounts"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
-	}
+// Validate, custom_alert_mounts'u saklanan (ve GET'in döndürdüğü) biçime getirir: nil yerine boş, sıralı.
+func (req *setDiskAlertsRequest) Validate() error {
 	if req.AllMountsAlert == nil {
-		writeError(w, http.StatusBadRequest, `"all_mounts_alert" zorunlu: raporlanan tüm mount'lar için true, yalnızca seçilenler için false`)
-		return
+		return errors.New(`"all_mounts_alert" zorunlu: raporlanan tüm mount'lar için true, yalnızca seçilenler için false`)
 	}
 	mounts := req.CustomAlertMounts
 	if mounts == nil {
 		mounts = []string{}
 	}
 	if err := model.ValidateMountList(mounts); err != nil {
-		writeError(w, http.StatusBadRequest, "custom_alert_mounts: "+err.Error())
-		return
+		return errors.New("custom_alert_mounts: " + err.Error())
 	}
 	mounts = append([]string(nil), mounts...)
-	sort.Strings(mounts) // saklanan (ve GET'in döndürdüğü) sırayla aynı
-
-	if err := d.hosts.SetDiskAlertMounts(r.Context(), id, *req.AllMountsAlert, mounts); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "set disk alerts", "err", err)
-		writeError(w, http.StatusInternalServerError, "disk alert ayarları güncellenemedi")
-		return
-	}
-
-	targetID := id.String()
-	d.logAudit(r, "host.update_disk_alerts", "host", &targetID, map[string]any{"all_mounts_alert": *req.AllMountsAlert, "custom_alert_mounts": mounts})
-
-	host.AllMountsAlert, host.CustomAlertMounts = *req.AllMountsAlert, mounts
-	settings, err := d.diskAlertSettings(r, host)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "set disk alerts: reload", "err", err)
-		writeError(w, http.StatusInternalServerError, "ayarlar kaydedildi ancak geri okunamadı")
-		return
-	}
-	writeJSON(w, http.StatusOK, settings)
+	sort.Strings(mounts)
+	req.CustomAlertMounts = mounts
+	return nil
 }
 
-// loadHostForView, yolda adı geçen host'ı yükler ve çağıranın onu görmeye yetkili olduğunu
-// denetler; değilse hata yanıtını kendisi yazar.
-func (d *Deps) loadHostForView(w http.ResponseWriter, r *http.Request, failure string) (model.Host, bool) {
-	id, err := uuid.Parse(r.PathValue("id"))
+// handleSetDiskAlerts, PUT /api/v1/hosts/:id/disk-alerts'i sunar. Gövde "all_mounts_alert" (true: raporlanan her
+// mount; false: yalnızca custom_alert_mounts) içermeli; anahtarı atlamak hatadır, çünkü "gönderilmedi" ile "tüm
+// mount'lar" aksi halde ayırt edilemez ve tek bir yazım hatası neyin alert vereceğini değiştirirdi.
+func (d *Deps) handleSetDiskAlerts(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("disk alert ayarları güncellenemedi")
+	host, err := d.managedHost(r, "set disk alerts", fail)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz sunucu kimliği")
-		return model.Host{}, false
+		return err
 	}
-	host, err := d.hosts.GetByID(r.Context(), id)
+	req, err := bind[setDiskAlertsRequest](r)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
-			return model.Host{}, false
-		}
-		slog.ErrorContext(r.Context(), "lookup host", "failure", failure, "err", err)
-		writeError(w, http.StatusInternalServerError, failure)
-		return model.Host{}, false
+		return err
 	}
-	allowed, err := d.requireHostViewAccess(r, host)
+	allMounts, mounts := *req.AllMountsAlert, req.CustomAlertMounts
+
+	err = d.hosts.SetDiskAlertMounts(r.Context(), host.ID, allMounts, mounts)
+	if errors.Is(err, store.ErrNotFound) {
+		return notFound("sunucu bulunamadı")
+	}
 	if err != nil {
-		slog.ErrorContext(r.Context(), "check host access", "failure", failure, "err", err)
-		writeError(w, http.StatusInternalServerError, failure)
-		return model.Host{}, false
+		return fail("set disk alerts", err)
 	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return model.Host{}, false
+
+	targetID := host.ID.String()
+	d.logAudit(r, "host.update_disk_alerts", "host", &targetID, map[string]any{"all_mounts_alert": allMounts, "custom_alert_mounts": mounts})
+
+	host.AllMountsAlert, host.CustomAlertMounts = allMounts, mounts
+	settings, err := d.diskAlertSettings(r, host)
+	if err != nil {
+		return serverErr("ayarlar kaydedildi ancak geri okunamadı", "set disk alerts: reload", err)
 	}
-	return host, true
+	writeJSON(w, http.StatusOK, settings)
+	return nil
 }

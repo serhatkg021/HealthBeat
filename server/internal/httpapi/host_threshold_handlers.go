@@ -3,11 +3,8 @@ package httpapi
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sort"
-
-	"github.com/google/uuid"
 
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/rbac"
@@ -162,18 +159,31 @@ func (d *Deps) hostThresholds(r *http.Request, host model.Host) (hostThresholdsR
 }
 
 // handleGetHostThresholds, GET /api/v1/hosts/:id/thresholds'u sunar.
-func (d *Deps) handleGetHostThresholds(w http.ResponseWriter, r *http.Request) {
-	host, ok := d.loadHostForView(w, r, "sunucu eşikleri alınamadı")
-	if !ok {
-		return
+func (d *Deps) handleGetHostThresholds(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("sunucu eşikleri alınamadı")
+	host, err := d.viewableHost(r, "get host thresholds", fail)
+	if err != nil {
+		return err
 	}
 	resp, err := d.hostThresholds(r, host)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "get host thresholds", "err", err)
-		writeError(w, http.StatusInternalServerError, "sunucu eşikleri alınamadı")
-		return
+		return fail("get host thresholds", err)
 	}
 	writeJSON(w, http.StatusOK, resp)
+	return nil
+}
+
+type setHostThresholdsRequest struct {
+	Thresholds          thresholdOverridesInput `json:"thresholds"`
+	MountThresholds     thresholdSubjectsInput  `json:"mount_thresholds"`
+	ContainerThresholds thresholdSubjectsInput  `json:"container_thresholds"`
+}
+
+func (req *setHostThresholdsRequest) Validate() error {
+	if req.Thresholds == nil {
+		return errors.New(`"thresholds" zorunlu: metrik türü -> null (varsayılan) ya da {warning_level, critical_level} nesnesi`)
+	}
+	return nil
 }
 
 // handleSetHostThresholds, PUT /api/v1/hosts/:id/thresholds'u sunar. Gövde
@@ -182,84 +192,46 @@ func (d *Deps) handleGetHostThresholds(w http.ResponseWriter, r *http.Request) {
 // (varsayılana döner) ve dışarıda bırakılan metriklere dokunulmaz. İsteğe bağlı
 // "mount_thresholds" aynı şekilde mount yolu başına çalışır ({"/storage": {...}, "/": null}).
 // Tüm değişiklikler birlikte uygulanır ya da hiç uygulanmaz.
-func (d *Deps) handleSetHostThresholds(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleSetHostThresholds(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("sunucu eşikleri güncellenemedi")
+	host, err := d.managedHost(r, "set host thresholds", fail)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz sunucu kimliği")
-		return
+		return err
 	}
-	host, err := d.hosts.GetByID(r.Context(), id)
+	req, err := bind[setHostThresholdsRequest](r)
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "set host thresholds: lookup", "err", err)
-		writeError(w, http.StatusInternalServerError, "sunucu eşikleri güncellenemedi")
-		return
-	}
-	allowed, err := d.requireOrgAccess(r, host.OrganizationID)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "set host thresholds: check org access", "err", err)
-		writeError(w, http.StatusInternalServerError, "sunucu eşikleri güncellenemedi")
-		return
-	}
-	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return
-	}
-
-	var req struct {
-		Thresholds          thresholdOverridesInput `json:"thresholds"`
-		MountThresholds     thresholdSubjectsInput  `json:"mount_thresholds"`
-		ContainerThresholds thresholdSubjectsInput  `json:"container_thresholds"`
-	}
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
-	}
-	if req.Thresholds == nil {
-		writeError(w, http.StatusBadRequest, `"thresholds" zorunlu: metrik türü -> null (varsayılan) ya da {warning_level, critical_level} nesnesi`)
-		return
+		return err
 	}
 	overrides, err := req.Thresholds.toOverrides()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "thresholds: "+err.Error())
-		return
+		return badRequest("thresholds: " + err.Error())
 	}
-
 	mounts, err := req.MountThresholds.toMounts()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "mount_thresholds: "+err.Error())
-		return
+		return badRequest("mount_thresholds: " + err.Error())
 	}
-
 	containers, err := req.ContainerThresholds.toContainers()
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "container_thresholds: "+err.Error())
-		return
+		return badRequest("container_thresholds: " + err.Error())
 	}
 
-	if err := d.thresholds.SetHostOverrides(r.Context(), id, overrides, mounts, containers); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "sunucu bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "set host thresholds", "err", err)
-		writeError(w, http.StatusInternalServerError, "sunucu eşikleri güncellenemedi")
-		return
+	err = d.thresholds.SetHostOverrides(r.Context(), host.ID, overrides, mounts, containers)
+	if errors.Is(err, store.ErrNotFound) {
+		return notFound("sunucu bulunamadı")
+	}
+	if err != nil {
+		return fail("set host thresholds", err)
 	}
 
-	targetID := id.String()
+	targetID := host.ID.String()
 	d.logAudit(r, "host.update_thresholds", "host", &targetID, map[string]any{"thresholds": overrides, "mount_thresholds": mounts, "container_thresholds": containers})
 
 	resp, err := d.hostThresholds(r, host)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "set host thresholds: reload", "err", err)
-		writeError(w, http.StatusInternalServerError, "eşikler kaydedildi ancak geri okunamadı")
-		return
+		return serverErr("eşikler kaydedildi ancak geri okunamadı", "set host thresholds: reload", err)
 	}
 	writeJSON(w, http.StatusOK, resp)
+	return nil
 }
 
 // canEditThresholds, çağıranın rolünün threshold.edit'e sahip olup olmadığını bildirir. Farklı

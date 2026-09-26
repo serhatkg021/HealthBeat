@@ -177,7 +177,7 @@ GET    /api/v1/audit-logs | /dashboard/summary | /dashboard/overview
 Her hata yanıtı aynı biçimdedir ve her yanıt `X-Request-ID` başlığını taşır:
 
 ```json
-{"error": "sunucu bulunamadı", "code": "not_found", "request_id": "4b453012-…", "fields": {"title": "boş olamaz"}}
+{"error": "geçersiz istek gövdesi", "code": "validation_failed", "request_id": "4b453012-…", "fields": {"interval_seconds": "tam sayı olmalı"}}
 ```
 
 - `error`: kullanıcıya gösterilen Türkçe mesaj; istemciler karar için buna **bakmaz**.
@@ -186,7 +186,9 @@ Her hata yanıtı aynı biçimdedir ve her yanıt `X-Request-ID` başlığını 
   kodlar bunların yerine geçer: `password_change_required` (403), `reset_link_invalid` (400). Yeni kod eklenebilir, var
   olanın anlamı değişmez.
 - `request_id`: o isteğin log satırlarındaki kimlik (`docs/DEPLOYMENT.md`, "Loglama"). Panel onu yalnızca `5xx`'te gösterir.
-- `fields`: yalnızca doğrulama hatalarında, alan adı → sorun.
+- `fields`: yalnızca istek gövdesi çözülemediğinde ve sorun bir alana bağlanabildiğinde (yanlış tür, bilinmeyen alan): alan
+  adı → sorun; iç içe alanlar noktayla (`thresholds.warning_level`). Bozuk JSON gibi alana bağlanamayan hatalarda yoktur.
+  Kural ihlalleri (ör. `ip geçerli bir IP adresi olmalı`) yalnızca `error` ile döner.
 
 Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
 
