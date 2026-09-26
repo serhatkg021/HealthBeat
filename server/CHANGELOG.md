@@ -47,6 +47,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Agent raporu alımındaki ikincil hata satırları birleşti:** push ve pull artık aynı satırları yazıyor, `host_id` ve
+  `source=push|pull` alanlarıyla: `ingest: store docker containers` (önceden `ingest metrics: insert docker containers` /
+  `pull scheduler: store docker containers`) ve `ingest: mark host online` (önceden `ingest metrics: mark online` /
+  `pull scheduler: mark host online`). Bu metinleri arayan alarm kuralın varsa güncelle.
 - **Çözülemeyen istek gövdesinde hatalı alan adlandırılıyor:** mesaj yine `geçersiz istek gövdesi`, ama sorun bir alana
   bağlanabiliyorsa yanıt artık `fields` taşıyor: yanlış türde değer (`{"interval_seconds": "tam sayı olmalı"}`) ya da
   bilinmeyen alan (`{"colour": "bilinmeyen alan"}`). Eklemeli: `error`, `code` ve durum kodları değişmedi. Şifre ve token
@@ -120,6 +124,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- Push ve pull alımı ortak `internal/ingest` servisine taşındı: `Decode` (çözme + doğrulama) ve `Service.Record` (metrik,
+  container'lar, çevrimiçi işareti, alert motoru) iki yolun da tek kopyası.
 - Erişim kapsamı `internal/access` paketinde toplandı: istek başına bir `Scope`, organizasyon/sunucu atamalarını istek içinde
   bir kez okur (önceden aynı istekte denetim başına bir sorgu); handler'lardaki kapsam fonksiyonları ve rol `switch`'leri
   onu kullanıyor. Rol izinleri 60 sn bellekte tutuluyor (`role_permissions`'ı elle değiştirmek en geç bu süre sonra etkili).
