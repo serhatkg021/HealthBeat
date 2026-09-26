@@ -4,10 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-26 — Docker Compose'da `docker compose logs` kopyasına servis başına boyut sınırı
-(`HB_DOCKER_LOG_MAX_SIZE`/`_FILE`, varsayılan 3 × 10 MB, gzip'li); kalıcı geçmiş `logs` volume'ündeki `LOG_FILE`
-dosyalarında (#14). Önceki adımlar: hata yanıtlarında `code` + `request_id` (#13); slog, `X-Request-ID`, maskeli hata
-ayrıntısı, panic kurtarma (#12). Sırada: A2b (`alertengine`, `pullscheduler` vb. ~60 `log.Printf` + JSON `duration_ms`).
+**Son güncelleme:** 2026-09-26 — Log göçü tamamlandı: kodda `log.Printf` kalmadı; arka plan işlerinin (alert motoru,
+pull scheduler, offline izleyici, retention, TLS, istemci IP) satırları seviyeli ve alanlı, ingest/poll bağlamının
+`request_id`'sini taşıyor; istek satırında `duration_ms`. Önceki adımlar: Docker log kopyasına sınır (#15), kalıcı log
+dosyası (#14), hata kodları + request_id (#13), slog + maskeli hata ayrıntısı + panic kurtarma (#12). Sırada: B1+B2
+(handler hata akışı, istek bağlama/doğrulama).
 
 ## Durum
 

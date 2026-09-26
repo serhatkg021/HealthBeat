@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	"log/slog"
 	"math"
 	"sort"
 	"time"
@@ -84,7 +84,7 @@ func (s *Metrics) ReplaceDockerContainers(ctx context.Context, hostID uuid.UUID,
 	for _, c := range containers {
 		c, ok := sanitizeContainer(c)
 		if !ok {
-			log.Printf("docker report for host %s: skipping container %q with unknown status %q", hostID, c.Name, c.Status)
+			slog.WarnContext(ctx, "docker report: skipping container with unknown status", "host_id", hostID.String(), "container", c.Name, "status", c.Status)
 			continue
 		}
 		byName[c.Name] = c

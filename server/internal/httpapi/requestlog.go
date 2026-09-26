@@ -80,7 +80,9 @@ func (d *Deps) requestLog(next http.Handler) http.Handler {
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.Int("status", status),
-			slog.Duration("duration", time.Since(start)),
+			// Milisaniye, üç ondalık: iki biçimde de aynı sayı (slog.Duration JSON'da nanosaniye yazardı) ve
+			// doğrudan sorgulanır (ör. duration_ms > 500).
+			slog.Float64("duration_ms", float64(time.Since(start).Microseconds())/1000),
 		}
 		if status >= 400 {
 			if r.URL.RawQuery != "" {

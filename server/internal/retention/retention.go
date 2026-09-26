@@ -5,7 +5,7 @@ package retention
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"healthbeat-server/internal/store"
@@ -45,10 +45,10 @@ func (p *Purger) RunOnce(ctx context.Context) (int64, error) {
 // Run, ctx iptal edilene kadar periyodik olarak temizler. Kendi goroutine'inde çalıştırın.
 func (p *Purger) Run(ctx context.Context) {
 	if p.days <= 0 {
-		log.Printf("retention: METRICS_RETENTION_DAYS=0, metric samples are kept forever")
+		slog.InfoContext(ctx, "retention: METRICS_RETENTION_DAYS=0, metric samples are kept forever")
 		return
 	}
-	log.Printf("retention: keeping metric samples for %d day(s)", p.days)
+	slog.InfoContext(ctx, "retention: keeping metric samples", "days", p.days)
 
 	timer := time.NewTimer(firstRunDelay)
 	defer timer.Stop()
@@ -58,9 +58,9 @@ func (p *Purger) Run(ctx context.Context) {
 			return
 		case <-timer.C:
 			if n, err := p.RunOnce(ctx); err != nil {
-				log.Printf("retention: purge failed after deleting %d row(s): %v", n, err)
+				slog.ErrorContext(ctx, "retention: purge failed", "deleted", n, "err", err)
 			} else if n > 0 {
-				log.Printf("retention: deleted %d expired metric sample(s)", n)
+				slog.InfoContext(ctx, "retention: deleted expired metric samples", "count", n)
 			}
 			timer.Reset(purgeEvery)
 		}

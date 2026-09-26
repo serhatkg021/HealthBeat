@@ -5,7 +5,7 @@ package tlsreload
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -49,9 +49,9 @@ func (r *Reloader) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error
 		r.lastCheck = now
 		if r.changed() {
 			if err := r.load(); err != nil {
-				log.Printf("tls: certificate files changed but cannot be loaded, keeping the previous certificate: %v", err)
+				slog.Error("tls: certificate files changed but cannot be loaded, keeping the previous certificate", "err", err)
 			} else {
-				log.Printf("tls: reloaded certificate from %s", r.certFile)
+				slog.Info("tls: reloaded certificate", "file", r.certFile)
 			}
 		}
 	}

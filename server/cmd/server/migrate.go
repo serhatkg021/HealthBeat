@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"log/slog"
 	"strconv"
 	"time"
@@ -26,7 +25,7 @@ func prepareSchema(ctx context.Context, pool *pgxpool.Pool, autoMigrate bool) er
 	if err != nil {
 		return err
 	}
-	r.Logf = log.Printf
+	r.Logf = func(format string, a ...any) { slog.InfoContext(ctx, fmt.Sprintf(format, a...)) }
 
 	if !autoMigrate {
 		return explain(r.RequireUpToDate(ctx))

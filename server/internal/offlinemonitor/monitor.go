@@ -5,7 +5,7 @@ package offlinemonitor
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -51,13 +51,13 @@ func (m *Monitor) Run(ctx context.Context) {
 func (m *Monitor) check(ctx context.Context) {
 	stale, err := m.hosts.ListStale(ctx, graceMultiplier)
 	if err != nil {
-		log.Printf("offline monitor: list stale hosts: %v", err)
+		slog.ErrorContext(ctx, "offline monitor: list stale hosts", "err", err)
 		return
 	}
 
 	for _, c := range stale {
 		if err := m.hosts.MarkOffline(ctx, c.ID); err != nil {
-			log.Printf("offline monitor: mark host %s offline: %v", c.ID, err)
+			slog.ErrorContext(ctx, "offline monitor: mark host offline", "host_id", c.ID.String(), "err", err)
 			continue
 		}
 		m.engine.RaiseOffline(ctx, c.ID, c.OrganizationID)

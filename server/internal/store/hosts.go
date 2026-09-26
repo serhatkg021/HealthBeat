@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -427,7 +427,7 @@ func (s *Hosts) ListPullHosts(ctx context.Context) ([]PullHostInfo, error) {
 		}
 		secret, err := s.box.Open(stored, i.ID.String())
 		if err != nil {
-			log.Printf("hosts: skipping pull host %s: pull secret cannot be decrypted: %v", i.ID, err)
+			slog.ErrorContext(ctx, "hosts: skipping pull host: pull secret cannot be decrypted", "host_id", i.ID.String(), "err", err)
 			continue
 		}
 		i.PullSecret = secret

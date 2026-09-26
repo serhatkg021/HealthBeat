@@ -10,7 +10,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
-	"log"
+	"log/slog"
 	"mime"
 	"mime/quotedprintable"
 	"net"
@@ -67,7 +67,7 @@ func (m *Mailer) tlsCfg() *tls.Config {
 
 func (m *Mailer) Send(ctx context.Context, to []string, subject, body string) error {
 	if !m.enabled {
-		log.Printf("notify: SMTP not configured, would have sent %q to %v", subject, to)
+		slog.InfoContext(ctx, "notify: SMTP not configured, e-mail not sent", "subject", subject, "to", strings.Join(to, ", "))
 		return nil
 	}
 	if len(to) == 0 {
