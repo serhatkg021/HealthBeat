@@ -47,6 +47,20 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Bildirimler kalıcı kuyruktan, yeniden denemeyle gidiyor.** Alert e-postaları önceden bellekteki bir kuyruktaydı:
+  server yeniden başlarsa ya da çökerse bekleyenler kayboluyor, SMTP hatasında yeniden denenmiyor, kuyruk dolunca yeni
+  bildirimler atılıyordu. Artık bildirim alert değişikliğiyle aynı transaction'da yeni `notification_outbox` tablosuna
+  yazılıyor (kanal başına bir satır; hangi olay için — açılma, seviye değişimi, çözülme — ve hangi seviyede gittiği ayrıca
+  tutuluyor); işçi başarısızlıkta 30 sn'den başlayıp en çok 1 saate kadar geri çekilerek en çok
+  10 kez deniyor, sonra vazgeçip ERROR logluyor. Bildirim kuyruğa yazılamazsa (veritabanı hatası) alert yine
+  kaydediliyor, yalnızca o olayın bildirimi gitmiyor (ERROR loglanıyor); sonraki bildirimler (ör. "ÇÖZÜLDÜ") normal gidiyor. Şifre sıfırlama ve "şifreniz değiştirildi" e-postaları da aynı kuyruktan gidiyor:
+  sıfırlama bağlantısı yalnızca şifreli (`SECRETS_ENCRYPTION_KEY`) saklanıyor ve gönderilince silinmiş oluyor, bağlantının
+  süresiyle birlikte geçersiz oluyor; henüz gitmemişken yeni bağlantı istenirse eskisi gönderilmiyor. Gönderilmiş ve
+  vazgeçilmiş satırlar 30 gün tutuluyor. Log: `alert engine: send email` ve `password reset: send mail to user failed`
+  yerine `notification delivery failed; will retry` (WARN) / `… giving up` (ERROR); `mail queue full` satırı kalktı.
+  **Bu sürüm bir migration içerir (`000003`, yeni tablo):** eski sürüme yalnızca `HB_VERSION`'ı değiştirerek dönülemez;
+  geri dönüş `000003_notification_outbox.down.sql` + geçmiş satırının silinmesiyle (bekleyen bildirimler de silinir) ya
+  da güncelleme öncesi yedekle (`docs/DISTRIBUTION.md` §8.3).
 - **Agent raporu alımındaki ikincil hata satırları birleşti:** push ve pull artık aynı satırları yazıyor, `host_id` ve
   `source=push|pull` alanlarıyla: `ingest: store docker containers` (önceden `ingest metrics: insert docker containers` /
   `pull scheduler: store docker containers`) ve `ingest: mark host online` (önceden `ingest metrics: mark online` /

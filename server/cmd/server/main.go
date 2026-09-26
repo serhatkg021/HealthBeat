@@ -75,15 +75,8 @@ func main() {
 		From:     cfg.SMTPFrom,
 	})
 	alertEngine := alertengine.New(pool, mailer, cfg.PanelBaseURL)
-	// pool.Close'un defer'inden sonra kaydedildiği için önce çalışır: kuyruktaki alert e-postaları
-	// veritabanı kapanmadan önce (sınırlı sürede) teslim edilir.
-	defer func() {
-		drain, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err := alertEngine.Close(drain); err != nil {
-			slog.Warn("alert engine: mail queue not fully drained at shutdown", "err", err)
-		}
-	}()
+	// Alert bildirimleri kalıcı kuyruktan (notification_outbox) teslim edilir; gönderilemeyen yeniden denenir.
+	go logging.RunLoop(ctx, "alert notifications", alertEngine.RunNotifications)
 
 	deps := httpapi.NewDeps(pool, tokenSvc, alertEngine, httpapi.RateLimits{
 		AuthFailuresPerMinute: cfg.AuthFailuresPerMinute,
@@ -115,6 +108,21 @@ func main() {
 	default:
 		slog.Info("password reset by e-mail: disabled (set SMTP_HOST and PANEL_BASE_URL to enable it)")
 	}
+
+	go logging.RunLoop(ctx, "password mails", deps.RunMailOutbox)
+	// pool.Close'un defer'inden sonra kaydedildiği için önce çalışır: teslim zamanı gelmiş bildirimler veritabanı
+	// kapanmadan önce (sınırlı sürede) gönderilmeye çalışılır. Gönderilemeyenler kaybolmaz: kuyrukta kalır ve bir sonraki
+	// açılışta gönderilir.
+	defer func() {
+		drain, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := alertEngine.Close(drain); err != nil {
+			slog.Warn("alert notifications: not all due notifications were sent at shutdown; they stay queued", "err", err)
+		}
+		if err := deps.WaitForMail(drain); err != nil {
+			slog.Warn("password mails: not all due mails were sent at shutdown; they stay queued", "err", err)
+		}
+	}()
 
 	go logging.RunLoop(ctx, "token purge", deps.RunTokenPurge)
 	go logging.RunLoop(ctx, "metrics retention", retention.New(store.NewMetrics(pool), cfg.MetricsRetentionDays).Run)

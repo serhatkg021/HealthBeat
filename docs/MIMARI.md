@@ -227,6 +227,13 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   - Kurala yalnızca o kapsam için seçilebilir alıcılar yazılabilir (kapsamdaki yöneticiler, sunucuya atanmış operatörler,
     organizasyonun kişileri).
   - Şimdilik yalnızca e-posta kanalı uygulanmıştır; diğer kanallar şemada hazırdır, API onları kabul etmez.
+- **Teslim — kalıcı kuyruk:** bildirim, alert değişikliğiyle **aynı transaction'da** `notification_outbox`'a (kanal başına bir
+  satır, hazır konu ve gövdeyle) yazılır; alıcılar o anki kurallara göre çözülür. Bir işçi satırları alıp kanalın
+  `Notifier`'ıyla gönderir; başarısızlıkta geri çekilerek (30 sn, 1 dk, 2 dk… en çok 1 saat) en çok 10 kez dener, sonra
+  vazgeçip ERROR loglar. Alert kaydı esastır: bildirim kuyruğa yazılamazsa alert yine kaydedilir, yalnızca o olayın
+  bildirimi gitmez (ERROR). Server yeniden başlasa da bekleyen bildirim kaybolmaz; birden çok server kopyası aynı satırı
+  almaz (`FOR UPDATE SKIP LOCKED`). Şifre sıfırlama ve "şifreniz değişti" e-postaları da aynı kuyruktan gider; sıfırlama
+  bağlantısı şifreli saklanır, bağlantıyla birlikte geçersiz olur ve yenisi istenince eski e-posta gönderilmez.
 
 ---
 

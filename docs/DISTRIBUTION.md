@@ -238,9 +238,13 @@ migrations this binary does not know"; `docs/COMPATIBILITY.md` kural 6). İki yo
    uygula ve geçmişten satırını sil, sonra `HB_VERSION`'ı geri al. `.down.sql` dosyaları binary'de değil, repodadır
    (`server/migrations/`, ilgili `server/vX.Y.Z` etiketinde):
    ```sh
+   # ör. 000003 ve 000002 içeren bir sürümden 000001'e: önce 3, sonra 2
+   docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < server/migrations/000003_notification_outbox.down.sql
+   docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DELETE FROM healthbeat_migrations WHERE version = 3"'
    docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < server/migrations/000002_alert_acknowledged_active.down.sql
    docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DELETE FROM healthbeat_migrations WHERE version = 2"'
    ```
+   `000003`'ün geri alınması bekleyen (henüz gönderilmemiş) bildirimleri de siler.
 2. **Yedekten:** güncelleme öncesi aldığın yedeği geri yükle (güncellemeden sonraki veri kaybolur):
    `docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup-….sql`.
 

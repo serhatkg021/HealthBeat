@@ -92,13 +92,14 @@ func TestFailedAlertEmailIsLoggedWithTheRequestThatRaisedTheAlert(t *testing.T) 
 	engine.EvaluateMetrics(requestCtx(e.ctx, "req-ingest", e.host.String()), e.host, e.org, 97, 10, nil)
 	engine.Flush()
 
-	got := lines("alert engine: send email")
+	// Başarısız teslim yeniden denenir (WARN); son denemede vazgeçilince ERROR olur (bkz. internal/outbox).
+	got := lines("notification delivery failed; will retry")
 	if len(got) != 1 {
 		t.Fatalf("got %d lines, want 1", len(got))
 	}
 	rec := decode(t, got[0])
-	// Teslim, isteğin bitmesinden sonra ayrı bir işçide olur; yine de alert'i açan isteğin kimliğini taşır.
-	if rec["level"] != "ERROR" || rec["request_id"] != "req-ingest" || rec["alert_id"] == nil {
+	// Teslim, isteğin bitmesinden sonra kuyruktan yapılır; yine de alert'i açan isteğin kimliğini taşır.
+	if rec["level"] != "WARN" || rec["request_id"] != "req-ingest" || rec["alert_id"] == nil || rec["channel"] != "email" {
 		t.Fatalf("record = %v", rec)
 	}
 }
