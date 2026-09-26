@@ -149,7 +149,7 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) error {
 			return fail("create route: organization", err)
 		}
 	}
-	allowed, err := d.requireOrgAccess(r, scopeOrg)
+	allowed, err := d.scope(r).CanManageOrg(r.Context(), scopeOrg)
 	if err != nil {
 		return fail("create route: check access", err)
 	}
@@ -273,7 +273,7 @@ func (d *Deps) managedRoute(r *http.Request, op string, fail failFunc) (model.No
 		}
 		orgID = host.OrganizationID
 	}
-	allowed, err := d.requireOrgAccess(r, orgID)
+	allowed, err := d.scope(r).CanManageOrg(r.Context(), orgID)
 	if err != nil {
 		return model.NotificationRoute{}, fail(op+": check notification route access", err)
 	}

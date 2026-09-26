@@ -4,11 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-26 — Handler hata akışı ve istek doğrulaması ortak yardımcılara taşındı (B1+B2): handler'lar
-hatasını döndürüyor (`handle`, `failWith`, `pathID`, `notFound`/`forbidden`/`conflict`), gövdeler `bind[T]` + `Validate()` ile
-çözülüyor; çözülemeyen gövdede hatalı alan `fields`'ta. Yanıt mesajları ve durum kodları aynı. Önceki adımlar: log göçü (#16),
-Docker log kopyasına sınır (#15), kalıcı log dosyası (#14), hata kodları + request_id (#13), slog + panic kurtarma (#12).
-Sırada: B3 (erişim kapsamı paketi `internal/access`).
+**Son güncelleme:** 2026-09-26 — Erişim kapsamı tek pakette toplandı (B3): `internal/access` istek başına `Scope` kurar
+(`CanManageOrg`, `OrgAccess`, `CanViewHost`, `VisibleHostIDs`; atama kümeleri istek içinde bir kez okunur); rol izinleri 60 sn
+önbellekte (`rbac.Cache`); `GET /me` artık `permissions` döndürüyor. Önceki adımlar: handler hata akışı + istek doğrulaması
+(#17), log göçü (#16), Docker log sınırı (#15), kalıcı log dosyası (#14), hata kodları (#13), slog + panic kurtarma (#12).
+Sırada: C1 (push ve pull alımı için ortak ingest servisi).
 
 ## Durum
 

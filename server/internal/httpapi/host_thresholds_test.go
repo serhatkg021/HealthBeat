@@ -274,6 +274,7 @@ func TestCreatingAHostWithCustomThresholds(t *testing.T) {
 	if _, err := a.pool.Exec(context.Background(), `DELETE FROM role_permissions WHERE role = 'org_admin' AND permission_key = 'threshold.edit'`); err != nil {
 		t.Fatal(err)
 	}
+	a.deps.ResetPermissionCache()
 	if code, _ := create(adminTok, map[string]any{"cpu": ok(30, 40)}); code != 403 {
 		t.Errorf("org_admin without threshold.edit set custom thresholds: %d, want 403", code)
 	}

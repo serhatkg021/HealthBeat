@@ -43,7 +43,7 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return fail("list alerts: lookup host", err)
 		}
-		allowed, err := d.requireHostViewAccess(r, host)
+		allowed, err := d.scope(r).CanViewHost(r.Context(), host)
 		if err != nil {
 			return fail("list alerts: check access", err)
 		}
@@ -59,9 +59,7 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 
-	role, _ := roleFromContext(r.Context())
-	userID, _ := userIDFromContext(r.Context())
-	hostIDs, err := d.dashboardScope(r.Context(), role, userID)
+	hostIDs, err := d.scope(r).VisibleHostIDs(r.Context())
 	if err != nil {
 		return fail("list alerts: resolve scope", err)
 	}
@@ -96,7 +94,7 @@ func (d *Deps) handleAcknowledgeAlert(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return fail("acknowledge alert: lookup host", err)
 	}
-	allowed, err := d.requireHostViewAccess(r, host)
+	allowed, err := d.scope(r).CanViewHost(r.Context(), host)
 	if err != nil {
 		return fail("acknowledge alert: check access", err)
 	}

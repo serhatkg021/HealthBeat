@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -14,10 +15,8 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-// requireOrgAccess (organization_handlers.go'da tanımlı) organizasyon kimliğine göre
-// super_admin/org_admin kapsam denetimini zaten uygular — host'lar onu yeniden kullanır,
-// çünkü host.create/update/delete yalnızca bu iki role verilir (bkz. migrations/000001_baseline,
-// role_permissions tohumu).
+// Sunucu oluşturma/güncelleme/silme organizasyonun kapsamını izler (access.Scope.CanManageOrg): host.create/update/delete
+// yalnızca super_admin ve org_admin'e verilir (bkz. migrations/000001_baseline, role_permissions tohumu).
 
 type createHostRequest struct {
 	OrganizationID uuid.UUID `json:"organization_id"`
@@ -95,15 +94,15 @@ func (d *Deps) handleCreateHost(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("container_thresholds: " + err.Error())
 	}
 
-	// requireOrgAccess oluşturma sırasında FK üzerinden organizasyonun var olduğunu da doğrular,
-	// ama burada önce denetlemek ham 400 yerine temiz bir 404 verir.
+	// Organizasyonun varlığı kayıtta FK ile de doğrulanır, ama burada önce denetlemek yetki denetiminden önce temiz bir
+	// 404 verir.
 	if _, err := d.organizations.GetByID(r.Context(), req.OrganizationID); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return notFound("organizasyon bulunamadı")
 		}
 		return fail("create host: lookup organization", err)
 	}
-	allowed, err := d.requireOrgAccess(r, req.OrganizationID)
+	allowed, err := d.scope(r).CanManageOrg(r.Context(), req.OrganizationID)
 	if err != nil {
 		return fail("create host: check org access", err)
 	}
@@ -190,25 +189,6 @@ func (d *Deps) handleCreateHost(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// requireHostViewAccess, host.view'ın rol başına kapsamını uygular: super_admin her şeyi
-// görür, org_admin yalnızca atandığı organizasyonlardaki host'ları, operator yalnızca
-// user_hosts ile kendisine doğrudan atanmış host'ları.
-func (d *Deps) requireHostViewAccess(r *http.Request, host model.Host) (bool, error) {
-	role, _ := roleFromContext(r.Context())
-	userID, _ := userIDFromContext(r.Context())
-
-	switch role {
-	case model.RoleSuperAdmin:
-		return true, nil
-	case model.RoleOrgAdmin:
-		return d.userOrgs.IsAssigned(r.Context(), userID, host.OrganizationID)
-	case model.RoleOperator:
-		return d.userHosts.IsAssigned(r.Context(), userID, host.ID)
-	default:
-		return false, nil
-	}
-}
-
 func (d *Deps) handleGetHost(w http.ResponseWriter, r *http.Request) error {
 	host, err := d.viewableHost(r, "get host", failWith("sunucu alınamadı"))
 	if err != nil {
@@ -221,7 +201,7 @@ func (d *Deps) handleGetHost(w http.ResponseWriter, r *http.Request) error {
 	} else {
 		// Yalnızca çağıranın görebildiği sunucular (başka organizasyonun makinesi sızmasın).
 		for _, ref := range same {
-			if ok, err := d.requireHostViewAccess(r, model.Host{ID: ref.ID, OrganizationID: ref.OrganizationID}); err == nil && ok {
+			if ok, err := d.scope(r).CanViewHost(r.Context(), model.Host{ID: ref.ID, OrganizationID: ref.OrganizationID}); err == nil && ok {
 				resp.SameMachineAs = append(resp.SameMachineAs, ref)
 			}
 		}
@@ -244,18 +224,15 @@ func (d *Deps) handleListOrganizationHosts(w http.ResponseWriter, r *http.Reques
 		return badRequest(err.Error())
 	}
 
-	role, _ := roleFromContext(r.Context())
-	userID, _ := userIDFromContext(r.Context())
-
+	// Yöneticiler organizasyonun bütün sunucularını (kapsamındaysa), operator yalnızca kendisine atananları görür.
+	scope := d.scope(r)
 	var (
 		hosts []model.Host
 		total int
 	)
-	switch role {
-	case model.RoleSuperAdmin:
-		hosts, total, err = d.hosts.ListByOrganization(r.Context(), orgID, p)
-	case model.RoleOrgAdmin:
-		allowed, accessErr := d.userOrgs.IsAssigned(r.Context(), userID, orgID)
+	switch scope.Role() {
+	case model.RoleSuperAdmin, model.RoleOrgAdmin:
+		allowed, accessErr := scope.CanManageOrg(r.Context(), orgID)
 		if accessErr != nil {
 			return fail("list organization hosts: check org access", accessErr)
 		}
@@ -264,7 +241,7 @@ func (d *Deps) handleListOrganizationHosts(w http.ResponseWriter, r *http.Reques
 		}
 		hosts, total, err = d.hosts.ListByOrganization(r.Context(), orgID, p)
 	case model.RoleOperator:
-		hostIDs, idsErr := d.userHosts.ListHostIDs(r.Context(), userID)
+		hostIDs, idsErr := scope.VisibleHostIDs(r.Context())
 		if idsErr != nil {
 			return fail("list organization hosts: list assigned hosts", idsErr)
 		}
@@ -304,22 +281,23 @@ func (req *updateHostRequest) Validate() error {
 	return nil
 }
 
-// viewableHost, yoldaki {id} sunucusunu yükler ve çağıranın onu görebildiğini denetler (requireHostViewAccess).
+// viewableHost, yoldaki {id} sunucusunu yükler ve çağıranın onu görebildiğini denetler (access.Scope.CanViewHost).
 // Beklenmeyen hatalar fail ile, op öneki taşıyarak loglanır.
 func (d *Deps) viewableHost(r *http.Request, op string, fail failFunc) (model.Host, error) {
-	return d.hostFromPath(r, op+": lookup host", op+": check access", fail, d.requireHostViewAccess)
+	return d.hostFromPath(r, op+": lookup host", op+": check access", fail, d.scope(r).CanViewHost)
 }
 
-// managedHost, yoldaki {id} sunucusunu yükler ve çağıranın onun organizasyonunu yönettiğini denetler (host.update/
-// delete yalnızca super_admin ve org_admin'e verilir; bkz. requireOrgAccess).
+// managedHost, yoldaki {id} sunucusunu yükler ve çağıranın onun organizasyonunu yönettiğini denetler
+// (access.Scope.CanManageOrg).
 func (d *Deps) managedHost(r *http.Request, op string, fail failFunc) (model.Host, error) {
-	return d.hostFromPath(r, op+": lookup", op+": check org access", fail, func(r *http.Request, host model.Host) (bool, error) {
-		return d.requireOrgAccess(r, host.OrganizationID)
+	scope := d.scope(r)
+	return d.hostFromPath(r, op+": lookup", op+": check org access", fail, func(ctx context.Context, host model.Host) (bool, error) {
+		return scope.CanManageOrg(ctx, host.OrganizationID)
 	})
 }
 
 func (d *Deps) hostFromPath(r *http.Request, lookupOp, accessOp string, fail failFunc,
-	allowed func(*http.Request, model.Host) (bool, error)) (model.Host, error) {
+	allowed func(context.Context, model.Host) (bool, error)) (model.Host, error) {
 	id, err := pathID(r, "geçersiz sunucu kimliği")
 	if err != nil {
 		return model.Host{}, err
@@ -331,7 +309,7 @@ func (d *Deps) hostFromPath(r *http.Request, lookupOp, accessOp string, fail fai
 	if err != nil {
 		return model.Host{}, fail(lookupOp, err)
 	}
-	ok, err := allowed(r, host)
+	ok, err := allowed(r.Context(), host)
 	if err != nil {
 		return model.Host{}, fail(accessOp, err)
 	}

@@ -97,6 +97,12 @@ Kurallar:
 - **Organizasyon ağacını yalnızca süper admin değiştirir** (oluşturma, taşıma, silme).
 - Bir sunucu oluşturulurken organizasyon seçimi zorunludur (bkz. bölüm 6).
 
+Uygulama: her istek iki denetimden geçer. **İzin** (ne yapabilir) `role_permissions`'tan gelir (`internal/rbac`; rol başına
+60 sn bellekte tutulur, tabloyu elle değiştirmek en geç bu süre sonra etkili olur). **Kapsam** (nerede yapabilir) yukarıdaki
+kurallardır ve tek yerde uygulanır: `internal/access`, istek başına bir `Scope` (`CanManageOrg`, `OrgAccess`, `CanViewHost`,
+`VisibleHostIDs`); atama kümeleri istek içinde bir kez okunur. `GET /api/v1/me` kullanıcının izin anahtarlarını
+(`permissions`) da döndürür.
+
 ---
 
 ## 5. Server auth ve panel güvenliği
@@ -160,7 +166,7 @@ GET    https://<agent>:<port>/<pull_endpoint>   Bearer paylaşılan secret
 
 # panel (auth zorunlu, rol/kapsam bazlı)
 POST   /api/v1/auth/login | refresh | logout | forgot-password | reset-password
-GET    /api/v1/me | /me/hosts | /meta
+GET    /api/v1/me (+ permissions) | /me/hosts | /meta
        /api/v1/organizations[/:id]              (ağaç: parent_organization_id, address)
        /api/v1/organizations/:id/contacts       + /api/v1/contacts/:id
        /api/v1/organizations/:id/hosts
