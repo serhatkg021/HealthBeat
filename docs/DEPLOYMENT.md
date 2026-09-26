@@ -42,6 +42,9 @@ flowchart LR
 | `RATE_LIMIT_INGEST_PER_MINUTE` | hayır | Doğrulanmış push agent başına, varsayılan `120`, `0` = kapalı. |
 | `LOG_LEVEL` | hayır | `debug`, `info` (varsayılan), `warn`, `error`. Başarılı agent raporları ve `/healthz` yalnızca `debug`'da loglanır. Bkz. "Loglama". |
 | `LOG_FORMAT` | hayır | `text` (varsayılan, `key=value`) ya da `json` (log toplayıcılar için). |
+| `LOG_FILE` | hayır | Logun stdout'a ek olarak yazıldığı **kalıcı dosya**; o dizinde günlük dosyalar tutulur (`server-YYYY-MM-DD.log`, eski günler `.log.gz`). Boş = kapalı (bare-metal varsayılanı). Docker Compose varsayılanı `/var/log/healthbeat/server.log` (`logs` volume'ü). Açılamazsa server yine başlar, log'a `log file disabled` yazar. Bkz. "Loglama". |
+| `LOG_FILE_MAX_AGE_DAYS` | hayır | Bugün dahil kaç günün log dosyasının tutulacağı, varsayılan `14`. |
+| `LOG_FILE_MAX_TOTAL_MB` | hayır | Bütün log dosyalarının toplam üst sınırı, varsayılan `1024`; aşılırsa en eski günler silinir (hata fırtınasında diski korur). |
 | `LOG_ERROR_BODY_BYTES` | hayır | Hata alan (4xx/5xx) isteklerde loga yazılan istek/yanıt gövdesinin azami boyutu, varsayılan `4096`, `0` = gövde yazılmaz, en fazla `1048576`. Hassas alanlar her zaman maskelenir. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | hayır | Alert e-postaları. `SMTP_HOST` boşsa yalnızca log'a yazılır (e-posta **gitmez**). **Port 465 = implicit TLS**; diğer portlarda (587 vb.) sunucu STARTTLS sunuyorsa kullanılır. Kullanıcı adı/şifre yalnızca TLS üzerinden (ya da localhost'a) gönderilir. |
 | `PANEL_BASE_URL` | şifre sıfırlama için | Panelin kullanıcıya görünen adresi (`scheme://host[:port]`, yol ve sondaki `/` yok), örn. `https://panel.example.com`. **"Şifremi unuttum" e-postalarındaki bağlantının kökü** olur; isteğin `Host` başlığından türetilmez (başlık enjeksiyonuyla bağlantının saldırgan bir alan adına yöneltilmesini önler). Geçersizse server başlamaz; boşsa e-posta ile şifre sıfırlama kapalıdır. |
@@ -91,6 +94,39 @@ Server logu stderr'e yazar (Docker'da `docker compose logs server`); her satır�
 - **Beklenmeyen hata (panic):** istek `500` ve `request_id`'li bir JSON yanıtla biter, log'a yığın iziyle
   `msg="panic recovered"` yazılır; server çalışmaya devam eder. Arka plan işleri (pull scheduler, offline izleyici,
   retention vb.) panic'lerse loglanıp birkaç saniye sonra yeniden başlatılır.
+
+#### Kalıcı log dosyası
+
+`LOG_FILE` ayarlıysa (Docker Compose'da varsayılan olarak açık) aynı satırlar — HTTP istek/yanıt satırları ve uygulama
+satırları birlikte — o dizindeki günlük dosyalara da yazılır:
+
+```
+/var/log/healthbeat/
+  server-2026-09-26.log        ← bugün (açık dosya)
+  server-2026-09-25.log.gz     ← önceki günler sıkıştırılır
+  server-2026-09-24.1.log.gz   ← bir gün çok büyürse aynı gün parçalara bölünür
+```
+
+- **Saklama:** bugün dahil son `LOG_FILE_MAX_AGE_DAYS` gün (varsayılan 14) tutulur; toplam boyut `LOG_FILE_MAX_TOTAL_MB`'ı
+  (varsayılan 1024) aşarsa en eski günler daha erken silinir. Server yeniden başlarsa aynı günün dosyasına devam eder.
+  Gün sınırı container saatine göredir (varsayılan UTC; log zaman damgaları da UTC).
+- **Kalıcılık (Docker Compose):** dosyalar `logs` volume'ündedir: `docker compose down` / `restart` ve sürüm
+  güncellemeleri (`up -d --build`, yeni imaj) onları silmez; yalnızca `docker compose down -v` siler. `docker compose logs`
+  ise container'a bağlıdır ve güncellemede sıfırlanır — geçmiş için dosyalara bak.
+- **Okuma:**
+  ```sh
+  # bugünün dosyasında bir istek kimliği
+  docker compose exec server grep 9324a487 /var/log/healthbeat/server-2026-09-26.log
+  # önceki bir gün
+  docker compose exec server sh -c 'zcat /var/log/healthbeat/server-2026-09-25.log.gz | grep 9324a487'
+  # bütün dosyaları hosta kopyala (sonra zgrep, jq, less)
+  docker compose cp server:/var/log/healthbeat ./server-logs
+  ```
+  `LOG_FORMAT=json` ile her satır bir JSON nesnesidir: `zcat server-*.log.gz | jq 'select(.status >= 500)'`.
+- **Hostta bir klasörde tutmak** istersen `docker-compose.yml`'da `logs:/var/log/healthbeat` satırını
+  `./logs:/var/log/healthbeat` yap ve klasörü server kullanıcısına ver: `mkdir -p logs && sudo chown 10001:10001 logs`.
+- Dosyaya yazılamazsa (disk dolu, izin) server durmaz: log stdout'ta devam eder, sorun bir kez stderr'e yazılır.
+- Bare-metal'de `LOG_FILE` boş varsayılandır; systemd servisi olarak çalışan server'ın logu zaten journal'dadır.
 
 ### Hız sınırları ve istemci IP'si
 
@@ -338,8 +374,9 @@ docker compose up -d --build
 | `panel` | Panel; kendi TLS'ini `certs` volume'ünden (server'la aynı sertifika) sonlandırır. `API_PROXY_URL=https://server:8443` ile panel `/api/` isteklerini server'a **kendi origin'inden** proxy'ler (CORS ve sertifika onayı gerekmez — bkz. `server/panel/deploy/docker-entrypoint.d/15-healthbeat-config.sh`). Panel ile API'yi ayrı alan adlarında sunacaksan `.env`'de `API_PROXY_URL=` (boş) yap, `API_BASE_URL` ve `CORS_ALLOWED_ORIGINS` ver (bölüm 4). |
 
 **Kalıcı veriler** adlandırılmış volume'lerdedir; `docker compose down` / `up` onları **silmez**:
-`pgdata` (tüm kullanıcılar, sunucular, metrikler, alert'ler) ve `certs` (server VE panelin okuduğu TLS
-sertifikası — ikisi de aynı domain'i sunduğu için tek çift yeter). Volume'leri silmek yalnızca
+`pgdata` (tüm kullanıcılar, sunucular, metrikler, alert'ler), `certs` (server VE panelin okuduğu TLS
+sertifikası — ikisi de aynı domain'i sunduğu için tek çift yeter) ve `logs` (server'ın kalıcı log dosyaları,
+bölüm 2 "Loglama"). Volume'leri silmek yalnızca
 `docker compose down -v` ile olur.
 
 **Panel her zaman HTTPS'tir**, kendinden imzalı ya da gerçek bir sertifikayla — hiçbir zaman düz HTTP
@@ -362,4 +399,6 @@ de ayrıca güvenli bir yerde tut.
 **Güncelleme:** `git pull && docker compose up -d --build` — server açılışta bekleyen
 migration'ları kendisi uygular (`AUTO_MIGRATE`, bölüm 2).
 
-**Log'lar:** `docker compose logs -f server` (ya da `panel`, `db`). Seviye, biçim ve hata ayrıntısı: bölüm 2, "Loglama".
+**Log'lar:** `docker compose logs -f server` (ya da `panel`, `db`) canlı akış içindir ve container yeniden
+oluşturulunca sıfırlanır; server'ın geçmişi `logs` volume'ündeki günlük dosyalardadır. Seviye, biçim, hata ayrıntısı ve
+dosyaları okuma: bölüm 2, "Loglama".

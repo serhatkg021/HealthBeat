@@ -33,6 +33,12 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   Biçim: `docs/MIMARI.md` §7, "Hata yanıtları".
 - **Panel: sunucu hatalarında (5xx) hata kimliği gösteriliyor:** mesajın sonunda `(hata kimliği: …)`; kullanıcı onu
   yöneticiye iletir, yönetici logda o kimlikle ayrıntıyı bulur. Kullanıcının düzeltebileceği 4xx hatalarında gösterilmez.
+- **Kalıcı log dosyası (`LOG_FILE`):** log stdout'a ek olarak günlük dosyalara yazılıyor (`server-YYYY-MM-DD.log`, önceki
+  günler `.log.gz`); HTTP istek/yanıt satırları ve uygulama satırları aynı dosyada, `request_id` ile. Bugün dahil son
+  `LOG_FILE_MAX_AGE_DAYS` gün (varsayılan 14) tutuluyor, toplam `LOG_FILE_MAX_TOTAL_MB` (varsayılan 1024) aşılırsa en eski
+  günler siliniyor. Docker Compose'da varsayılan olarak açık ve yeni `logs` volume'ünde: `down` ve sürüm güncellemelerinden
+  sonra kalıyor (önceden log yalnızca container'daydı, her güncellemede sıfırlanıyordu). Bare-metal'de varsayılan kapalı.
+  Ayrıntı: `docs/DEPLOYMENT.md`, "Kalıcı log dosyası".
 - **Panic kurtarma:** bir istekteki beklenmeyen hata artık bağlantıyı düşürmek yerine `500` ve `request_id`'li JSON yanıt
   döndürüyor, yığın izi loga yazılıyor. Arka plan işleri (pull scheduler, offline izleyici, retention, token temizliği,
   istemci IP çözücüsü) panic'lerse loglanıp 5 sn sonra yeniden başlatılıyor; alert e-postası ya da tek bir host'un poll'u

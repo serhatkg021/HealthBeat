@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -39,6 +40,9 @@ func main() {
 		fatal("config", err)
 	}
 	logging.Setup(os.Stderr, cfg.LogLevel, cfg.LogFormat)
+	if logFile := openLogFile(cfg); logFile != nil {
+		defer logFile.Close()
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -176,6 +180,26 @@ func ensureFirstAdmin(ctx context.Context, cfg *config.Config, users *store.User
 		slog.Warn("no super_admin exists and BOOTSTRAP_ADMIN_EMAIL/BOOTSTRAP_ADMIN_PASSWORD are not set: nobody can sign in to the panel")
 	}
 	return nil
+}
+
+// openLogFile, LOG_FILE ayarlıysa logu stdout'a ek olarak kalıcı dosyaya da yönlendirir. Dosya açılamazsa (izin, yanlış
+// yol) server yine başlar ve bunu ERROR olarak loglar: log dosyası yüzünden izleme durmamalı.
+func openLogFile(cfg *config.Config) *logging.FileWriter {
+	if cfg.LogFile == "" {
+		return nil
+	}
+	fw, err := logging.OpenFile(logging.FileOptions{
+		Path:          cfg.LogFile,
+		MaxAgeDays:    cfg.LogFileMaxAgeDays,
+		MaxTotalBytes: int64(cfg.LogFileMaxTotalMB) << 20,
+	})
+	if err != nil {
+		slog.Error("log file disabled: logging to stdout only", "path", cfg.LogFile, "err", err)
+		return nil
+	}
+	logging.Setup(io.MultiWriter(os.Stderr, fw), cfg.LogLevel, cfg.LogFormat)
+	slog.Info("logging to file", "path", cfg.LogFile, "max_age_days", cfg.LogFileMaxAgeDays, "max_total_mb", cfg.LogFileMaxTotalMB)
+	return fw
 }
 
 // fatal, açılışı durduran bir hatayı loglar ve süreci sonlandırır.
