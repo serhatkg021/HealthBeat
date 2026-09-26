@@ -45,6 +45,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Docker Compose: `docker compose logs`'un kopyasına boyut sınırı.** Docker'ın varsayılan `json-file` sürücüsü container
+  logunu hiç döndürmüyordu; disk zamanla dolabilirdi. Artık `db`, `server`, `panel` ve `mailpit` için servis başına en fazla
+  `HB_DOCKER_LOG_MAX_FILE` × `HB_DOCKER_LOG_MAX_SIZE` (varsayılan 3 × 10 MB, eskiler gzip'li) tutuluyor; daha eski satırlar
+  `docker compose logs`'ta görünmez. Server'ın kalıcı geçmişi `logs` volume'ündeki dosyalarda (`LOG_FILE`). Yeni sınır
+  container yeniden oluşturulunca (`docker compose up -d`) uygulanır.
 - **Log biçimi değişti:** satırlar artık seviyeli ve yapılandırılmış (`time=… level=INFO msg="…" key=value`, ya da
   `LOG_FORMAT=json`). İstek satırında durum koduna göre seviye (`5xx` ERROR, `4xx` WARN); başarılı agent raporları
   (`POST /api/v1/metrics`) ve `/healthz` artık yalnızca `LOG_LEVEL=debug`'da görünüyor. Log metinlerini arayan betik ya da

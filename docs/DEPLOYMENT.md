@@ -399,6 +399,12 @@ de ayrıca güvenli bir yerde tut.
 **Güncelleme:** `git pull && docker compose up -d --build` — server açılışta bekleyen
 migration'ları kendisi uygular (`AUTO_MIGRATE`, bölüm 2).
 
-**Log'lar:** `docker compose logs -f server` (ya da `panel`, `db`) canlı akış içindir ve container yeniden
-oluşturulunca sıfırlanır; server'ın geçmişi `logs` volume'ündeki günlük dosyalardadır. Seviye, biçim, hata ayrıntısı ve
-dosyaları okuma: bölüm 2, "Loglama".
+**Log'lar:** iki yerde tutulur.
+
+| | `docker compose logs -f server` (ya da `panel`, `db`) | `logs` volume'ü (`LOG_FILE`, yalnızca server) |
+| --- | --- | --- |
+| Ne için | canlı akış, son olaylar | geçmiş: bir `request_id`'yi günler sonra bulmak |
+| Sınır | servis başına `HB_DOCKER_LOG_MAX_FILE` × `HB_DOCKER_LOG_MAX_SIZE` (varsayılan 3 × 10 MB, eskiler gzip'li); dolunca en eski parça silinir | bugün dahil son 14 gün, toplam 1 GB |
+| Güncelleme / `down` | container yeniden oluşturulunca **sıfırlanır** | kalır (yalnızca `down -v` siler) |
+
+Seviye, biçim, hata ayrıntısı ve dosyaları okuma: bölüm 2, "Loglama".
