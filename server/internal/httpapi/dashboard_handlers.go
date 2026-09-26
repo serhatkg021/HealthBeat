@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"net/http"
 	"time"
 
@@ -27,10 +26,7 @@ type dashboardSummaryResponse struct {
 // çekip saymadan başka hiçbir şey yanıtlayamaz.
 func (d *Deps) handleDashboardSummary(w http.ResponseWriter, r *http.Request) error {
 	fail := failWith("özet oluşturulamadı")
-	role, _ := roleFromContext(r.Context())
-	userID, _ := userIDFromContext(r.Context())
-
-	hostIDs, err := d.dashboardScope(r.Context(), role, userID)
+	hostIDs, err := d.scope(r).VisibleHostIDs(r.Context())
 	if err != nil {
 		return fail("dashboard summary: resolve scope", err)
 	}
@@ -52,24 +48,6 @@ func (d *Deps) handleDashboardSummary(w http.ResponseWriter, r *http.Request) er
 		OpenWarningAlerts:  warning,
 	})
 	return nil
-}
-
-// dashboardScope, çağıranın görebildiği host kimliklerini döndürür. nil "kapsamsız" demektir
-// (super_admin her şeyi görür); diğer her rol somut (belki boş) bir dilim alır.
-func (d *Deps) dashboardScope(ctx context.Context, role string, userID uuid.UUID) ([]uuid.UUID, error) {
-	switch role {
-	case model.RoleSuperAdmin:
-		return nil, nil
-	case model.RoleOrgAdmin:
-		orgIDs, err := d.userOrgs.ListOrganizationIDs(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
-		return d.hosts.ListIDsByOrganizations(ctx, orgIDs)
-	case model.RoleOperator:
-		return d.userHosts.ListHostIDs(ctx, userID)
-	}
-	return []uuid.UUID{}, nil
 }
 
 type overviewOrganization struct {
@@ -104,12 +82,11 @@ type dashboardOverviewResponse struct {
 // yapılır; böylece her süzgeç değişiminde istek atılmaz ve sayılar birbiriyle tutarlı kalır.
 // Operatör organizasyon adlarını almaz (organization.view yetkisi yok) — organization_id alanı yeter.
 func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) error {
-	role, _ := roleFromContext(r.Context())
-	userID, _ := userIDFromContext(r.Context())
+	scope := d.scope(r)
 	failed := failWith("özet oluşturulamadı")
 	fail := func(step string, err error) error { return failed("dashboard overview: "+step, err) }
 
-	hostIDs, err := d.dashboardScope(r.Context(), role, userID)
+	hostIDs, err := scope.VisibleHostIDs(r.Context())
 	if err != nil {
 		return fail("resolve scope", err)
 	}
@@ -133,13 +110,13 @@ func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) e
 	}
 
 	orgs := []overviewOrganization{}
-	if role == model.RoleSuperAdmin || role == model.RoleOrgAdmin {
+	if scope.IsSuperAdmin() || scope.Role() == model.RoleOrgAdmin {
 		var list []model.Organization
-		if role == model.RoleSuperAdmin {
+		if scope.IsSuperAdmin() {
 			list, err = d.organizations.List(r.Context())
 		} else {
 			var orgIDs []uuid.UUID
-			if orgIDs, err = d.userOrgs.ListOrganizationIDs(r.Context(), userID); err == nil {
+			if orgIDs, err = scope.ManagedOrgIDs(r.Context()); err == nil {
 				list, err = d.organizations.ListByIDs(r.Context(), orgIDs)
 			}
 		}

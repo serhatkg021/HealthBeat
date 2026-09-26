@@ -7,7 +7,6 @@ import (
 	"sort"
 
 	"healthbeat-server/internal/model"
-	"healthbeat-server/internal/rbac"
 	"healthbeat-server/internal/store"
 )
 
@@ -238,5 +237,5 @@ func (d *Deps) handleSetHostThresholds(w http.ResponseWriter, r *http.Request) e
 // bir izin gerektiren bir isteğin (host oluşturma) eşik de ayarladığı yerlerde kullanılır.
 func (d *Deps) canEditThresholds(r *http.Request) (bool, error) {
 	role, _ := roleFromContext(r.Context())
-	return rbac.HasPermission(r.Context(), d.pool, role, "threshold.edit")
+	return d.perms.HasPermission(r.Context(), role, "threshold.edit")
 }

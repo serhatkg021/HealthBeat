@@ -10,10 +10,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"healthbeat-server/internal/access"
 	"healthbeat-server/internal/alertengine"
 	"healthbeat-server/internal/authsvc"
 	"healthbeat-server/internal/clientip"
 	"healthbeat-server/internal/ratelimit"
+	"healthbeat-server/internal/rbac"
 	"healthbeat-server/internal/secretbox"
 	"healthbeat-server/internal/store"
 )
@@ -23,6 +25,10 @@ type Deps struct {
 	tokenSvc *authsvc.TokenService
 
 	agentPolicy AgentPolicy
+
+	// perms, rol izinlerinin önbelleğidir (bkz. rbac.Cache); access, istek başına kapsamı (access.Scope) üretir.
+	perms  *rbac.Cache
+	access *access.Resolver
 
 	// clientIPs, istemci IP'sini TRUSTED_PROXIES'e göre belirler; nil = her zaman TCP eşi (bkz. remoteIP).
 	clientIPs *clientip.Resolver
@@ -95,7 +101,7 @@ func (d *Deps) SetClientIPResolver(r *clientip.Resolver) { d.clientIPs = r }
 func (d *Deps) SetErrorBodyLogging(maxBytes int) { d.errorBodyBytes = maxBytes }
 
 func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *alertengine.Engine, limits RateLimits, secrets *secretbox.Box) *Deps {
-	return &Deps{
+	d := &Deps{
 		pool:        pool,
 		tokenSvc:    tokenSvc,
 		alertEngine: alertEngine,
@@ -122,6 +128,9 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 
 		errorBodyBytes: DefaultErrorBodyBytes,
 	}
+	d.perms = rbac.NewCache(pool, rbac.DefaultCacheTTL)
+	d.access = access.NewResolver(d.userOrgs, d.userHosts, d.hosts)
+	return d
 }
 
 // RunTokenPurge, ctx iptal edilene kadar süresi çoktan dolmuş refresh token kayıtlarını

@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"healthbeat-server/internal/access"
 	"healthbeat-server/internal/authsvc"
 	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
-	"healthbeat-server/internal/rbac"
 	"healthbeat-server/internal/store"
 )
 
@@ -52,17 +52,18 @@ func (d *Deps) authenticated(next http.HandlerFunc, allowPasswordChangeDue bool)
 		}
 
 		ctx := withUser(r.Context(), claims.UserID, claims.Email, claims.Role)
+		ctx = withScope(ctx, d.access.Scope(claims.Role, claims.UserID))
 		next(w, r.WithContext(ctx))
 	}
 }
 
 // requirePermission requireAuth'u içerir, sonra çağıranın rolünü permKey için role_permissions
-// tablosuna karşı denetler (bkz. internal/rbac — burada asla sabit kodlanmaz).
+// tablosuna karşı denetler (bkz. internal/rbac — burada asla sabit kodlanmaz). Sonuç rbac.Cache'ten gelir.
 func (d *Deps) requirePermission(permKey string, next http.HandlerFunc) http.HandlerFunc {
 	return d.requireAuth(func(w http.ResponseWriter, r *http.Request) {
 		role, _ := roleFromContext(r.Context())
 
-		ok, err := rbac.HasPermission(r.Context(), d.pool, role, permKey)
+		ok, err := d.perms.HasPermission(r.Context(), role, permKey)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "permission check error", "err", err)
 			writeError(w, http.StatusInternalServerError, "yetki denetimi başarısız")
@@ -139,4 +140,16 @@ func (d *Deps) resolveClientIP(next http.Handler) http.Handler {
 		logging.RequestInfoFrom(r.Context()).SetIP(ip)
 		next.ServeHTTP(w, r.WithContext(withClientIP(r.Context(), ip)))
 	})
+}
+
+// scope, isteğin erişim kapsamıdır (requireAuth kurar). Kümeleri istek içinde bir kez okunur; bu yüzden aynı isteğin
+// bütün denetimleri aynı Scope'u kullanmalıdır.
+func (d *Deps) scope(r *http.Request) *access.Scope {
+	if s, ok := r.Context().Value(ctxKeyScope).(*access.Scope); ok {
+		return s
+	}
+	// requireAuth'tan geçmemiş bir çağrı (yalnızca testler): bağlamdaki kimlikle, bu çağrıya özel bir kapsam.
+	role, _ := roleFromContext(r.Context())
+	userID, _ := userIDFromContext(r.Context())
+	return d.access.Scope(role, userID)
 }

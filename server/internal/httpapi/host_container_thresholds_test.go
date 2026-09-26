@@ -200,6 +200,7 @@ func TestContainerThresholdPermissionsAndCreation(t *testing.T) {
 		t.Fatalf("a rejected creation left a host behind (%d -> %d)", before, after)
 	}
 	a.pool.Exec(context.Background(), `DELETE FROM role_permissions WHERE role = 'org_admin' AND permission_key = 'threshold.edit'`)
+	a.deps.ResetPermissionCache()
 	if code, _ := create(adminTok, map[string]any{"db": map[string]any{"warning_level": 5, "critical_level": 9}}); code != 403 {
 		t.Errorf("container thresholds without threshold.edit: %d, want 403", code)
 	}

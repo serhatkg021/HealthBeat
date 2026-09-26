@@ -15,9 +15,9 @@ import (
 
 func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) error {
 	fail := failWith("organizasyonlar listelenemedi")
-	role, _ := roleFromContext(r.Context())
+	scope := d.scope(r)
 
-	if role == model.RoleSuperAdmin {
+	if scope.IsSuperAdmin() {
 		orgs, err := d.organizations.List(r.Context())
 		if err != nil {
 			return fail("list organizations", err)
@@ -31,12 +31,11 @@ func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) e
 
 	// org_admin: atandığı organizasyonlar ve altındaki dallar tam erişimlidir; üst zincirleri yalnızca bağlam olarak
 	// (ad ve konum) görünür, içerikleri (adres, sunucular) ve kardeş dalları görünmez.
-	userID, _ := userIDFromContext(r.Context())
-	fullIDs, err := d.userOrgs.ListOrganizationIDs(r.Context(), userID)
+	fullIDs, err := scope.ManagedOrgIDs(r.Context())
 	if err != nil {
 		return fail("list user organizations", err)
 	}
-	contextIDs, err := d.userOrgs.ListContextIDs(r.Context(), userID)
+	contextIDs, err := scope.ContextOrgIDs(r.Context())
 	if err != nil {
 		return fail("list user context organizations", err)
 	}
@@ -119,39 +118,6 @@ func (d *Deps) handleCreateOrganization(w http.ResponseWriter, r *http.Request) 
 	return nil
 }
 
-// requireOrgAccess, çağıranın orgID üzerinde işlem yapabileceğini denetler: super_admin her
-// zaman yapabilir, org_admin yalnızca orgID atamalarındaysa.
-func (d *Deps) requireOrgAccess(r *http.Request, orgID uuid.UUID) (bool, error) {
-	role, _ := roleFromContext(r.Context())
-	if role == model.RoleSuperAdmin {
-		return true, nil
-	}
-	userID, _ := userIDFromContext(r.Context())
-	return d.userOrgs.IsAssigned(r.Context(), userID, orgID)
-}
-
-// orgAccessLevel, çağıranın orgID'deki erişimini söyler: "full", yalnızca üst zincir bilgisi olarak "context" ya da "".
-func (d *Deps) orgAccessLevel(r *http.Request, orgID uuid.UUID) (string, error) {
-	full, err := d.requireOrgAccess(r, orgID)
-	if err != nil || full {
-		if full {
-			return model.OrgAccessFull, nil
-		}
-		return "", err
-	}
-	userID, _ := userIDFromContext(r.Context())
-	ids, err := d.userOrgs.ListContextIDs(r.Context(), userID)
-	if err != nil {
-		return "", err
-	}
-	for _, id := range ids {
-		if id == orgID {
-			return model.OrgAccessContext, nil
-		}
-	}
-	return "", nil
-}
-
 func (d *Deps) handleGetOrganization(w http.ResponseWriter, r *http.Request) error {
 	fail := failWith("organizasyon alınamadı")
 	id, err := pathID(r, "geçersiz organizasyon kimliği")
@@ -159,7 +125,7 @@ func (d *Deps) handleGetOrganization(w http.ResponseWriter, r *http.Request) err
 		return err
 	}
 
-	access, err := d.orgAccessLevel(r, id)
+	access, err := d.scope(r).OrgAccess(r.Context(), id)
 	if err != nil {
 		return fail("check org access", err)
 	}

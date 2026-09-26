@@ -16,6 +16,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   eşten `X-Forwarded-For`'lu istek gelince hemen yeniden çözülür). İstemci IP'si yalnızca istek bunlardan
   birinden geldiğinde başlıktan okunur; boşsa (bare-metal varsayılanı) her zaman TCP eşidir. Docker Compose varsayılanı
   `panel`. `0.0.0.0/0` gibi herkese güvenen aralıklar reddedilir. Ayrıntı: `docs/DEPLOYMENT.md`, "Hız sınırları ve istemci IP'si".
+- **`GET /me` rolün izinlerini de döndürüyor:** yanıta eklemeli `permissions` alanı (ör. `["alert.acknowledge", "host.view", …]`,
+  sıralı); istemci bir işlemi göstermeden önce rol adına değil izne bakabilir. Diğer alanlar değişmedi.
 - **`GET /hosts/:id/metrics/latest`:** host'un en son ham metrik örneği (`/metrics` dizisinin bir elemanıyla aynı biçim;
   host hiç rapor vermediyse `204`). Aynı izin (`host.view`) ve erişim kuralı.
 - **İstek kimliği (`X-Request-ID`):** her yanıt bir istek kimliği taşır (istekte geçerli bir tane gelirse korunur); o isteğin
@@ -118,6 +120,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- Erişim kapsamı `internal/access` paketinde toplandı: istek başına bir `Scope`, organizasyon/sunucu atamalarını istek içinde
+  bir kez okur (önceden aynı istekte denetim başına bir sorgu); handler'lardaki kapsam fonksiyonları ve rol `switch`'leri
+  onu kullanıyor. Rol izinleri 60 sn bellekte tutuluyor (`role_permissions`'ı elle değiştirmek en geç bu süre sonra etkili).
 - Handler'lar ortak hata akışına taşındı: her handler hatasını döndürüyor (`handle`), yoldaki kimlik (`pathID`), 404/403/409
   yanıtları ve 500'ün loglanması tek yerde; istek gövdeleri `bind[T]` ile çözülüp tipin `Validate()` kuralıyla doğrulanıyor.
   Sunucu/organizasyon/eşik/kişi/kural için "yükle + yetki denetle" blokları yardımcılara (`viewableHost`, `managedHost`,

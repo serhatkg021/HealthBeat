@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"healthbeat-server/internal/access"
 	"healthbeat-server/internal/logging"
 )
 
@@ -17,6 +18,7 @@ const (
 	ctxKeyHostID
 	ctxKeyHostOrgID
 	ctxKeyClientIP
+	ctxKeyScope
 )
 
 func withUser(ctx context.Context, userID uuid.UUID, email, role string) context.Context {
@@ -25,6 +27,11 @@ func withUser(ctx context.Context, userID uuid.UUID, email, role string) context
 	ctx = context.WithValue(ctx, ctxKeyEmail, email)
 	ctx = context.WithValue(ctx, ctxKeyRole, role)
 	return ctx
+}
+
+// withScope, kimliği doğrulanmış kullanıcının istek boyunca paylaşılan erişim kapsamını taşır (bkz. Deps.scope).
+func withScope(ctx context.Context, s *access.Scope) context.Context {
+	return context.WithValue(ctx, ctxKeyScope, s)
 }
 
 func userIDFromContext(ctx context.Context) (uuid.UUID, bool) {

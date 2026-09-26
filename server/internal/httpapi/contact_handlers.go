@@ -164,7 +164,7 @@ func (d *Deps) managedOrg(r *http.Request, op string, fail failFunc) (uuid.UUID,
 	if err != nil {
 		return uuid.Nil, fail(op+": lookup organization", err)
 	}
-	allowed, err := d.requireOrgAccess(r, orgID)
+	allowed, err := d.scope(r).CanManageOrg(r.Context(), orgID)
 	if err != nil {
 		return uuid.Nil, fail(op+": check organization access", err)
 	}
@@ -187,7 +187,7 @@ func (d *Deps) managedContact(r *http.Request, op string, fail failFunc) (model.
 	if err != nil {
 		return model.OrganizationContact{}, fail(op+": lookup contact", err)
 	}
-	allowed, err := d.requireOrgAccess(r, c.OrganizationID)
+	allowed, err := d.scope(r).CanManageOrg(r.Context(), c.OrganizationID)
 	if err != nil {
 		return model.OrganizationContact{}, fail(op+": check organization access", err)
 	}

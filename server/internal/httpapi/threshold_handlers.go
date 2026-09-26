@@ -10,22 +10,11 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-// requireThresholdAccess, requireOrgAccess'i bir varsayılan eşik satırı için yansıtır: organizasyon
-// varsayılanı organizasyon erişimini izler ve genel bir varsayılan (organizasyonsuz) yalnızca
-// super_admin içindir. (Sunucuya özel eşikler /hosts/:id/thresholds ile yönetilir.)
-func (d *Deps) requireThresholdAccess(r *http.Request, t model.ThresholdConfig) (bool, error) {
-	if t.OrganizationID != nil {
-		return d.requireOrgAccess(r, *t.OrganizationID)
-	}
-	role, _ := roleFromContext(r.Context())
-	return role == model.RoleSuperAdmin, nil
-}
-
 func (d *Deps) handleListThresholds(w http.ResponseWriter, r *http.Request) error {
 	fail := failWith("eşikler listelenemedi")
-	role, _ := roleFromContext(r.Context())
+	scope := d.scope(r)
 
-	if role == model.RoleSuperAdmin {
+	if scope.IsSuperAdmin() {
 		thresholds, err := d.thresholds.List(r.Context())
 		if err != nil {
 			return fail("list thresholds", err)
@@ -36,12 +25,11 @@ func (d *Deps) handleListThresholds(w http.ResponseWriter, r *http.Request) erro
 
 	// Kendi dalının eşiklerine ek olarak üst zincirin eşikleri de (salt okunur bağlam) döner: sunucuya uygulanan geçerli
 	// değer üst şirketten miras alınmış olabilir ve yönetici bunu görmeden neyin uygulandığını bilemez. Düzenleme/silme
-	// yine yalnızca kendi dalı içindir (requireThresholdAccess).
-	userID, _ := userIDFromContext(r.Context())
-	orgIDs, err := d.userOrgs.ListOrganizationIDs(r.Context(), userID)
+	// yine yalnızca kendi dalı içindir (access.Scope.CanManageThreshold).
+	orgIDs, err := scope.ManagedOrgIDs(r.Context())
 	if err == nil {
 		var contextIDs []uuid.UUID
-		if contextIDs, err = d.userOrgs.ListContextIDs(r.Context(), userID); err == nil {
+		if contextIDs, err = scope.ContextOrgIDs(r.Context()); err == nil {
 			orgIDs = append(orgIDs, contextIDs...)
 		}
 	}
@@ -78,7 +66,7 @@ func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return err
 	}
-	allowed, err := d.requireThresholdAccess(r, model.ThresholdConfig{OrganizationID: req.OrganizationID})
+	allowed, err := d.scope(r).CanManageThreshold(r.Context(), req.OrganizationID)
 	switch {
 	case errors.Is(err, store.ErrNotFound):
 		return notFound("organizasyon bulunamadı")
@@ -128,7 +116,7 @@ func (d *Deps) handleGetThreshold(w http.ResponseWriter, r *http.Request) error 
 		return fail("get threshold", err)
 	}
 
-	allowed, err := d.requireThresholdAccess(r, threshold)
+	allowed, err := d.scope(r).CanManageThreshold(r.Context(), threshold.OrganizationID)
 	if err != nil {
 		return fail("get threshold: check access", err)
 	}
@@ -141,7 +129,7 @@ func (d *Deps) handleGetThreshold(w http.ResponseWriter, r *http.Request) error 
 }
 
 // managedThreshold, id'li varsayılan eşiği yükler ve çağıranın onu düzenleyebildiğini denetler (bkz.
-// requireThresholdAccess). Beklenmeyen hatalar fail ile op öneki taşıyarak loglanır.
+// access.Scope.CanManageThreshold). Beklenmeyen hatalar fail ile op öneki taşıyarak loglanır.
 func (d *Deps) managedThreshold(r *http.Request, id uuid.UUID, op string, fail failFunc) (model.ThresholdConfig, error) {
 	threshold, err := d.thresholds.GetByID(r.Context(), id)
 	if errors.Is(err, store.ErrNotFound) {
@@ -150,7 +138,7 @@ func (d *Deps) managedThreshold(r *http.Request, id uuid.UUID, op string, fail f
 	if err != nil {
 		return model.ThresholdConfig{}, fail(op+": lookup", err)
 	}
-	allowed, err := d.requireThresholdAccess(r, threshold)
+	allowed, err := d.scope(r).CanManageThreshold(r.Context(), threshold.OrganizationID)
 	if err != nil {
 		return model.ThresholdConfig{}, fail(op+": check access", err)
 	}
