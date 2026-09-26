@@ -11,6 +11,15 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 ## [Yayınlanmamış]
 
 ### Eklendi
+- **Alert'in bildirim geçmişi (`GET /alerts/:id/notifications`):** her bildirim olayı (açılma, seviye değişimi, çözülme)
+  için kanal, durum (`sent` / `pending` / `failed`), deneme sayısı, oluşturulma ve gönderilme/vazgeçilme zamanı, bir
+  sonraki deneme ve gönderilen konu/gövde. Alıcı adresleri ve son hata yalnızca `notification.view` izniyle döner
+  (diğerleri `recipient_count` görür). İzin `alert.view`, kapsam alert'in sunucusu. Alert listeleri (`GET /alerts`) artık
+  `notification_status` taşıyor: en az bir bildirimi gitmediyse `failed`, bekleyen varsa `pending`, hepsi gittiyse `sent`;
+  bildirimi yoksa alan yok.
+- **Panel: alert ayrıntısı ve "Bildirim" sütunu.** Alert'ler sayfasında ve sunucunun "Alert'ler" sekmesinde her satırda
+  bildirim durumu rozeti ve "Ayrıntı" düğmesi; açılan yan panel alert bilgilerini ve bildirim geçmişini (kimlere, ne zaman
+  gitti ya da neden gitmedi; içerik açılıp görülebilir) gösteriyor.
 - **`TRUSTED_PROXIES`:** server'ın `X-Forwarded-For` başlığına güvendiği reverse proxy'ler (virgülle ayrılmış IP, CIDR ya da
   docker'daki `panel` gibi bir host adı; host adları 30 sn'de bir, çözülemedikleri sürece 2 sn'de bir ve tanınmayan bir
   eşten `X-Forwarded-For`'lu istek gelince hemen yeniden çözülür). İstemci IP'si yalnızca istek bunlardan
@@ -55,8 +64,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   10 kez deniyor, sonra vazgeçip ERROR logluyor. Bildirim kuyruğa yazılamazsa (veritabanı hatası) alert yine
   kaydediliyor, yalnızca o olayın bildirimi gitmiyor (ERROR loglanıyor); sonraki bildirimler (ör. "ÇÖZÜLDÜ") normal gidiyor. Şifre sıfırlama ve "şifreniz değiştirildi" e-postaları da aynı kuyruktan gidiyor:
   sıfırlama bağlantısı yalnızca şifreli (`SECRETS_ENCRYPTION_KEY`) saklanıyor ve gönderilince silinmiş oluyor, bağlantının
-  süresiyle birlikte geçersiz oluyor; henüz gitmemişken yeni bağlantı istenirse eskisi gönderilmiyor. Gönderilmiş ve
-  vazgeçilmiş satırlar 30 gün tutuluyor. Log: `alert engine: send email` ve `password reset: send mail to user failed`
+  süresiyle birlikte geçersiz oluyor; henüz gitmemişken yeni bağlantı istenirse eskisi gönderilmiyor. Alert bildirimleri
+  alert'leri durdukça gövdesiyle saklanıyor (alert'in bildirim geçmişi); şifre e-postaları ve alert'i silinmiş (sunucusu
+  silinen) bildirimler 30 gün sonra siliniyor. Log: `alert engine: send email` ve `password reset: send mail to user failed`
   yerine `notification delivery failed; will retry` (WARN) / `… giving up` (ERROR); `mail queue full` satırı kalktı.
   **Bu sürüm bir migration içerir (`000003`, yeni tablo):** eski sürüme yalnızca `HB_VERSION`'ı değiştirerek dönülemez;
   geri dönüş `000003_notification_outbox.down.sql` + geçmiş satırının silinmesiyle (bekleyen bildirimler de silinir) ya

@@ -108,7 +108,7 @@ export function HostDetailPage() {
 
       {id && (
         <TabPanel id="alertler" active={tab} keepMounted>
-          <HostAlerts hostId={id} />
+          <HostAlerts hostId={id} hostTitle={host?.title} />
         </TabPanel>
       )}
 

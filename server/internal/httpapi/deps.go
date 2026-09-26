@@ -62,10 +62,10 @@ type Deps struct {
 	ingestRate     *ratelimit.Limiter
 
 	// E-posta ile şifre sıfırlama (bkz. password_reset_handlers.go). mailer nil ya da panelBaseURL boşsa özellik kapalıdır.
-	// E-postalar bildirim kuyruğuna (mailQueue) yazılır, mailWorker teslim eder; sıfırlama bağlantısı şifreli saklanır.
+	// E-postalar bildirim kuyruğuna (outbox) yazılır, mailWorker teslim eder; sıfırlama bağlantısı şifreli saklanır.
 	mailer       Mailer
 	panelBaseURL string
-	mailQueue    *store.Outbox
+	outbox       *store.Outbox
 	mailWorker   *outbox.Worker
 	// resetIPs sıfırlama isteklerini kaynak IP başına, resetEmails hedef e-posta başına sınırlar (posta bombası önlemi).
 	resetIPs    *ratelimit.Limiter
@@ -136,7 +136,7 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 	d.perms = rbac.NewCache(pool, rbac.DefaultCacheTTL)
 	d.access = access.NewResolver(d.userOrgs, d.userHosts, d.hosts)
 	d.ingest = ingest.New(d.metrics, d.hosts, alertEngine)
-	d.mailQueue = store.NewOutbox(pool, secrets)
+	d.outbox = store.NewOutbox(pool, secrets)
 	return d
 }
 

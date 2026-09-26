@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/secretbox"
 )
 
@@ -189,10 +190,63 @@ func (s *Outbox) Supersede(ctx context.Context, kind, recipient string) (int64, 
 	return tag.RowsAffected(), err
 }
 
-// PurgeFinished, before'dan önce oluşturulmuş bitmiş (gönderilmiş ya da vazgeçilmiş) kinds satırlarını siler.
+// PurgeFinished, before'dan önce oluşturulmuş bitmiş (gönderilmiş ya da vazgeçilmiş) kinds satırlarını siler. Alert
+// bildirimleri alert'leri durdukça silinmez (alert detayındaki bildirim geçmişi, gövdesiyle); yalnızca alert'i silinmiş
+// (ör. sunucusu silinen) sahipsiz alert bildirimleri silinir.
 func (s *Outbox) PurgeFinished(ctx context.Context, kinds []string, before time.Time) (int64, error) {
 	tag, err := s.db.Exec(ctx,
 		`DELETE FROM notification_outbox
-		 WHERE (sent_at IS NOT NULL OR failed_at IS NOT NULL) AND created_at < $2 AND kind = ANY($1)`, kinds, before)
+		 WHERE (sent_at IS NOT NULL OR failed_at IS NOT NULL) AND created_at < $2 AND kind = ANY($1)
+		   AND (kind <> 'alert' OR alert_id IS NULL)`, kinds, before)
 	return tag.RowsAffected(), err
+}
+
+// AlertNotification, bir alert bildiriminin teslim kaydıdır (alert detayındaki bildirim geçmişi).
+type AlertNotification struct {
+	ID            uuid.UUID
+	Event         string // AlertEvent*
+	Level         string
+	Channel       string
+	Recipients    []string
+	Subject       string
+	Body          string
+	Status        string // model.Notification*
+	Attempts      int
+	LastError     string
+	CreatedAt     time.Time
+	SentAt        *time.Time
+	FailedAt      *time.Time
+	NextAttemptAt *time.Time // yalnızca bekleyen satırda
+}
+
+// ListForAlert, alertID'nin bildirimlerini oluşturulma sırasıyla döndürür.
+func (s *Outbox) ListForAlert(ctx context.Context, alertID uuid.UUID) ([]AlertNotification, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, alert_event, alert_level, channel, recipients, subject, COALESCE(body, ''), attempts,
+		        COALESCE(last_error, ''), created_at, sent_at, failed_at, next_attempt_at
+		 FROM notification_outbox WHERE alert_id = $1 AND kind = 'alert'
+		 ORDER BY created_at, id`, alertID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []AlertNotification{}
+	for rows.Next() {
+		var n AlertNotification
+		var next time.Time
+		if err := rows.Scan(&n.ID, &n.Event, &n.Level, &n.Channel, &n.Recipients, &n.Subject, &n.Body, &n.Attempts,
+			&n.LastError, &n.CreatedAt, &n.SentAt, &n.FailedAt, &next); err != nil {
+			return nil, err
+		}
+		switch {
+		case n.SentAt != nil:
+			n.Status = model.NotificationSent
+		case n.FailedAt != nil:
+			n.Status = model.NotificationFailed
+		default:
+			n.Status, n.NextAttemptAt = model.NotificationPending, &next
+		}
+		out = append(out, n)
+	}
+	return out, rows.Err()
 }

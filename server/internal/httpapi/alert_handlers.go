@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -114,5 +115,77 @@ func (d *Deps) handleAcknowledgeAlert(w http.ResponseWriter, r *http.Request) er
 	targetID := id.String()
 	d.logAudit(r, "alert.acknowledge", "alert", &targetID, nil)
 	writeJSON(w, http.StatusOK, acknowledged)
+	return nil
+}
+
+// alertNotificationResponse, alert'in bir bildiriminin teslim kaydıdır. Alıcılar ve son hata (SMTP sunucusunun
+// ayrıntısını içerebilir) yalnızca notification.view izni olanlara döner; diğerleri alıcı sayısını görür.
+type alertNotificationResponse struct {
+	ID             uuid.UUID  `json:"id"`
+	Event          string     `json:"event"`
+	Level          string     `json:"level"`
+	Channel        string     `json:"channel"`
+	Status         string     `json:"status"`
+	Attempts       int        `json:"attempts"`
+	RecipientCount int        `json:"recipient_count"`
+	Recipients     []string   `json:"recipients,omitempty"`
+	LastError      string     `json:"last_error,omitempty"`
+	Subject        string     `json:"subject"`
+	Body           string     `json:"body"`
+	CreatedAt      time.Time  `json:"created_at"`
+	SentAt         *time.Time `json:"sent_at,omitempty"`
+	FailedAt       *time.Time `json:"failed_at,omitempty"`
+	NextAttemptAt  *time.Time `json:"next_attempt_at,omitempty"`
+}
+
+// handleListAlertNotifications, GET /api/v1/alerts/:id/notifications'ı sunar: alert'in bildirimleri (açılma, seviye
+// değişimi, çözülme; kanal başına bir kayıt) oluşturulma sırasıyla.
+func (d *Deps) handleListAlertNotifications(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("bildirimler alınamadı")
+	id, err := pathID(r, "geçersiz alert kimliği")
+	if err != nil {
+		return err
+	}
+	alert, err := d.alerts.GetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		return notFound("alert bulunamadı")
+	}
+	if err != nil {
+		return fail("list alert notifications: lookup alert", err)
+	}
+	host, err := d.hosts.GetByID(r.Context(), alert.HostID)
+	if err != nil {
+		return fail("list alert notifications: lookup host", err)
+	}
+	scope := d.scope(r)
+	allowed, err := scope.CanViewHost(r.Context(), host)
+	if err != nil {
+		return fail("list alert notifications: check access", err)
+	}
+	if !allowed {
+		return forbidden()
+	}
+	showRecipients, err := d.perms.HasPermission(r.Context(), scope.Role(), "notification.view")
+	if err != nil {
+		return fail("list alert notifications: check notification.view", err)
+	}
+
+	items, err := d.outbox.ListForAlert(r.Context(), id)
+	if err != nil {
+		return fail("list alert notifications", err)
+	}
+	out := make([]alertNotificationResponse, 0, len(items))
+	for _, n := range items {
+		resp := alertNotificationResponse{
+			ID: n.ID, Event: n.Event, Level: n.Level, Channel: n.Channel, Status: n.Status, Attempts: n.Attempts,
+			RecipientCount: len(n.Recipients), Subject: n.Subject, Body: n.Body,
+			CreatedAt: n.CreatedAt, SentAt: n.SentAt, FailedAt: n.FailedAt, NextAttemptAt: n.NextAttemptAt,
+		}
+		if showRecipients {
+			resp.Recipients, resp.LastError = n.Recipients, n.LastError
+		}
+		out = append(out, resp)
+	}
+	writeJSON(w, http.StatusOK, out)
 	return nil
 }

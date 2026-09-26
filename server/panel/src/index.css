@@ -2279,6 +2279,74 @@ body.scroll-lock {
   color: var(--text-primary);
 }
 
+/* ---------- Alert ayrıntısı (yan panel) ---------- */
+/* Alert ayrıntısında "Bildirimler" başlığı üstteki bilgi listesinden ayrılsın. */
+.drawer-body .section-title {
+  margin-top: 22px;
+}
+
+.notification-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notification-timeline > li {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.notification-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.notification-head time {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.notification-timeline .meta-list li {
+  overflow-wrap: anywhere;
+}
+
+.notification-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--status-critical-text);
+  overflow-wrap: anywhere;
+}
+
+.notification-content {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.notification-content summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.notification-content pre {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  font-size: 12px;
+}
+
 .drawer-root {
   position: fixed;
   inset: 0;

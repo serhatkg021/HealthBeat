@@ -479,7 +479,8 @@ Bildirim kuyruğu (`000003`): alert bildirimleri ve hesap e-postaları gönderil
 gönderir, başarısızlıkta geri çekilerek yeniden dener (en çok 10 deneme). Alert bildirimleri alert değişikliğiyle aynı
 transaction'da, kanal başına bir satır olarak yazılır; `alert_event` (açılma / seviye değişimi / çözülme) ve
 `alert_level` hangi olay için, hangi seviyede gittiğini tutar (alert başına bildirim geçmişi). Şifre sıfırlama bağlantısı yalnızca şifreli (`body_sealed`,
-`SECRETS_ENCRYPTION_KEY`, satır kimliğine bağlı) saklanır ve satır bitince silinir. Bitmiş satırlar 30 gün tutulur.
+`SECRETS_ENCRYPTION_KEY`, satır kimliğine bağlı) saklanır ve satır bitince silinir. Alert bildirimleri alert durdukça
+gövdesiyle saklanır (alert'in bildirim geçmişi); hesap e-postaları ve alert'i silinmiş satırlar bittikten 30 gün sonra silinir.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |

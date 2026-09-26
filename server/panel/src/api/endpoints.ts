@@ -1,6 +1,7 @@
 import { apiRequest, apiRequestPage } from './client'
 import type {
   Alert,
+  AlertNotification,
   AuditLogPage,
   AlertStatus,
   Host,
@@ -188,6 +189,7 @@ export const alertsApi = {
       },
     }),
   acknowledge: (id: string) => apiRequest<Alert>(`/api/v1/alerts/${id}/acknowledge`, { method: 'POST' }),
+  notifications: (id: string) => apiRequest<AlertNotification[]>(`/api/v1/alerts/${id}/notifications`),
 }
 
 export const auditApi = {

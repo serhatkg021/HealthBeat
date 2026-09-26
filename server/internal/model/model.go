@@ -572,7 +572,18 @@ type Alert struct {
 	AcknowledgedAt *time.Time `json:"acknowledged_at,omitempty"`
 	AcknowledgedBy *uuid.UUID `json:"acknowledged_by,omitempty"`
 	ResolvedAt     *time.Time `json:"resolved_at,omitempty"`
+	// NotificationStatus, alert listelerinde bildirimlerinin toplu durumudur: en az biri gitmediyse
+	// NotificationFailed, bekleyen varsa NotificationPending, hepsi gittiyse NotificationSent; boş = bildirim yok
+	// (ör. alıcı yok). Tek alert yanıtlarında doldurulmaz.
+	NotificationStatus string `json:"notification_status,omitempty"`
 }
+
+// Bir bildirimin (ya da alert'in bildirimlerinin toplu) teslim durumu.
+const (
+	NotificationSent    = "sent"
+	NotificationPending = "pending"
+	NotificationFailed  = "failed"
+)
 
 // Bildirim kanalları. Veritabanı ileride eklenecek kanalları da kabul eder; API yalnızca burada
 // "uygulanmış" olanları kabul eder (aksi halde biri hiç gitmeyecek bir kanal seçebilirdi).

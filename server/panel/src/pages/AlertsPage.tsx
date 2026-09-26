@@ -3,14 +3,15 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { alertsApi, hostsApi } from '../api/endpoints'
 import { usePagedQuery } from '../api/usePagedQuery'
-import type { AlertStatus } from '../types/api'
+import type { Alert, AlertStatus } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel } from '../labels'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
-import { BellOff, Check } from 'lucide-react'
+import { BellOff, Check, Info } from 'lucide-react'
+import { AlertDetail, NotificationBadge } from './AlertDetail'
 
 const STATUS_TABS: { value: AlertStatus | ''; label: string }[] = [
   { value: 'open', label: 'Açık' },
@@ -24,6 +25,7 @@ const PAGE_SIZE = 20
 export function AlertsPage() {
   const [status, setStatus] = useState<AlertStatus | ''>('open')
   const [hostTitles, setHostTitles] = useState<Record<string, string>>({})
+  const [selected, setSelected] = useState<Alert | null>(null)
 
   const {
     items: alerts,
@@ -77,7 +79,7 @@ export function AlertsPage() {
   // çözülme her zaman boştur (onaylanan bir alert asla kendiliğinden çözülmez — bkz. HostAlerts).
   const showAcknowledged = status !== 'open'
   const showResolved = status === 'resolved' || status === ''
-  const columnCount = 5 + Number(showAcknowledged) + Number(showResolved) + 1
+  const columnCount = 6 + Number(showAcknowledged) + Number(showResolved) + 1
 
   return (
     <div>
@@ -107,6 +109,7 @@ export function AlertsPage() {
               <th>Oluşturulma</th>
               {showAcknowledged && <th>Onaylanma</th>}
               {showResolved && <th>Çözülme</th>}
+              <th>Bildirim</th>
               <th className="actions" />
             </tr>
           </thead>
@@ -132,7 +135,14 @@ export function AlertsPage() {
                 {showResolved && (
                   <td className="muted" data-label="Çözülme">{a.resolved_at ? new Date(a.resolved_at).toLocaleString() : '—'}</td>
                 )}
+                <td data-label="Bildirim">
+                  <NotificationBadge status={a.notification_status} />
+                </td>
                 <td className="actions">
+                  <button className="btn btn-sm btn-ghost" onClick={() => setSelected(a)}>
+                    <Info size={14} strokeWidth={2} />
+                    Ayrıntı
+                  </button>
                   {a.status === 'open' && (
                     <button className="btn btn-sm" onClick={() => handleAcknowledge(a.id)}>
                       <Check size={14} strokeWidth={2} />
@@ -152,6 +162,12 @@ export function AlertsPage() {
           </tbody>
         </table>
       </div>
+
+      <AlertDetail
+        alert={selected}
+        hostTitle={selected ? hostTitles[selected.host_id] : undefined}
+        onClose={() => setSelected(null)}
+      />
     </div>
   )
 }

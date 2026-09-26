@@ -4,11 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — Bildirimler kalıcı kuyruğa taşındı (C3): migration `000003` ile `notification_outbox`;
-alert bildirimleri alert değişikliğiyle aynı transaction'da yazılıyor, `internal/outbox` işçisi geri çekilmeli yeniden
-denemeyle (en çok 10) teslim ediyor; şifre e-postaları da kuyrukta (sıfırlama bağlantısı şifreli, süreli, yenisi gelince
-eskisi gitmiyor). Önceki adımlar: alert motoru bölme + `Notifier` (#20), ortak ingest (#19), erişim kapsamı (#18), handler
-hata akışı (#17), log/Faz A (#12–#16). Sırada: B4 (store hatalarında makine-okur neden).
+**Son güncelleme:** 2026-09-27 — Alert'in bildirim geçmişi eklendi: `GET /alerts/:id/notifications` (alıcılar ve hata
+yalnızca `notification.view` ile), alert listelerinde `notification_status`; panelde alert ayrıntısı yan paneli ve "Bildirim"
+sütunu. Alert bildirimleri alert durdukça gövdesiyle saklanıyor. Önceki adımlar: kalıcı bildirim kuyruğu (#21), alert
+motoru bölme (#20), ortak ingest (#19), erişim kapsamı (#18), handler hata akışı (#17), log/Faz A (#12–#16).
+Sırada: B4 (store hatalarında makine-okur neden).
 
 ## Durum
 

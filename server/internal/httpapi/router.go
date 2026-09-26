@@ -71,6 +71,7 @@ func (d *Deps) Router() http.Handler {
 
 	mux.HandleFunc("GET /api/v1/alerts", d.requirePermission("alert.view", handle(d.handleListAlerts)))
 	mux.HandleFunc("POST /api/v1/alerts/{id}/acknowledge", d.requirePermission("alert.acknowledge", handle(d.handleAcknowledgeAlert)))
+	mux.HandleFunc("GET /api/v1/alerts/{id}/notifications", d.requirePermission("alert.view", handle(d.handleListAlertNotifications)))
 
 	mux.HandleFunc("GET /api/v1/hosts/{id}/metrics", d.requirePermission("host.view", handle(d.handleGetHostMetrics)))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/metrics/latest", d.requirePermission("host.view", handle(d.handleGetHostLatestMetric)))
