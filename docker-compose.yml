@@ -87,6 +87,11 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-}
       LOG_FORMAT: ${LOG_FORMAT:-}
       LOG_ERROR_BODY_BYTES: ${LOG_ERROR_BODY_BYTES:-}
+      # Kalıcı log: `logs` volume'ünde günlük dosyalar (down ve güncellemelerden sonra kalır; yalnızca `down -v` siler).
+      # Kapatmak için .env'de LOG_FILE= (boş).
+      LOG_FILE: ${LOG_FILE-/var/log/healthbeat/server.log}
+      LOG_FILE_MAX_AGE_DAYS: ${LOG_FILE_MAX_AGE_DAYS:-}
+      LOG_FILE_MAX_TOTAL_MB: ${LOG_FILE_MAX_TOTAL_MB:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -97,6 +102,8 @@ services:
     volumes:
       # Server bu dizinden yalnızca OKUR (sertifika + CA); değişiklikler yeniden başlatmadan algılanır.
       - certs:/certs:ro
+      # Kalıcı server logu (LOG_FILE). Hostta bir klasörde görmek için: ./logs:/var/log/healthbeat (bkz. docs/DEPLOYMENT.md).
+      - logs:/var/log/healthbeat
     ports:
       # Push agent'lar buraya bağlanır; pull agent'lar ise server'dan onlara gider.
       - "${HB_API_BIND:-0.0.0.0}:${HB_API_PORT:-8443}:8443"
@@ -138,3 +145,4 @@ services:
 volumes:
   pgdata:
   certs:
+  logs:

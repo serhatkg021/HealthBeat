@@ -10,6 +10,9 @@
 .env.*
 !.env.example
 *.log
+# Kalıcı log dizinleri (LOG_FILE): yerel geliştirme ve Docker Compose bind mount alternatifi
+/logs/
+/server/logs/
 
 # Sürüm artifact'ları (scripts/release.sh)
 /dist/

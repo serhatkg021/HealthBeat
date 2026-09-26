@@ -134,7 +134,16 @@ func TestLoadLogSettings(t *testing.T) {
 	if cfg, err = Load(); err != nil || cfg.LogLevel != slog.LevelDebug || cfg.LogFormat != "json" || cfg.LogErrorBodyBytes != 0 {
 		t.Fatalf("set: level=%v format=%q body=%d err=%v", cfg.LogLevel, cfg.LogFormat, cfg.LogErrorBodyBytes, err)
 	}
-	for key, bad := range map[string]string{"LOG_LEVEL": "verbose", "LOG_FORMAT": "xml", "LOG_ERROR_BODY_BYTES": "2000000"} {
+	if cfg.LogFile != "" || cfg.LogFileMaxAgeDays != 14 || cfg.LogFileMaxTotalMB != 1024 {
+		t.Fatalf("file defaults: %q %d %d", cfg.LogFile, cfg.LogFileMaxAgeDays, cfg.LogFileMaxTotalMB)
+	}
+	t.Setenv("LOG_FILE", " /var/log/healthbeat/server.log ")
+	t.Setenv("LOG_FILE_MAX_AGE_DAYS", "5")
+	if cfg, err = Load(); err != nil || cfg.LogFile != "/var/log/healthbeat/server.log" || cfg.LogFileMaxAgeDays != 5 {
+		t.Fatalf("file set: %q %d %v", cfg.LogFile, cfg.LogFileMaxAgeDays, err)
+	}
+	for key, bad := range map[string]string{"LOG_LEVEL": "verbose", "LOG_FORMAT": "xml", "LOG_ERROR_BODY_BYTES": "2000000",
+		"LOG_FILE_MAX_AGE_DAYS": "0", "LOG_FILE_MAX_TOTAL_MB": "-1"} {
 		t.Setenv(key, bad)
 		if _, err := Load(); err == nil || !strings.Contains(err.Error(), key) {
 			t.Fatalf("%s=%s: err=%v, want it to name %s", key, bad, err, key)

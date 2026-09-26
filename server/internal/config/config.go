@@ -100,6 +100,14 @@ type Config struct {
 	// LogErrorBodyBytes (LOG_ERROR_BODY_BYTES, varsayılan 4096), hata alan (4xx/5xx) bir isteğin loga yazılan
 	// istek/yanıt gövdesinin azami boyutudur; 0 gövde yazmaz. Şifre/token/secret alanları her zaman maskelenir.
 	LogErrorBodyBytes int
+
+	// LogFile (LOG_FILE), logun stdout'a ek olarak yazıldığı kalıcı dosyadır; o dizinde günlük dosyalar tutulur
+	// (server-YYYY-MM-DD.log, eski günler gzip'li). Boş = kapalı (bare-metal varsayılanı; Docker Compose açar).
+	// LogFileMaxAgeDays (varsayılan 14) bugün dahil kaç günün tutulacağı, LogFileMaxTotalMB (varsayılan 1024) bütün log
+	// dosyalarının toplam üst sınırıdır. Bkz. logging.FileWriter.
+	LogFile           string
+	LogFileMaxAgeDays int
+	LogFileMaxTotalMB int
 }
 
 // maxLogErrorBodyBytes, LOG_ERROR_BODY_BYTES'ın üst sınırıdır: API zaten 1 MiB'tan büyük gövde kabul etmez.
@@ -216,6 +224,13 @@ func Load() (*Config, error) {
 	}
 	if cfg.LogErrorBodyBytes > maxLogErrorBodyBytes {
 		return nil, fmt.Errorf("invalid LOG_ERROR_BODY_BYTES: must be at most %d", maxLogErrorBodyBytes)
+	}
+	cfg.LogFile = strings.TrimSpace(os.Getenv("LOG_FILE"))
+	if cfg.LogFileMaxAgeDays, err = getIntDefault("LOG_FILE_MAX_AGE_DAYS", 14); err != nil || cfg.LogFileMaxAgeDays < 1 {
+		return nil, fmt.Errorf("invalid LOG_FILE_MAX_AGE_DAYS: must be a positive number of days")
+	}
+	if cfg.LogFileMaxTotalMB, err = getIntDefault("LOG_FILE_MAX_TOTAL_MB", 1024); err != nil || cfg.LogFileMaxTotalMB < 1 {
+		return nil, fmt.Errorf("invalid LOG_FILE_MAX_TOTAL_MB: must be a positive number of megabytes")
 	}
 
 	return cfg, nil

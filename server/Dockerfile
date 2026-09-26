@@ -15,9 +15,12 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/healthbeat-server 
 
 FROM alpine:3.21
 # ca-certificates: SMTP sunucusunun TLS sertifikasını doğrulamak için.
+# /var/log/healthbeat: LOG_FILE'ın dizini. Yeni bir named volume ilk bağlanışta bu dizinin sahipliğini alır; böylece
+# 10001 olarak çalışan server içine yazabilir.
 RUN apk add --no-cache ca-certificates tzdata \
  && addgroup -S -g 10001 healthbeat \
- && adduser -S -u 10001 -G healthbeat -H -s /sbin/nologin healthbeat
+ && adduser -S -u 10001 -G healthbeat -H -s /sbin/nologin healthbeat \
+ && install -d -o 10001 -g 10001 -m 750 /var/log/healthbeat
 COPY --from=build /out/healthbeat-server /usr/local/bin/healthbeat-server
 USER 10001:10001
 EXPOSE 8443

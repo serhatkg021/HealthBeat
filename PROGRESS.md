@@ -4,11 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-26 — Hata yanıtları `{"error","code","request_id"}` biçimine geçti (kod durum kodundan
-türetiliyor, özel kodlar korunuyor; `fields` B2'deki doğrulama için ayrıldı); panel 5xx'te "hata kimliği"ni gösteriyor,
-CORS `X-Request-ID`'yi açığa çıkarıyor. Handler'ların `apiError` döndürmesi (B1) ve alan bazlı doğrulama (B2) sonraki adımlar.
-Önceki adım: server logu `log/slog`'a geçti, `X-Request-ID`, maskeli hata ayrıntısı, panic kurtarma (#12); `alertengine`,
-`pullscheduler` vb. hâlâ `log.Printf` (A2b).
+**Son güncelleme:** 2026-09-26 — Server logu kalıcı dosyaya da yazılıyor (`LOG_FILE`): günlük dosyalar, önceki günler
+gzip'li, son 14 gün + 1 GB toplam sınır; Docker Compose'da `logs` volume'ünde, güncellemelerden sonra kalıyor. Önceki adımlar:
+hata yanıtlarında `code` + `request_id`, panel 5xx'te hata kimliği (#13); slog, `X-Request-ID`, maskeli hata ayrıntısı,
+panic kurtarma (#12). Sırada: A5 (Docker'ın kendi log kopyasına boyut sınırı), A2b (`alertengine`, `pullscheduler` vb.
+~60 `log.Printf` + JSON `duration_ms`).
 
 ## Durum
 
