@@ -39,6 +39,29 @@ const CONTAINER_STATUS: Record<string, string> = {
   removing: 'kaldırılıyor',
 }
 
+// Bir bildirimin teslim durumu (bkz. GET /alerts/:id/notifications).
+const NOTIFICATION_STATUS: Record<string, string> = {
+  sent: 'gönderildi',
+  pending: 'bekliyor',
+  failed: 'gönderilemedi',
+}
+
+// Bildirimi doğuran alert olayı.
+const ALERT_EVENT: Record<string, string> = {
+  opened: 'açıldı',
+  level_changed: 'seviye değişti',
+  resolved: 'çözüldü',
+}
+
+// Bildirim kanalları (notification_routes.channel).
+const CHANNEL: Record<string, string> = {
+  email: 'e-posta',
+  sms: 'SMS',
+  slack: 'Slack',
+  discord: 'Discord',
+  telegram: 'Telegram',
+}
+
 const label = (table: Record<string, string>, value: string): string => table[value] ?? value
 
 export const hostStatusLabel = (status: string): string => label(HOST_STATUS, status)
@@ -49,3 +72,9 @@ export const alertLevelLabel = (level: string): string => label(ALERT_LEVEL, lev
 export const alertStatusLabel = (status: string): string => label(ALERT_STATUS, status)
 export const alertMetricLabel = (metric: string): string => label(ALERT_METRIC, metric)
 export const containerStatusLabel = (status: string): string => label(CONTAINER_STATUS, status)
+export const notificationStatusLabel = (status: string): string => label(NOTIFICATION_STATUS, status)
+// Bildirim durumunun rozet rengi: gittiyse yeşil, bekliyorsa (yeniden denenecek) sarı, gitmediyse kırmızı.
+export const notificationStatusTone = (status: string): 'good' | 'warning' | 'critical' | 'neutral' =>
+  status === 'sent' ? 'good' : status === 'pending' ? 'warning' : status === 'failed' ? 'critical' : 'neutral'
+export const alertEventLabel = (event: string): string => label(ALERT_EVENT, event)
+export const channelLabel = (channel: string): string => label(CHANNEL, channel)

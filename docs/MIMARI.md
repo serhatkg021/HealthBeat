@@ -173,7 +173,7 @@ GET    /api/v1/me (+ permissions) | /me/hosts | /meta
        /api/v1/hosts[/:id]                      metrics[/latest] | docker | thresholds | disk-alerts | rotate-credentials
        /api/v1/thresholds[/:id]                 varsayılan eşikler (genel ya da organizasyon)
        /api/v1/notification-routes[/:id]        + .../organizations/:id|hosts/:id/notification-routes | -recipients
-GET    /api/v1/alerts?status=open               POST /api/v1/alerts/:id/acknowledge
+GET    /api/v1/alerts?status=open               POST /api/v1/alerts/:id/acknowledge · GET …/:id/notifications
        /api/v1/users[/:id]                      + organizations | hosts atamaları
 GET    /api/v1/audit-logs | /dashboard/summary | /dashboard/overview
 ```
@@ -234,6 +234,9 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   bildirimi gitmez (ERROR). Server yeniden başlasa da bekleyen bildirim kaybolmaz; birden çok server kopyası aynı satırı
   almaz (`FOR UPDATE SKIP LOCKED`). Şifre sıfırlama ve "şifreniz değişti" e-postaları da aynı kuyruktan gider; sıfırlama
   bağlantısı şifreli saklanır, bağlantıyla birlikte geçersiz olur ve yenisi istenince eski e-posta gönderilmez.
+- **Bildirim geçmişi:** alert bildirimleri alert durdukça gövdesiyle saklanır; panelde alert ayrıntısında olay olay
+  (kimlere, ne zaman, gitti mi) görünür, listelerde toplu durum rozeti vardır. Alıcı adreslerini ve hata metnini yalnızca
+  `notification.view` izni olanlar görür. Hesap e-postaları ve sahipsiz satırlar 30 gün sonra silinir.
 
 ---
 

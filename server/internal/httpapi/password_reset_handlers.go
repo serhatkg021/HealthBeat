@@ -80,7 +80,7 @@ func (d *Deps) SetPasswordReset(m Mailer, baseURL string) {
 	d.panelBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	d.mailWorker = nil
 	if m != nil {
-		d.mailWorker = outbox.NewWorker(d.mailQueue, accountMailKinds, mailerChannel{m})
+		d.mailWorker = outbox.NewWorker(d.outbox, accountMailKinds, mailerChannel{m})
 	}
 }
 
@@ -122,7 +122,7 @@ func (d *Deps) WaitForMail(ctx context.Context) error {
 // SMTP'ye bağlı olmaz. Hata yalnızca loglanır (kullanıcıya bildirilemez: yanıt her durumda aynıdır).
 func (d *Deps) queueMail(ctx context.Context, m store.OutboxMessage) {
 	m.Channel, m.RequestID = model.ChannelEmail, logging.RequestID(ctx)
-	if _, err := d.mailQueue.Enqueue(ctx, m); err != nil {
+	if _, err := d.outbox.Enqueue(ctx, m); err != nil {
 		slog.ErrorContext(ctx, "password mail: enqueue failed", "kind", m.Kind, "err", err)
 		return
 	}
@@ -207,7 +207,7 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) erro
 
 	// Önceki bağlantıyı taşıyan, henüz gitmemiş e-posta artık gönderilmez (o token Issue ile geçersizleşti). Yeni
 	// bağlantı şifreli saklanır ve token'la aynı anda geçersiz olur: süresi dolmuş bağlantıyı göndermek anlamsız.
-	if _, err := d.mailQueue.Supersede(r.Context(), store.OutboxKindPasswordReset, user.Email); err != nil {
+	if _, err := d.outbox.Supersede(r.Context(), store.OutboxKindPasswordReset, user.Email); err != nil {
 		slog.ErrorContext(r.Context(), "password reset: supersede pending mail", "err", err)
 	}
 	d.queueMail(r.Context(), store.OutboxMessage{
@@ -271,7 +271,7 @@ func (d *Deps) handleResetPassword(w http.ResponseWriter, r *http.Request) error
 		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 	// Kullanılan bağlantının (varsa hâlâ bekleyen) e-postası artık gönderilmez.
-	if _, err := d.mailQueue.Supersede(r.Context(), store.OutboxKindPasswordReset, user.Email); err != nil {
+	if _, err := d.outbox.Supersede(r.Context(), store.OutboxKindPasswordReset, user.Email); err != nil {
 		slog.ErrorContext(r.Context(), "password reset: supersede pending mail", "err", err)
 	}
 	if d.mailer != nil && d.mailer.Enabled() {

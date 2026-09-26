@@ -263,6 +263,32 @@ export interface Alert {
   acknowledged_at?: string
   acknowledged_by?: string
   resolved_at?: string
+  // Yalnızca alert listelerinde: bildirimlerin toplu durumu (en az biri gitmediyse failed, bekleyen varsa pending, hepsi
+  // gittiyse sent). Yoksa alert'in bildirimi olmamıştır (ör. alıcı yoktu).
+  notification_status?: NotificationStatus
+}
+
+export type NotificationStatus = 'sent' | 'pending' | 'failed'
+export type AlertEvent = 'opened' | 'level_changed' | 'resolved'
+
+// Bir alert bildiriminin teslim kaydı (GET /alerts/:id/notifications). Alıcılar ve son hata yalnızca notification.view
+// izniyle gelir; yoksa yalnızca recipient_count vardır.
+export interface AlertNotification {
+  id: string
+  event: AlertEvent
+  level: AlertLevel
+  channel: string
+  status: NotificationStatus
+  attempts: number
+  recipient_count: number
+  recipients?: string[]
+  last_error?: string
+  subject: string
+  body: string
+  created_at: string
+  sent_at?: string
+  failed_at?: string
+  next_attempt_at?: string
 }
 
 export interface AuditLogEntry {

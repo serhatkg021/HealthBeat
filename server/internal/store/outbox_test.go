@@ -232,3 +232,86 @@ func TestOutboxEnqueueFollowsTheTransaction(t *testing.T) {
 		t.Fatalf("rows after rollback = %d, %v", n, err)
 	}
 }
+
+// Alert bildirimleri alert'leri durdukça (gövdesiyle) saklanır; alert'i silinmiş sahipsiz satırlar ve hesap e-postaları
+// süresi gelince silinir. Alert detayı bildirimleri sırasıyla ve durumlarıyla okur; alert listesi toplu durumu taşır.
+func TestOutboxAlertHistoryIsKeptAndSummarized(t *testing.T) {
+	pool, o := newOutbox(t)
+	ctx := context.Background()
+	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "o"), "h", "hash")
+	alerts := store.NewAlerts(pool)
+	newAlert := func(metric string) uuid.UUID {
+		t.Helper()
+		a, _, err := alerts.CreateIfNoneActive(ctx, host, metric, "", "warning", nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return a.ID
+	}
+	sentAlert, failedAlert, pendingAlert, quietAlert := newAlert("cpu"), newAlert("ram"), newAlert("disk"), newAlert("docker_restart")
+	notify := func(alertID uuid.UUID, event, level string) uuid.UUID {
+		return enqueue(t, o, store.OutboxMessage{AlertID: &alertID, AlertEvent: event, AlertLevel: level, Subject: event, Body: "gövde " + event})
+	}
+	opened := notify(sentAlert, store.AlertEventOpened, "warning")
+	resolved := notify(sentAlert, store.AlertEventResolved, "warning")
+	failedOpen := notify(failedAlert, store.AlertEventOpened, "critical")
+	failedResolved := notify(failedAlert, store.AlertEventResolved, "critical")
+	notify(pendingAlert, store.AlertEventOpened, "warning")
+	for _, id := range []uuid.UUID{opened, resolved, failedResolved} {
+		if err := o.MarkSent(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := o.MarkFailed(ctx, failedOpen, "550 mailbox unavailable"); err != nil {
+		t.Fatal(err)
+	}
+
+	history, err := o.ListForAlert(ctx, sentAlert)
+	if err != nil || len(history) != 2 {
+		t.Fatalf("history = %+v, %v", history, err)
+	}
+	if h := history[0]; h.Event != store.AlertEventOpened || h.Status != "sent" || h.SentAt == nil || h.Body != "gövde opened" ||
+		h.Recipients[0] != "ops@x.test" || h.NextAttemptAt != nil {
+		t.Fatalf("first entry = %+v", h)
+	}
+	if failed, _ := o.ListForAlert(ctx, failedAlert); failed[0].Status != "failed" || failed[0].LastError != "550 mailbox unavailable" {
+		t.Fatalf("failed entry = %+v", failed[0])
+	}
+	if pending, _ := o.ListForAlert(ctx, pendingAlert); pending[0].Status != "pending" || pending[0].NextAttemptAt == nil {
+		t.Fatalf("pending entry = %+v", pending[0])
+	}
+
+	list, _, err := alerts.List(ctx, "", store.ListParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[uuid.UUID]string{sentAlert: "sent", failedAlert: "failed", pendingAlert: "pending", quietAlert: ""}
+	for _, a := range list {
+		if a.NotificationStatus != want[a.ID] {
+			t.Errorf("alert %s notification_status = %q, want %q", a.AlertType, a.NotificationStatus, want[a.ID])
+		}
+	}
+
+	// Temizlik: alert'i duran bildirimler kalır; sahipsiz alert bildirimi ve hesap e-postası silinir.
+	orphan := enqueue(t, o, store.OutboxMessage{Body: "sahipsiz"})
+	account := enqueue(t, o, store.OutboxMessage{Kind: store.OutboxKindPasswordChanged, Body: "hesap"})
+	for _, id := range []uuid.UUID{orphan, account} {
+		if err := o.MarkSent(ctx, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `UPDATE notification_outbox SET created_at = now() - interval '400 days'`); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := o.PurgeFinished(ctx, allKinds, time.Now().Add(-30*24*time.Hour)); err != nil || n != 2 {
+		t.Fatalf("PurgeFinished = %d, %v; want only the orphaned and the account rows", n, err)
+	}
+	history, _ = o.ListForAlert(ctx, sentAlert)
+	bodies := map[string]bool{}
+	for _, h := range history {
+		bodies[h.Body] = true
+	}
+	if len(history) != 2 || !bodies["gövde opened"] || !bodies["gövde resolved"] {
+		t.Fatalf("alert history after purge = %+v, want it kept with its bodies", history)
+	}
+}

@@ -246,7 +246,7 @@ func (s *Alerts) listWhere(ctx context.Context, scopeClause string, scopeArgs []
 		return nil, 0, err
 	}
 
-	query := `SELECT ` + alertColumnsJoined + ` ` + from + ` ORDER BY a.created_at DESC`
+	query := `SELECT ` + alertColumnsJoined + `, ` + alertNotificationStatus + ` ` + from + ` ORDER BY a.created_at DESC`
 	if p.Limit > 0 {
 		args = append(args, p.Limit, p.Offset)
 		query += fmt.Sprintf(" LIMIT $%d OFFSET $%d", len(args)-1, len(args))
@@ -256,9 +256,29 @@ func (s *Alerts) listWhere(ctx context.Context, scopeClause string, scopeArgs []
 		return nil, 0, err
 	}
 	defer rows.Close()
-	alerts, err := scanAlerts(rows)
-	return alerts, total, err
+	alerts := []model.Alert{}
+	for rows.Next() {
+		var a model.Alert
+		var notification *string
+		if err := rows.Scan(&a.ID, &a.HostID, &a.AlertType, &a.Subject, &a.Level, &a.Status, &a.Value, &a.Threshold,
+			&a.CreatedAt, &a.AcknowledgedAt, &a.AcknowledgedBy, &a.ResolvedAt, &notification); err != nil {
+			return nil, 0, err
+		}
+		if notification != nil {
+			a.NotificationStatus = *notification
+		}
+		alerts = append(alerts, a)
+	}
+	return alerts, total, rows.Err()
 }
+
+// alertNotificationStatus, alert'in bildirimlerinin toplu durumudur (bkz. model.Alert.NotificationStatus); bildirimi
+// yoksa NULL.
+const alertNotificationStatus = `(SELECT CASE
+	    WHEN bool_or(o.failed_at IS NOT NULL) THEN 'failed'
+	    WHEN bool_or(o.sent_at IS NULL) THEN 'pending'
+	    WHEN count(*) > 0 THEN 'sent'
+	END FROM notification_outbox o WHERE o.alert_id = a.id)`
 
 // CountOpenByLevel dashboard özetini besler — Hosts.CountByStatus ile aynı
 // ids==nil-kapsamsız-demektir kuralı.
