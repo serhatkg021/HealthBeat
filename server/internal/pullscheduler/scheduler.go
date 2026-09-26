@@ -1,13 +1,13 @@
 // Package pullscheduler, pull modu host'ları periyodik olarak poll eder (bkz.
 // docs/MIMARI.md bölüm 2 ve 6: "Server, belirlenen aralıkta host'a
-// bağlanıp durumu sorgular"); push modu alımının kullandığı depolama yolunun (store.Metrics,
-// store.Hosts.MarkOnline) tıpatıp aynısını kullanır.
+// bağlanıp durumu sorgular"); raporu push modu alımıyla aynı yoldan kaydeder (internal/ingest).
 package pullscheduler
 
 import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"healthbeat-server/internal/alertengine"
+	"healthbeat-server/internal/ingest"
 	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/secretbox"
@@ -33,9 +34,8 @@ import (
 const dueCheckInterval = 5 * time.Second
 
 type Scheduler struct {
-	hosts   *store.Hosts
-	metrics *store.Metrics
-	engine  *alertengine.Engine
+	hosts  *store.Hosts
+	ingest *ingest.Service
 
 	httpClient  *http.Client
 	verifiesTLS bool // poll edilen host'ların sertifikalarının doğrulanıp doğrulanmadığı (bkz. New)
@@ -68,10 +68,10 @@ func New(pool *pgxpool.Pool, engine *alertengine.Engine, box *secretbox.Box, roo
 	} else {
 		tlsConfig.InsecureSkipVerify = true //nolint:gosec // documented default, see above
 	}
+	hosts := store.NewHosts(pool, box)
 	return &Scheduler{
-		hosts:   store.NewHosts(pool, box),
-		metrics: store.NewMetrics(pool),
-		engine:  engine,
+		hosts:  hosts,
+		ingest: ingest.New(store.NewMetrics(pool), hosts, engine),
 		httpClient: &http.Client{
 			Timeout:   10 * time.Second,
 			Transport: &http.Transport{TLSClientConfig: tlsConfig},
@@ -189,30 +189,22 @@ func (s *Scheduler) pollOne(ctx context.Context, c store.PullHostInfo) {
 		slog.WarnContext(ctx, "pull scheduler: read response", "host_id", c.ID.String(), "err", err)
 		return
 	}
-	payload, unknown, err := model.ParseMetricsIngest(body)
-	if err != nil {
+	payload, unknown, err := ingest.Decode(body)
+	if errors.Is(err, ingest.ErrMalformed) {
 		slog.WarnContext(ctx, "pull scheduler: decode response", "host_id", c.ID.String(), "err", err)
 		return
 	}
-	if err := payload.Validate(); err != nil {
+	if err != nil {
 		slog.WarnContext(ctx, "pull scheduler: rejecting report", "host_id", c.ID.String(), "err", err)
 		return
 	}
 
-	if err := s.metrics.Insert(ctx, c.ID, payload.CPUUsagePct, payload.RAMUsagePct, payload.Disk); err != nil {
+	err = s.ingest.Record(ctx, ingest.Report{
+		HostID: c.ID, OrgID: c.OrganizationID, Payload: payload, Agent: agentInfo(resp.Header, unknown), Source: ingest.SourcePull,
+	})
+	if err != nil {
 		slog.ErrorContext(ctx, "pull scheduler: store metrics", "host_id", c.ID.String(), "err", err)
-		return
 	}
-	if err := s.metrics.ReplaceDockerContainers(ctx, c.ID, payload.DockerContainers); err != nil {
-		slog.ErrorContext(ctx, "pull scheduler: store docker containers", "host_id", c.ID.String(), "err", err)
-	}
-	if err := s.hosts.MarkOnline(ctx, c.ID, payload.Hardware(), agentInfo(resp.Header, unknown)); err != nil {
-		slog.ErrorContext(ctx, "pull scheduler: mark host online", "host_id", c.ID.String(), "err", err)
-	}
-
-	s.engine.ResolveOffline(ctx, c.ID, c.OrganizationID)
-	s.engine.EvaluateDocker(ctx, c.ID, c.OrganizationID, payload.DockerContainers)
-	s.engine.EvaluateMetrics(ctx, c.ID, c.OrganizationID, payload.CPUUsagePct, payload.RAMUsagePct, payload.Disk)
 }
 
 // agentInfo, pull yanıtının başlıklarından agent sürümünü okur; unknown, yanıt gövdesindeki

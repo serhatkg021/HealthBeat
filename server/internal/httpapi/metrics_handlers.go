@@ -1,10 +1,11 @@
 package httpapi
 
 import (
-	"log/slog"
+	"errors"
 	"net/http"
 	"strconv"
 
+	"healthbeat-server/internal/ingest"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/version"
 )
@@ -33,36 +34,25 @@ func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) error
 		h.Set(version.HeaderLatestAgent, d.agentPolicy.Latest)
 	}
 
-	// bind kullanılmaz: ingest bilinmeyen alanları reddetmez, bildirir (bkz. model.ParseMetricsIngest).
+	// bind kullanılmaz: ingest bilinmeyen alanları reddetmez, bildirir (bkz. ingest.Decode).
 	body, err := readJSONBody(r)
 	if err != nil {
 		return badRequest("geçersiz istek gövdesi")
 	}
-	req, unknown, err := model.ParseMetricsIngest(body)
-	if err != nil {
+	payload, unknown, err := ingest.Decode(body)
+	if errors.Is(err, ingest.ErrMalformed) {
 		return badRequest("geçersiz istek gövdesi")
 	}
-	if err := req.Validate(); err != nil {
+	if err != nil {
 		return badRequest(err.Error())
 	}
 
-	if err := d.metrics.Insert(r.Context(), hostID, req.CPUUsagePct, req.RAMUsagePct, req.Disk); err != nil {
+	err = d.ingest.Record(r.Context(), ingest.Report{
+		HostID: hostID, OrgID: orgID, Payload: payload, Agent: agentInfoFromRequest(r, unknown), Source: ingest.SourcePush,
+	})
+	if err != nil {
 		return serverErr("metrikler kaydedilemedi", "ingest metrics: insert", err)
 	}
-
-	// Hatalı biçimli bir container raporu (ör. tanınmayan bir durum değeri) tüm alımı başarısız
-	// kılmamalı — CPU/RAM/disk zaten kalıcı olarak saklandı.
-	if err := d.metrics.ReplaceDockerContainers(r.Context(), hostID, req.DockerContainers); err != nil {
-		slog.ErrorContext(r.Context(), "ingest metrics: insert docker containers", "err", err)
-	}
-
-	if err := d.hosts.MarkOnline(r.Context(), hostID, req.Hardware(), agentInfoFromRequest(r, unknown)); err != nil {
-		slog.ErrorContext(r.Context(), "ingest metrics: mark online", "err", err)
-	}
-
-	d.alertEngine.ResolveOffline(r.Context(), hostID, orgID)
-	d.alertEngine.EvaluateDocker(r.Context(), hostID, orgID, req.DockerContainers)
-	d.alertEngine.EvaluateMetrics(r.Context(), hostID, orgID, req.CPUUsagePct, req.RAMUsagePct, req.Disk)
 
 	w.WriteHeader(http.StatusNoContent)
 	return nil

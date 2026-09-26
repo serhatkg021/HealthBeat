@@ -4,11 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-26 — Erişim kapsamı tek pakette toplandı (B3): `internal/access` istek başına `Scope` kurar
-(`CanManageOrg`, `OrgAccess`, `CanViewHost`, `VisibleHostIDs`; atama kümeleri istek içinde bir kez okunur); rol izinleri 60 sn
-önbellekte (`rbac.Cache`); `GET /me` artık `permissions` döndürüyor. Önceki adımlar: handler hata akışı + istek doğrulaması
-(#17), log göçü (#16), Docker log sınırı (#15), kalıcı log dosyası (#14), hata kodları (#13), slog + panic kurtarma (#12).
-Sırada: C1 (push ve pull alımı için ortak ingest servisi).
+**Son güncelleme:** 2026-09-26 — Push ve pull alımı ortak ingest servisine taşındı (C1): `internal/ingest` (`Decode` +
+`Service.Record`) iki yolun tek kopyası; ikincil hata satırları `ingest: …` adıyla ve `source` alanıyla. Önceki adımlar:
+erişim kapsamı paketi + izin önbelleği + `/me` `permissions` (#18), handler hata akışı + istek doğrulaması (#17), log göçü
+(#16), Docker log sınırı (#15), kalıcı log dosyası (#14), hata kodları (#13), slog + panic kurtarma (#12).
+Sırada: C2 (alert motorunu bölme + `Notifier` arayüzü).
 
 ## Durum
 

@@ -14,6 +14,7 @@ import (
 	"healthbeat-server/internal/alertengine"
 	"healthbeat-server/internal/authsvc"
 	"healthbeat-server/internal/clientip"
+	"healthbeat-server/internal/ingest"
 	"healthbeat-server/internal/ratelimit"
 	"healthbeat-server/internal/rbac"
 	"healthbeat-server/internal/secretbox"
@@ -50,6 +51,8 @@ type Deps struct {
 	// alertEngine, pullscheduler/offlinemonitor ile paylaşılır (main.go'da bir kez kurulur); böylece
 	// iki alım yolu da eşikleri aynı şekilde değerlendirir.
 	alertEngine *alertengine.Engine
+	// ingest, push raporunu kaydeder ve değerlendirir; pull scheduler'ınkiyle aynı yol (bkz. internal/ingest).
+	ingest *ingest.Service
 
 	// loginFailures / ingestFailures yalnızca kimlik doğrulama başarısız olduğunda kaynak IP başına
 	// sayılır (panel giriş+yenileme, push-host doğrulaması); ingestRate doğrulanmış push host
@@ -130,6 +133,7 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 	}
 	d.perms = rbac.NewCache(pool, rbac.DefaultCacheTTL)
 	d.access = access.NewResolver(d.userOrgs, d.userHosts, d.hosts)
+	d.ingest = ingest.New(d.metrics, d.hosts, alertEngine)
 	return d
 }
 
