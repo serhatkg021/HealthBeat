@@ -130,7 +130,7 @@ func TestAlertAcknowledgedActiveMigrationRollsBackWithDownFile(t *testing.T) {
 		}
 		return r
 	}
-	latest, old := runner(migrations.FS), runner(upTo(t, "000001"))
+	latest, old := runner(upTo(t, "000002")), runner(upTo(t, "000001"))
 
 	if _, err := latest.Up(ctx); err != nil {
 		t.Fatal(err)
@@ -159,5 +159,78 @@ func TestAlertAcknowledgedActiveMigrationRollsBackWithDownFile(t *testing.T) {
 
 	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 {
 		t.Fatalf("upgrading again: applied=%d err=%v, want 000002 re-applied", len(applied), err)
+	}
+}
+
+// 000003: bildirim kuyruğu tablosu. Eski binary yeni şemayla açılmaz; .down.sql tabloyu kaldırır ve eski binary yeniden
+// açılır; tekrar yükseltme tabloyu geri getirir.
+func TestNotificationOutboxMigrationRollsBackWithDownFile(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.NewEmpty(t)
+	runner := func(fsys fs.FS) *migrate.Runner {
+		t.Helper()
+		r, err := migrate.New(pool, fsys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	latest, old := runner(upTo(t, "000003")), runner(upTo(t, "000002"))
+
+	if _, err := latest.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+	tableExists := func() bool {
+		t.Helper()
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_tables WHERE tablename = 'notification_outbox' AND schemaname = current_schema()`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	}
+	if !tableExists() {
+		t.Fatal("notification_outbox missing after 000003")
+	}
+	if err := old.RequireUpToDate(ctx); !errors.Is(err, migrate.ErrDatabaseNewer) {
+		t.Fatalf("old binary on the new schema: err=%v, want ErrDatabaseNewer (it must refuse to start)", err)
+	}
+
+	// Bekleyen satırın tam olarak bir gövdesi olmalı; bitmiş satır şifreli gövde tutamaz.
+	for _, bad := range []string{
+		`INSERT INTO notification_outbox (id, kind, channel, recipients, subject) VALUES (gen_random_uuid(), 'alert', 'email', '{a@x}', 's')`,
+		`INSERT INTO notification_outbox (id, kind, channel, recipients, subject, body, body_sealed) VALUES (gen_random_uuid(), 'alert', 'email', '{a@x}', 's', 'b', 'enc')`,
+		`INSERT INTO notification_outbox (id, kind, channel, recipients, subject, body_sealed, sent_at) VALUES (gen_random_uuid(), 'password_reset', 'email', '{a@x}', 's', 'enc', now())`,
+		// Alert bildiriminin olayı ve seviyesi olmalı; hesap e-postasının olmamalı.
+		`INSERT INTO notification_outbox (id, kind, channel, recipients, subject, body) VALUES (gen_random_uuid(), 'alert', 'email', '{a@x}', 's', 'b')`,
+		`INSERT INTO notification_outbox (id, kind, channel, recipients, subject, body, alert_event, alert_level) VALUES (gen_random_uuid(), 'password_changed', 'email', '{a@x}', 's', 'b', 'opened', 'warning')`,
+	} {
+		if _, err := pool.Exec(ctx, bad); err == nil {
+			t.Errorf("accepted an invalid row: %s", bad)
+		}
+	}
+
+	if _, err := pool.Exec(ctx, `INSERT INTO notification_outbox (id, kind, channel, recipients, subject, body, alert_event, alert_level)
+		VALUES (gen_random_uuid(), 'alert', 'email', '{a@x}', 's', 'b', 'resolved', 'critical')`); err != nil {
+		t.Fatalf("a valid alert notification row was rejected: %v", err)
+	}
+
+	down, err := fs.ReadFile(migrations.FS, "000003_notification_outbox.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM healthbeat_migrations WHERE version = 3`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.RequireUpToDate(ctx); err != nil {
+		t.Fatalf("old binary after the down migration: %v, want it to start", err)
+	}
+	if tableExists() {
+		t.Fatal("notification_outbox still there after the down migration")
+	}
+	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 || !tableExists() {
+		t.Fatalf("upgrading again: applied=%d err=%v, want 000003 re-applied", len(applied), err)
 	}
 }

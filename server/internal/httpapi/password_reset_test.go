@@ -274,6 +274,7 @@ func TestResetRejectsUnknownAndExpiredTokens(t *testing.T) {
 func TestNewRequestInvalidatesThePreviousLink(t *testing.T) {
 	a, mail := newResetAPI(t)
 	a.forgot("u@x.test", 204)
+	a.mails(mail) // ilk e-posta gitti
 	a.forgot("u@x.test", 204)
 	msgs := a.mails(mail)
 	if len(msgs) != 2 {
@@ -295,6 +296,7 @@ func TestForgotPasswordIsThrottled(t *testing.T) {
 	// Büyük/küçük harf ya da boşlukla e-posta sınırı atlatılamaz.
 	for _, email := range []string{"u@x.test", "U@X.TEST", " u@x.test", "u@x.test ", "U@x.Test"} {
 		a.forgot(email, 204)
+		a.mails(mail) // her istekten sonra teslim: sınırı ölçen, kuyruktaki eskinin yerine geçmesi değil
 	}
 	if msgs := a.mails(mail); len(msgs) != 3 {
 		t.Fatalf("one address may receive only a few mails in a row, got %d", len(msgs))
@@ -388,5 +390,48 @@ func TestFailedResetAttemptsAreThrottled(t *testing.T) {
 	}
 	if throttled == 0 {
 		t.Fatal("repeated wrong tokens from one source must be throttled")
+	}
+}
+
+// Sıfırlama e-postası kuyrukta bağlantının düz hâliyle durmaz; gönderilince şifreli hâli de silinir. Henüz gitmemiş
+// eski bağlantı, yenisi istenince gönderilmez; süresi dolmuş bağlantı hiç gönderilmez.
+func TestResetMailIsSealedAndSupersededInTheQueue(t *testing.T) {
+	a, mail := newResetAPI(t)
+	ctx := context.Background()
+
+	a.forgot("u@x.test", 204)
+	var sealed, plain int
+	if err := a.pool.QueryRow(ctx, `SELECT count(*) FILTER (WHERE body_sealed IS NOT NULL), count(*) FILTER (WHERE body IS NOT NULL)
+		FROM notification_outbox WHERE kind = 'password_reset'`).Scan(&sealed, &plain); err != nil {
+		t.Fatal(err)
+	}
+	if sealed != 1 || plain != 0 {
+		t.Fatalf("queued reset mail: sealed=%d plain=%d, want only an encrypted body", sealed, plain)
+	}
+	if n := a.count(`SELECT count(*) FROM notification_outbox WHERE body_sealed LIKE '%token=%'`); n != 0 {
+		t.Fatal("the reset link is readable in the queue")
+	}
+
+	// Gitmeden ikinci istek: yalnızca yeni bağlantı gönderilir.
+	a.forgot("u@x.test", 204)
+	msgs := a.mails(mail)
+	if len(msgs) != 1 {
+		t.Fatalf("mails = %d, want only the latest link", len(msgs))
+	}
+	a.reset(tokenFrom(t, msgs[0]), "a-brand-new-passphrase", 204)
+	if n := a.count(`SELECT count(*) FROM notification_outbox WHERE body_sealed IS NOT NULL`); n != 0 {
+		t.Fatalf("%d encrypted bodies left after delivery; want none", n)
+	}
+	if n := a.count(`SELECT count(*) FROM notification_outbox WHERE kind = 'password_reset' AND last_error = 'superseded'`); n != 1 {
+		t.Fatalf("superseded rows = %d, want the first link's mail", n)
+	}
+
+	// Süresi dolmuş bağlantı gönderilmez.
+	a.forgot("u@x.test", 204)
+	if _, err := a.pool.Exec(ctx, `UPDATE notification_outbox SET expires_at = now() - interval '1 second' WHERE kind = 'password_reset' AND sent_at IS NULL AND failed_at IS NULL`); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.mails(mail); len(got) != 2 { // şifre değişti e-postası + ilk bağlantı; süresi dolan yok
+		t.Fatalf("mails = %d, want the expired link not to be sent", len(got))
 	}
 }

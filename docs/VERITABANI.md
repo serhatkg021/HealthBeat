@@ -54,6 +54,7 @@ erDiagram
     users ||--o{ audit_logs : ""
     users ||--o{ refresh_tokens : ""
     users ||--o{ password_reset_tokens : ""
+    alerts ||--o{ notification_outbox : ""
 ```
 
 ## Tablolar
@@ -471,6 +472,46 @@ E-posta ile şifre sıfırlama: tek kullanımlık, kısa ömürlü, yalnızca SH
 - **UNIQUE** `password_reset_tokens_token_hash_key`: (token_hash)
 - **İndeks** `password_reset_tokens_expires_at_idx`: `btree (expires_at)`
 - **İndeks** `password_reset_tokens_user_id_idx`: `btree (user_id)`
+
+### `notification_outbox`
+
+Bildirim kuyruğu (`000003`): alert bildirimleri ve hesap e-postaları gönderilmeden önce buraya yazılır; işçi satırları alıp
+gönderir, başarısızlıkta geri çekilerek yeniden dener (en çok 10 deneme). Alert bildirimleri alert değişikliğiyle aynı
+transaction'da, kanal başına bir satır olarak yazılır; `alert_event` (açılma / seviye değişimi / çözülme) ve
+`alert_level` hangi olay için, hangi seviyede gittiğini tutar (alert başına bildirim geçmişi). Şifre sıfırlama bağlantısı yalnızca şifreli (`body_sealed`,
+`SECRETS_ENCRYPTION_KEY`, satır kimliğine bağlı) saklanır ve satır bitince silinir. Bitmiş satırlar 30 gün tutulur.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `id` | uuid | hayır |  |
+| `kind` | text | hayır |  |
+| `channel` | text | hayır |  |
+| `recipients` | text[] | hayır |  |
+| `subject` | text | hayır |  |
+| `body` | text | evet |  |
+| `body_sealed` | text | evet |  |
+| `alert_id` | uuid | evet |  |
+| `alert_event` | text | evet |  |
+| `alert_level` | text | evet |  |
+| `request_id` | text | evet |  |
+| `attempts` | integer | hayır | `0` |
+| `next_attempt_at` | timestamptz | hayır | `now()` |
+| `expires_at` | timestamptz | evet |  |
+| `last_error` | text | evet |  |
+| `sent_at` | timestamptz | evet |  |
+| `failed_at` | timestamptz | evet |  |
+| `created_at` | timestamptz | hayır | `now()` |
+
+- **CHECK** `notification_outbox_alert_event_check`: ((alert_event = ANY (ARRAY['opened'::text, 'level_changed'::text, 'resolved'::text])))
+- **CHECK** `notification_outbox_alert_event_chk`: (((kind = 'alert'::text) = ((alert_event IS NOT NULL) AND (alert_level IS NOT NULL)))) — alert bildiriminin olayı ve o andaki seviyesi vardır, hesap e-postalarının yoktur
+- **CHECK** `notification_outbox_alert_level_check`: ((alert_level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
+- **CHECK** `notification_outbox_body_chk`: ((((sent_at IS NULL) AND (failed_at IS NULL) AND ((body IS NULL) <> (body_sealed IS NULL))) OR (((sent_at IS NOT NULL) OR (failed_at IS NOT NULL)) AND (body_sealed IS NULL)))) — bekleyen satırın tam olarak bir gövdesi vardır; bitmiş satır şifreli gövde tutamaz
+- **CHECK** `notification_outbox_kind_check`: ((kind = ANY (ARRAY['alert'::text, 'password_reset'::text, 'password_changed'::text])))
+- **FK** (alert_id) REFERENCES alerts(id) ON DELETE SET NULL
+- **PK** (id)
+- **İndeks** `notification_outbox_alert_id_idx`: `btree (alert_id) WHERE (alert_id IS NOT NULL)`
+- **İndeks** `notification_outbox_created_at_idx`: `btree (created_at)`
+- **İndeks** `notification_outbox_due_idx`: `btree (next_attempt_at) WHERE ((sent_at IS NULL) AND (failed_at IS NULL))`
 
 ### `healthbeat_migrations`
 

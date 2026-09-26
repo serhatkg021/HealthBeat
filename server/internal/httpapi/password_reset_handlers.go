@@ -16,6 +16,8 @@ import (
 	"healthbeat-server/internal/authsvc"
 	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
+	"healthbeat-server/internal/notify"
+	"healthbeat-server/internal/outbox"
 	"healthbeat-server/internal/store"
 )
 
@@ -24,7 +26,8 @@ import (
 //
 // Güvenlik kararları:
 //   - "Bu e-posta kayıtlı mı?" sorusu yanıttan öğrenilemez: geçerli biçimdeki her e-posta için aynı 204 döner.
-//   - Ham token yalnızca e-postada bulunur; veritabanında yalnızca SHA-256 özeti saklanır.
+//   - Ham token yalnızca e-postada bulunur; veritabanında yalnızca SHA-256 özeti saklanır. E-posta gönderilene kadar
+//     bildirim kuyruğunda şifreli (secretbox) durur ve gönderilince (ya da süresi dolunca) şifreli hâli de silinir.
 //   - Bağlantı adresin #parçasında taşınır (?sorgu değil): tarayıcı bunu server'a, proxy günlüklerine ya da
 //     Referer başlığına göndermez.
 //   - Bağlantının kökü PANEL_BASE_URL'den gelir, isteğin Host/Origin başlığından değil (başlık enjeksiyonuyla
@@ -42,7 +45,6 @@ const (
 	resetIPBurst      = 5
 	resetEmailBurst   = 3
 	maxResetTokenLen  = 200
-	mailSendTimeout   = 45 * time.Second
 	resetMailSubject  = "HealthBeat şifre sıfırlama"
 	resetDoneSubject  = "HealthBeat şifreniz değiştirildi"
 	resetLinkPathFmt  = "%s/reset-password#token=%s"
@@ -76,37 +78,57 @@ type Mailer interface {
 func (d *Deps) SetPasswordReset(m Mailer, baseURL string) {
 	d.mailer = m
 	d.panelBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	d.mailWorker = nil
+	if m != nil {
+		d.mailWorker = outbox.NewWorker(d.mailQueue, accountMailKinds, mailerChannel{m})
+	}
+}
+
+// accountMailKinds, httpapi'nin bildirim kuyruğuna yazdığı ve kendi işçisiyle teslim ettiği türlerdir (alert
+// bildirimlerini alert motoru teslim eder).
+var accountMailKinds = []string{store.OutboxKindPasswordReset, store.OutboxKindPasswordChanged}
+
+// mailerChannel, Mailer'ı e-posta kanalı olarak sunar.
+type mailerChannel struct{ m Mailer }
+
+func (mailerChannel) Channel() string { return model.ChannelEmail }
+
+func (c mailerChannel) Send(ctx context.Context, to []string, msg notify.Message) error {
+	return c.m.Send(ctx, to, msg.Subject, msg.Body)
 }
 
 func (d *Deps) passwordResetEnabled() bool {
 	return d.mailer != nil && d.mailer.Enabled() && d.panelBaseURL != ""
 }
 
-// WaitForMail, arka planda giden e-postaların bitmesini bekler (testler ve düzgün kapanış için).
-func (d *Deps) WaitForMail(ctx context.Context) error {
-	done := make(chan struct{})
-	go func() { d.mailWG.Wait(); close(done) }()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+// RunMailOutbox, ctx bitene kadar şifre e-postalarını kuyruktan teslim eder. Kendi goroutine'inde çalıştırın.
+func (d *Deps) RunMailOutbox(ctx context.Context) {
+	if d.mailWorker != nil {
+		d.mailWorker.Run(ctx)
 	}
 }
 
-// sendMailAsync e-postayı isteğin dışında gönderir; böylece yanıt süresi "e-posta kayıtlı mı" bilgisini sızdırmaz
-// ve yavaş bir SMTP sunucusu isteği bekletmez. Hata yalnızca loglanır (kullanıcıya bildirilemez).
-func (d *Deps) sendMailAsync(to, subject, body string) {
-	d.mailWG.Add(1)
-	go func() {
-		defer d.mailWG.Done()
-		ctx, cancel := context.WithTimeout(context.Background(), mailSendTimeout)
-		defer cancel()
-		defer logging.Recover(ctx, "password reset mail")
-		if err := d.mailer.Send(ctx, []string{to}, subject, body); err != nil {
-			slog.ErrorContext(ctx, "password reset: send mail to user failed", "err", err)
-		}
-	}()
+// WaitForMail, teslim zamanı gelmiş şifre e-postalarını göndermeyi dener ve sürmekte olan bir teslim turunu bekler
+// (testler ve kapanış için). Gönderilemeyenler kuyrukta kalır.
+func (d *Deps) WaitForMail(ctx context.Context) error {
+	if d.mailWorker == nil {
+		return nil
+	}
+	_, err := d.mailWorker.DeliverDue(ctx)
+	return err
+}
+
+// queueMail, e-postayı kuyruğa yazar ve işçiyi uyandırır; gönderim isteğin dışında olur, böylece yanıt süresi
+// SMTP'ye bağlı olmaz. Hata yalnızca loglanır (kullanıcıya bildirilemez: yanıt her durumda aynıdır).
+func (d *Deps) queueMail(ctx context.Context, m store.OutboxMessage) {
+	m.Channel, m.RequestID = model.ChannelEmail, logging.RequestID(ctx)
+	if _, err := d.mailQueue.Enqueue(ctx, m); err != nil {
+		slog.ErrorContext(ctx, "password mail: enqueue failed", "kind", m.Kind, "err", err)
+		return
+	}
+	if d.mailWorker != nil {
+		d.mailWorker.Wake()
+	}
 }
 
 type authOptionsResponse struct {
@@ -172,7 +194,8 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) erro
 		slog.ErrorContext(r.Context(), "password reset: generate token", "err", err)
 		return respond()
 	}
-	if err := d.resets.Issue(r.Context(), user.ID, hashResetToken(token), time.Now().Add(passwordResetTTL)); err != nil {
+	expiresAt := time.Now().Add(passwordResetTTL)
+	if err := d.resets.Issue(r.Context(), user.ID, hashResetToken(token), expiresAt); err != nil {
 		slog.ErrorContext(r.Context(), "password reset: store token", "err", err)
 		return respond()
 	}
@@ -182,7 +205,16 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) erro
 		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 
-	d.sendMailAsync(user.Email, resetMailSubject, resetMailBody(user.Email, fmt.Sprintf(resetLinkPathFmt, d.panelBaseURL, token), passwordResetTTL))
+	// Önceki bağlantıyı taşıyan, henüz gitmemiş e-posta artık gönderilmez (o token Issue ile geçersizleşti). Yeni
+	// bağlantı şifreli saklanır ve token'la aynı anda geçersiz olur: süresi dolmuş bağlantıyı göndermek anlamsız.
+	if _, err := d.mailQueue.Supersede(r.Context(), store.OutboxKindPasswordReset, user.Email); err != nil {
+		slog.ErrorContext(r.Context(), "password reset: supersede pending mail", "err", err)
+	}
+	d.queueMail(r.Context(), store.OutboxMessage{
+		Kind: store.OutboxKindPasswordReset, Recipients: []string{user.Email}, Subject: resetMailSubject,
+		Body: resetMailBody(user.Email, fmt.Sprintf(resetLinkPathFmt, d.panelBaseURL, token), passwordResetTTL),
+		Seal: true, ExpiresAt: &expiresAt,
+	})
 	return respond()
 }
 
@@ -238,8 +270,15 @@ func (d *Deps) handleResetPassword(w http.ResponseWriter, r *http.Request) error
 	if err := d.audit.Write(r.Context(), &user.ID, user.Email, "auth.password_reset", "user", &targetID, nil, remoteIP(r)); err != nil {
 		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
+	// Kullanılan bağlantının (varsa hâlâ bekleyen) e-postası artık gönderilmez.
+	if _, err := d.mailQueue.Supersede(r.Context(), store.OutboxKindPasswordReset, user.Email); err != nil {
+		slog.ErrorContext(r.Context(), "password reset: supersede pending mail", "err", err)
+	}
 	if d.mailer != nil && d.mailer.Enabled() {
-		d.sendMailAsync(user.Email, resetDoneSubject, resetDoneMailBody(user.Email))
+		d.queueMail(r.Context(), store.OutboxMessage{
+			Kind: store.OutboxKindPasswordChanged, Recipients: []string{user.Email}, Subject: resetDoneSubject,
+			Body: resetDoneMailBody(user.Email),
+		})
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil

@@ -6,18 +6,23 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"healthbeat-server/internal/model"
 )
 
 type Alerts struct {
-	pool *pgxpool.Pool
+	pool DB
 }
 
 func NewAlerts(pool *pgxpool.Pool) *Alerts {
 	return &Alerts{pool: pool}
 }
+
+// WithTx, aynı sorguları tx içinde çalıştıran bir Alerts döndürür: alert değişikliği ve bildirimi (Outbox) birlikte
+// commit edilsin diye.
+func (s *Alerts) WithTx(tx pgx.Tx) *Alerts { return &Alerts{pool: tx} }
 
 const alertColumns = `id, host_id, alert_type, COALESCE(subject, ''), level, status, value, threshold, created_at, acknowledged_at, acknowledged_by, resolved_at`
 

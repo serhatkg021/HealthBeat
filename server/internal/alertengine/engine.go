@@ -13,17 +13,17 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/notify"
+	"healthbeat-server/internal/outbox"
 	"healthbeat-server/internal/store"
 )
 
-// Engine, eşikleri değerlendirir, alert'leri açar/günceller/çözer ve bildirimlerini kuyruğa alır.
+// Engine, eşikleri değerlendirir, alert'leri açar/günceller/çözer ve bildirimlerini kuyruğa yazar (dispatch.go).
 type Engine struct {
 	thresholds    ThresholdStore
 	metrics       MetricStore
@@ -31,39 +31,34 @@ type Engine struct {
 	hosts         HostStore
 	organizations OrgStore
 	notifs        RecipientStore
+	tx            TxRunner
 	// notifiers, kanal adına göre bildirim kanallarıdır (bkz. notify.Notifier); olmayan kanalın alıcıları atlanır.
 	notifiers map[string]notify.Notifier
 	// panelBaseURL, bildirimlerde alert'e doğrudan giden bir bağlantı eklemek için (boşsa satır hiç eklenmez).
 	panelBaseURL string
-
-	// Bildirimler arka plan işçileri tarafından teslim edilir (dispatch.go); alert'i açan ingest/poll
-	// çağrısının içinde asla değil: yavaş ya da ölü bir SMTP relay metrik alımını durdurmamalı.
-	// Kuyruk sınırlıdır; dolduğunda yeni bildirimler bloklamak yerine atılır (ve loglanır) —
-	// alert'in kendisi zaten kaydedilmiş ve panelde görünürdür.
-	mailMu    sync.RWMutex
-	mailQueue chan mailJob
-	closed    bool
-	pending   sync.WaitGroup // kuyruktaki + çalışan işler (Flush)
-	workers   sync.WaitGroup // çalışan işçi goroutine'leri (Close)
+	// worker, alert bildirimlerini kuyruktan teslim eder; DB'siz testlerde nil.
+	worker *outbox.Worker
 }
 
+// New, motoru ve alert bildirimlerinin teslim işçisini kurar; teslim için RunNotifications'ı çalıştırın.
 func New(pool *pgxpool.Pool, mailer *notify.Mailer, panelBaseURL string) *Engine {
-	return newEngine(pool, mailer, panelBaseURL, defaultMailQueueSize, defaultMailWorkers)
-}
-
-func newEngine(pool *pgxpool.Pool, mailer *notify.Mailer, panelBaseURL string, queueSize, workers int) *Engine {
+	alerts := store.NewAlerts(pool)
+	queue := store.NewOutbox(pool, nil) // alert bildirimleri şifrelenmez
+	email := notify.EmailChannel{Mailer: mailer}
 	return newEngineWith(Stores{
 		Thresholds:    store.NewThresholds(pool),
 		Metrics:       store.NewMetrics(pool),
-		Alerts:        store.NewAlerts(pool),
+		Alerts:        alerts,
 		Hosts:         store.NewHosts(pool, nil), // yalnızca host adlarını okur; pull secret'lara asla dokunmaz
 		Organizations: store.NewOrganizations(pool),
 		Recipients:    store.NewNotifications(pool),
-	}, []notify.Notifier{notify.EmailChannel{Mailer: mailer}}, panelBaseURL, queueSize, workers)
+		Tx:            pgTx{pool: pool, alerts: alerts, outbox: queue},
+	}, []notify.Notifier{email}, panelBaseURL, outbox.NewWorker(queue, []string{store.OutboxKindAlert}, email))
 }
 
-// newEngineWith, motoru verilen depolar ve kanallarla kurar; DB'siz testler sahte depolar ve sahte kanallar verir.
-func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, queueSize, workers int) *Engine {
+// newEngineWith, motoru verilen depolar ve kanallarla kurar; DB'siz testler sahte depolar ve sahte kanallar verir
+// (worker nil olabilir: bildirimler yalnızca kuyruğa yazılır).
+func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, worker *outbox.Worker) *Engine {
 	e := &Engine{
 		thresholds:    st.Thresholds,
 		metrics:       st.Metrics,
@@ -71,16 +66,13 @@ func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, 
 		hosts:         st.Hosts,
 		organizations: st.Organizations,
 		notifs:        st.Recipients,
+		tx:            st.Tx,
 		notifiers:     make(map[string]notify.Notifier, len(notifiers)),
 		panelBaseURL:  strings.TrimSuffix(panelBaseURL, "/"),
-		mailQueue:     make(chan mailJob, queueSize),
+		worker:        worker,
 	}
 	for _, n := range notifiers {
 		e.notifiers[n.Channel()] = n
-	}
-	for i := 0; i < workers; i++ {
-		e.workers.Add(1)
-		go e.mailWorker()
 	}
 	return e
 }
@@ -152,7 +144,7 @@ func (e *Engine) evaluateDisks(ctx context.Context, hostID, orgID uuid.UUID, dis
 	}
 	for _, a := range open {
 		if _, still := evaluated[a.Subject]; !still {
-			e.resolveAndNotify(ctx, a.ID, orgID, nil, nil)
+			e.resolveAndNotify(ctx, a, orgID, nil, nil)
 		}
 	}
 }
@@ -212,17 +204,22 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 	for _, d := range disks {
 		present[d.Mount] = struct{}{}
 	}
+	stillOpen := make(map[string]struct{}, len(open)) // açık kalan disk_missing alert'leri: yeniden açılmaz
 	for _, a := range open {
 		_, wanted := expected[a.Subject]
 		_, back := present[a.Subject]
 		if !wanted || back {
-			e.resolveAndNotify(ctx, a.ID, orgID, nil, nil)
+			e.resolveAndNotify(ctx, a, orgID, nil, nil)
+			continue
 		}
+		stillOpen[a.Subject] = struct{}{}
 	}
 
 	var candidates []string
 	for m := range expected {
-		if _, ok := present[m]; !ok {
+		_, ok := present[m]
+		_, alreadyOpen := stillOpen[m]
+		if !ok && !alreadyOpen {
 			candidates = append(candidates, m)
 		}
 	}
@@ -248,13 +245,11 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 		if seen {
 			continue
 		}
-		alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, model.AlertTypeDiskMissing, m, model.AlertLevelCritical, nil, nil)
+		err := e.change(ctx, e.prepare(ctx, hostID, orgID, model.AlertLevelCritical), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
+			return tx.Alerts().CreateIfNoneActive(ctx, hostID, model.AlertTypeDiskMissing, m, model.AlertLevelCritical, nil, nil)
+		})
 		if err != nil {
 			slog.ErrorContext(ctx, "alert engine: create disk_missing alert", "host_id", hostID.String(), "mount", m, "err", err)
-			continue
-		}
-		if created {
-			e.notify(ctx, orgID, alert)
 		}
 	}
 }
@@ -314,7 +309,7 @@ func (e *Engine) EvaluateDocker(ctx context.Context, hostID, orgID uuid.UUID, co
 	}
 	for _, a := range open {
 		if _, stillThere := present[a.Subject]; !stillThere {
-			e.resolveAndNotify(ctx, a.ID, orgID, nil, nil)
+			e.resolveAndNotify(ctx, a, orgID, nil, nil)
 		}
 	}
 }
@@ -344,7 +339,7 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 			// Çözülme okuması: eşiğin altına döndüğü andaki gerçek ölçüm ve uyarı eşiği — böylece
 			// e-postadaki "Değer" alert'in son yükseltildiği eski, hâlâ eşik üstü okumayı değil,
 			// artık gerçekten eşiğin altında olan güncel durumu gösterir.
-			e.resolveAndNotify(ctx, existing.ID, orgID, &value, &threshold.WarningLevel)
+			e.resolveAndNotify(ctx, existing, orgID, &value, &threshold.WarningLevel)
 		}
 		return
 	}
@@ -367,20 +362,30 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 			// olsalar bile) tekrar mail gider — açılış ve çözülme ile aynı kural. Onaylanmış bir alert
 			// YÜKSELİRSE onay da kalkar (durum ciddileşti, biri yeniden sahiplenmeli); düşüşte onay korunur.
 			reopen := reopensOnLevelChange(existing, level)
-			if err := e.alerts.UpdateLevel(ctx, existing.ID, level, valuePtr, triggerPtr, reopen); err != nil {
+			err := e.change(ctx, e.prepare(ctx, hostID, orgID, level), store.AlertEventLevelChanged, func(tx Tx) (model.Alert, bool, error) {
+				if err := tx.Alerts().UpdateLevel(ctx, existing.ID, level, valuePtr, triggerPtr, reopen); err != nil {
+					return model.Alert{}, false, err
+				}
+				changed := existing
+				changed.Level, changed.Value, changed.Threshold = level, valuePtr, triggerPtr
+				if reopen {
+					changed.Status, changed.AcknowledgedAt, changed.AcknowledgedBy = model.AlertStatusOpen, nil, nil
+				}
+				return changed, true, nil
+			})
+			if err != nil {
 				slog.ErrorContext(ctx, "alert engine: update alert level", "alert_id", existing.ID.String(), "err", err)
-				return
 			}
-			existing.Level, existing.Value, existing.Threshold = level, valuePtr, triggerPtr
-			if reopen {
-				existing.Status, existing.AcknowledgedAt, existing.AcknowledgedBy = model.AlertStatusOpen, nil, nil
-			}
-			e.notify(ctx, orgID, existing)
 		}
 		return
 	}
 
-	alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, metricType, subject, level, valuePtr, triggerPtr)
+	created := false
+	err = e.change(ctx, e.prepare(ctx, hostID, orgID, level), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
+		alert, ok, err := tx.Alerts().CreateIfNoneActive(ctx, hostID, metricType, subject, level, valuePtr, triggerPtr)
+		created = ok
+		return alert, ok, err
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "alert engine: create alert", "host_id", hostID.String(), "metric", metricType, "subject", subject, "err", err)
 		return
@@ -393,9 +398,7 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 				slog.ErrorContext(ctx, "alert engine: update alert level", "alert_id", active.ID.String(), "err", err)
 			}
 		}
-		return
 	}
-	e.notify(ctx, orgID, alert)
 }
 
 // reopensOnLevelChange, onaylanmış bir alert'in yeni seviyeyle yeniden açılıp açılmayacağıdır: yalnızca seviye
@@ -405,18 +408,18 @@ func reopensOnLevelChange(a model.Alert, newLevel string) bool {
 }
 
 // ResolveOffline, bir host yeniden rapor verdiğinde aktif (açık ya da onaylanmış) host_offline alert'ini kendiliğinden
-// çözer ve "sunucu tekrar çevrimiçi" e-postasını kuyruğa alır — her başarılı push/pull
-// alımından sonra çağrılır.
+// çözer ve "sunucu tekrar çevrimiçi" bildirimini kuyruğa yazar — her başarılı push/pull alımından sonra çağrılır.
+// Offline alert yoksa (sıradan durum) tek bir okuma yapar.
 func (e *Engine) ResolveOffline(ctx context.Context, hostID, orgID uuid.UUID) {
-	alert, err := e.alerts.ResolveActiveByHostAndMetric(ctx, hostID, model.AlertTypeHostOffline)
+	active, err := e.alerts.GetActive(ctx, hostID, model.AlertTypeHostOffline)
+	if errors.Is(err, store.ErrNotFound) {
+		return // aktif değildi
+	}
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return // aktif değildi
-		}
 		slog.ErrorContext(ctx, "alert engine: resolve offline alert", "host_id", hostID.String(), "err", err)
 		return
 	}
-	e.enqueue(ctx, mailJob{orgID: orgID, alert: alert})
+	e.resolveAndNotify(ctx, active, orgID, nil, nil)
 }
 
 // RaiseOffline, bir host sessizleştiğinde offline monitor tarafından çağrılır.
@@ -430,13 +433,11 @@ func (e *Engine) RaiseOffline(ctx context.Context, hostID, orgID uuid.UUID) {
 		return
 	}
 
-	alert, created, err := e.alerts.CreateIfNoneActive(ctx, hostID, model.AlertTypeHostOffline, "", model.AlertLevelCritical, nil, nil)
+	// Eşzamanlı açıldıysa (created=false) bildirimi o çağıran yapar.
+	err = e.change(ctx, e.prepare(ctx, hostID, orgID, model.AlertLevelCritical), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
+		return tx.Alerts().CreateIfNoneActive(ctx, hostID, model.AlertTypeHostOffline, "", model.AlertLevelCritical, nil, nil)
+	})
 	if err != nil {
 		slog.ErrorContext(ctx, "alert engine: create offline alert", "host_id", hostID.String(), "err", err)
-		return
 	}
-	if !created {
-		return // eşzamanlı açıldı; bildirimi o çağıran yapar
-	}
-	e.notify(ctx, orgID, alert)
 }

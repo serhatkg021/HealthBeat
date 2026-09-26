@@ -4,11 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-26 — Alert motoru bölündü ve bildirim kanalı arayüzü eklendi (C2): `alertengine` artık
-`engine.go` / `dispatch.go` / `message.go` / `stores.go`; motor depolara dar arayüzlerle, bildirimlere `notify.Notifier` ile
-bağlı (DB'siz birim testleri mümkün). Önceki adımlar: ortak ingest servisi (#19), erişim kapsamı + izin önbelleği (#18),
-handler hata akışı + istek doğrulaması (#17), log göçü (#16), Docker log sınırı (#15), kalıcı log (#14), hata kodları (#13),
-slog + panic kurtarma (#12). Sırada: C3 (bildirimler için kalıcı kuyruk; kendi outbox'ımız mı River mı — karar gerekiyor).
+**Son güncelleme:** 2026-09-27 — Bildirimler kalıcı kuyruğa taşındı (C3): migration `000003` ile `notification_outbox`;
+alert bildirimleri alert değişikliğiyle aynı transaction'da yazılıyor, `internal/outbox` işçisi geri çekilmeli yeniden
+denemeyle (en çok 10) teslim ediyor; şifre e-postaları da kuyrukta (sıfırlama bağlantısı şifreli, süreli, yenisi gelince
+eskisi gitmiyor). Önceki adımlar: alert motoru bölme + `Notifier` (#20), ortak ingest (#19), erişim kapsamı (#18), handler
+hata akışı (#17), log/Faz A (#12–#16). Sırada: B4 (store hatalarında makine-okur neden).
 
 ## Durum
 

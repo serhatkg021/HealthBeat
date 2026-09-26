@@ -2,6 +2,7 @@ package alertengine
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -165,56 +166,88 @@ func (f fakeRecipients) ResolveRecipients(context.Context, uuid.UUID, uuid.UUID,
 	return f, nil
 }
 
-// fakeNotifier, kendisine verilen bildirimleri kaydeder.
-type fakeNotifier struct {
-	channel string
-	mu      sync.Mutex
-	sent    []sentMessage
-}
-
-type sentMessage struct {
-	to  []string
-	msg notify.Message
-}
+// fakeNotifier yalnızca kanalın var olduğunu bildirir; teslimi outbox.Worker yapar (bkz. internal/outbox testleri).
+type fakeNotifier struct{ channel string }
 
 func (f *fakeNotifier) Channel() string { return f.channel }
 
-func (f *fakeNotifier) Send(_ context.Context, to []string, msg notify.Message) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.sent = append(f.sent, sentMessage{to: to, msg: msg})
+func (f *fakeNotifier) Send(context.Context, []string, notify.Message) error { return nil }
+
+// fakeOutbox, kuyruğa yazılanları kaydeder; fail doluysa yazma o hatayla başarısız olur.
+type fakeOutbox struct {
+	rows []store.OutboxMessage
+	fail error
+}
+
+func (f *fakeOutbox) Enqueue(_ context.Context, m store.OutboxMessage) (uuid.UUID, error) {
+	if f.fail != nil {
+		return uuid.Nil, f.fail
+	}
+	f.rows = append(f.rows, m)
+	return uuid.New(), nil
+}
+
+func (f *fakeOutbox) subjects() []string {
+	var s []string
+	for _, m := range f.rows {
+		s = append(s, m.Subject)
+	}
+	return s
+}
+
+// fakeTx, fn hata döndürürse alert'lerdeki ve kuyruktaki değişiklikleri geri alır (transaction gibi).
+type fakeTx struct {
+	alerts *fakeAlerts
+	outbox *fakeOutbox
+}
+
+func (t fakeTx) Alerts() AlertStore   { return t.alerts }
+func (t fakeTx) Outbox() OutboxWriter { return t.outbox }
+
+// Savepoint yalnızca kuyruk yazımlarını geri alır (motor kayıt noktasında yalnızca bildirim yazar).
+func (t fakeTx) Savepoint(_ context.Context, fn func(Tx) error) error {
+	rows := len(t.outbox.rows)
+	if err := fn(t); err != nil {
+		t.outbox.rows = t.outbox.rows[:rows]
+		return err
+	}
 	return nil
 }
 
-func (f *fakeNotifier) subjects() []string {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	var s []string
-	for _, m := range f.sent {
-		s = append(s, m.msg.Subject)
+func (t fakeTx) InTx(_ context.Context, fn func(Tx) error) error {
+	t.alerts.mu.Lock()
+	saved := make([]model.Alert, len(t.alerts.alerts))
+	for i, a := range t.alerts.alerts {
+		saved[i] = *a
 	}
-	return s
+	t.alerts.mu.Unlock()
+	rows := len(t.outbox.rows)
+	if err := fn(t); err != nil {
+		t.alerts.mu.Lock()
+		t.alerts.alerts = t.alerts.alerts[:0]
+		for i := range saved {
+			a := saved[i]
+			t.alerts.alerts = append(t.alerts.alerts, &a)
+		}
+		t.alerts.mu.Unlock()
+		t.outbox.rows = t.outbox.rows[:rows]
+		return err
+	}
+	return nil
 }
 
 type fakeEnv struct {
 	engine *Engine
 	alerts *fakeAlerts
 	hosts  *fakeHosts
-	email  *fakeNotifier
-	sms    *fakeNotifier
+	outbox *fakeOutbox
 	host   uuid.UUID
 	org    uuid.UUID
 }
 
 func newFakeEnv(t *testing.T, recipients fakeRecipients) *fakeEnv {
 	t.Helper()
-	f := &fakeEnv{
-		alerts: &fakeAlerts{},
-		host:   uuid.New(),
-		org:    uuid.New(),
-		email:  &fakeNotifier{channel: model.ChannelEmail},
-		sms:    &fakeNotifier{channel: model.ChannelSMS},
-	}
+	f := &fakeEnv{alerts: &fakeAlerts{}, outbox: &fakeOutbox{}, host: uuid.New(), org: uuid.New()}
 	f.hosts = &fakeHosts{host: model.Host{ID: f.host, OrganizationID: f.org, Title: "web-1", IP: "10.0.0.5"}}
 	f.engine = newEngineWith(Stores{
 		Alerts:        f.alerts,
@@ -223,14 +256,14 @@ func newFakeEnv(t *testing.T, recipients fakeRecipients) *fakeEnv {
 		Metrics:       fakeMetrics{},
 		Organizations: fakeOrgs{org: model.Organization{ID: f.org, Name: "Acme"}},
 		Recipients:    recipients,
-	}, []notify.Notifier{f.email, f.sms}, "https://panel.example.com/", 16, 1)
-	t.Cleanup(func() { _ = f.engine.Close(context.Background()) })
+		Tx:            fakeTx{alerts: f.alerts, outbox: f.outbox},
+	}, []notify.Notifier{&fakeNotifier{channel: model.ChannelEmail}, &fakeNotifier{channel: model.ChannelSMS}},
+		"https://panel.example.com/", nil)
 	return f
 }
 
 func (f *fakeEnv) report(cpu float64) {
 	f.engine.EvaluateMetrics(context.Background(), f.host, f.org, cpu, 10, nil)
-	f.engine.Flush()
 }
 
 // Açılma, yükselme, düşme ve çözülme her biri bir bildirimdir; aynı seviyede kalmak bildirim üretmez.
@@ -240,7 +273,7 @@ func TestFakeEngineNotifiesOnLifecycleChanges(t *testing.T) {
 	for _, cpu := range []float64{50, 75, 80, 95, 96, 72, 40, 30} {
 		f.report(cpu)
 	}
-	got := f.email.subjects()
+	got := f.outbox.subjects()
 	wantLevels := []string{"UYARI", "KRİTİK", "UYARI", "ÇÖZÜLDÜ"}
 	if len(got) != len(wantLevels) {
 		t.Fatalf("subjects = %q, want %d notifications (%v)", got, len(wantLevels), wantLevels)
@@ -250,9 +283,17 @@ func TestFakeEngineNotifiesOnLifecycleChanges(t *testing.T) {
 			t.Errorf("subject %d = %q, want prefix %q", i, got[i], want)
 		}
 	}
+	wantEvents := []string{store.AlertEventOpened, store.AlertEventLevelChanged, store.AlertEventLevelChanged, store.AlertEventResolved}
+	wantRowLevels := []string{model.AlertLevelWarning, model.AlertLevelCritical, model.AlertLevelWarning, model.AlertLevelWarning}
+	for i, row := range f.outbox.rows {
+		if row.Kind != store.OutboxKindAlert || row.AlertID == nil || row.Seal ||
+			row.AlertEvent != wantEvents[i] || row.AlertLevel != wantRowLevels[i] {
+			t.Fatalf("row %d = %+v, want event %s at level %s", i, row, wantEvents[i], wantRowLevels[i])
+		}
+	}
 }
 
-// Alıcılar kanala göre gruplanır ve her grup kendi kanalına gider; kanalı olmayan alıcı atlanır.
+// Alıcılar kanala göre gruplanır: kanal başına bir satır, aynı metin; kanalı olmayan alıcı atlanır.
 func TestFakeEngineFansOutByChannel(t *testing.T) {
 	f := newFakeEnv(t, fakeRecipients{
 		{Channel: model.ChannelEmail, Address: "a@acme.test", Name: "A"},
@@ -262,25 +303,51 @@ func TestFakeEngineFansOutByChannel(t *testing.T) {
 	})
 	f.report(95)
 
-	if len(f.email.sent) != 1 || strings.Join(f.email.sent[0].to, ",") != "a@acme.test,b@acme.test" {
-		t.Fatalf("email = %+v, want one message to both addresses", f.email.sent)
+	if len(f.outbox.rows) != 2 {
+		t.Fatalf("rows = %+v, want one per available channel", f.outbox.rows)
 	}
-	if len(f.sms.sent) != 1 || strings.Join(f.sms.sent[0].to, ",") != "+905550000000" {
-		t.Fatalf("sms = %+v, want one message to the phone number", f.sms.sent)
+	email, sms := f.outbox.rows[0], f.outbox.rows[1]
+	if email.Channel != model.ChannelEmail || strings.Join(email.Recipients, ",") != "a@acme.test,b@acme.test" {
+		t.Fatalf("email row = %+v", email)
 	}
-	if f.email.sent[0].msg != f.sms.sent[0].msg {
+	if sms.Channel != model.ChannelSMS || strings.Join(sms.Recipients, ",") != "+905550000000" {
+		t.Fatalf("sms row = %+v", sms)
+	}
+	if email.Subject != sms.Subject || email.Body != sms.Body {
 		t.Fatal("channels received different messages for the same alert")
 	}
 }
 
-// Teslim edilebilir alıcı yoksa bildirim metni hiç kurulmaz (sunucu/organizasyon okunmaz).
+// Teslim edilebilir alıcı yoksa bildirim metni hiç kurulmaz (sunucu/organizasyon okunmaz); alert yine kaydedilir.
 func TestFakeEngineSkipsLookupsWithoutRecipients(t *testing.T) {
 	f := newFakeEnv(t, fakeRecipients{{Channel: model.ChannelSlack, Address: "#ops", Name: "Slack"}})
 	f.report(95)
-	if len(f.email.sent)+len(f.sms.sent) != 0 || f.hosts.lookups != 0 {
-		t.Fatalf("sent email=%d sms=%d, host lookups=%d; want nothing", len(f.email.sent), len(f.sms.sent), f.hosts.lookups)
+	if len(f.outbox.rows) != 0 || f.hosts.lookups != 0 {
+		t.Fatalf("rows=%d host lookups=%d; want nothing", len(f.outbox.rows), f.hosts.lookups)
 	}
 	if len(f.alerts.alerts) != 1 {
 		t.Fatalf("alerts = %d, want the alert itself to be recorded", len(f.alerts.alerts))
+	}
+}
+
+// Alert kaydı esastır: bildirim kuyruğa yazılamazsa alert yine açılır (bildirimsiz); düzelince normal akış sürer ve
+// "ÇÖZÜLDÜ" bildirimi gider.
+func TestFakeEngineKeepsAlertWhenNotificationCannotBeQueued(t *testing.T) {
+	f := newFakeEnv(t, fakeRecipients{{Channel: model.ChannelEmail, Address: "ops@acme.test", Name: "Ops"}})
+	f.outbox.fail = errors.New("db down")
+	f.report(95)
+	if len(f.alerts.alerts) != 1 || f.alerts.alerts[0].Status != model.AlertStatusOpen || len(f.outbox.rows) != 0 {
+		t.Fatalf("alerts=%d rows=%d after a failed enqueue; want the alert recorded without a notification", len(f.alerts.alerts), len(f.outbox.rows))
+	}
+
+	f.outbox.fail = nil
+	f.report(96) // aynı seviye: yeni bildirim yok
+	f.report(30) // çözülme
+	got := f.outbox.subjects()
+	if len(got) != 1 || !strings.HasPrefix(got[0], "[HealthBeat] -- ÇÖZÜLDÜ / ") {
+		t.Fatalf("subjects = %q, want only the resolution", got)
+	}
+	if f.alerts.alerts[0].Status != model.AlertStatusResolved {
+		t.Fatalf("alert status = %s, want resolved", f.alerts.alerts[0].Status)
 	}
 }
