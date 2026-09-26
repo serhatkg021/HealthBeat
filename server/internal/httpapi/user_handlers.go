@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,24 +17,22 @@ import (
 // verilmezse (mevcut çağıranlarla geriye dönük uyumlu) tüm kullanıcılar döner. Toplam sayı,
 // sayfa numaralı bir arayüz kurabilsin diye X-Total-Count başlığında gelir (gövde her zaman
 // düz bir dizidir).
-func (d *Deps) handleListUsers(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleListUsers(w http.ResponseWriter, r *http.Request) error {
 	p, err := parseListParams(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return badRequest(err.Error())
 	}
 
 	users, total, err := d.users.List(r.Context(), p)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list users", "err", err)
-		writeError(w, http.StatusInternalServerError, "kullanıcılar listelenemedi")
-		return
+		return serverErr("kullanıcılar listelenemedi", "list users", err)
 	}
 	for i := range users {
 		users[i].PasswordHash = ""
 	}
 	w.Header().Set("X-Total-Count", strconv.Itoa(total))
 	writeJSON(w, http.StatusOK, users)
+	return nil
 }
 
 type createUserRequest struct {
@@ -88,51 +85,43 @@ func trimPtr(s *string) *string {
 	return &t
 }
 
-func (d *Deps) handleCreateUser(w http.ResponseWriter, r *http.Request) {
-	var req createUserRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
-	}
+// Validate, e-postayı normalleştirir (req.Email).
+func (req *createUserRequest) Validate() error {
 	if strings.TrimSpace(req.Email) == "" || req.Password == "" {
-		writeError(w, http.StatusBadRequest, "e-posta ve şifre zorunlu")
-		return
+		return errors.New("e-posta ve şifre zorunlu")
 	}
 	email, err := model.NormalizeEmail(req.Email)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return err
 	}
+	req.Email = email
 	if err := model.ValidatePassword(req.Password); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return err
 	}
 	if !model.ValidRole(req.Role) {
-		writeError(w, http.StatusBadRequest, "rol super_admin, org_admin veya operator olmalı")
-		return
+		return errors.New("rol super_admin, org_admin veya operator olmalı")
 	}
+	return validateProfile(req.FullName, req.Phone, nil)
+}
 
-	if err := validateProfile(req.FullName, req.Phone, nil); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+func (d *Deps) handleCreateUser(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("kullanıcı oluşturulamadı")
+	req, err := bind[createUserRequest](r)
+	if err != nil {
+		return err
 	}
 
 	passwordHash, err := authsvc.HashPassword(req.Password)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "create user: hash password", "err", err)
-		writeError(w, http.StatusInternalServerError, "kullanıcı oluşturulamadı")
-		return
+		return fail("create user: hash password", err)
 	}
 
-	user, err := d.users.Create(r.Context(), email, passwordHash, req.Role, trimPtr(req.FullName), trimPtr(req.Phone))
+	user, err := d.users.Create(r.Context(), req.Email, passwordHash, req.Role, trimPtr(req.FullName), trimPtr(req.Phone))
+	if errors.Is(err, store.ErrConflict) {
+		return conflict(err.Error())
+	}
 	if err != nil {
-		if errors.Is(err, store.ErrConflict) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		slog.ErrorContext(r.Context(), "create user", "err", err)
-		writeError(w, http.StatusInternalServerError, "kullanıcı oluşturulamadı")
-		return
+		return fail("create user", err)
 	}
 
 	targetID := user.ID.String()
@@ -140,26 +129,24 @@ func (d *Deps) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 
 	user.PasswordHash = ""
 	writeJSON(w, http.StatusCreated, user)
+	return nil
 }
 
-func (d *Deps) handleGetUser(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleGetUser(w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID(r, "geçersiz kullanıcı kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kullanıcı kimliği")
-		return
+		return err
 	}
 	user, err := d.users.GetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		return notFound("kullanıcı bulunamadı")
+	}
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "kullanıcı bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "get user", "err", err)
-		writeError(w, http.StatusInternalServerError, "kullanıcı alınamadı")
-		return
+		return serverErr("kullanıcı alınamadı", "get user", err)
 	}
 	user.PasswordHash = ""
 	writeJSON(w, http.StatusOK, user)
+	return nil
 }
 
 type updateUserRequest struct {
@@ -173,54 +160,45 @@ type updateUserRequest struct {
 	TwoFactorChannel *string `json:"two_factor_channel"`
 }
 
-func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kullanıcı kimliği")
-		return
-	}
-
-	var req updateUserRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
-	}
+// Validate, e-postayı normalleştirir (req.Email).
+func (req *updateUserRequest) Validate() error {
 	if req.Email != nil {
 		normalized, err := model.NormalizeEmail(*req.Email)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+			return err
 		}
 		req.Email = &normalized
 	}
 	if req.Role != nil && !model.ValidRole(*req.Role) {
-		writeError(w, http.StatusBadRequest, "rol super_admin, org_admin veya operator olmalı")
-		return
+		return errors.New("rol super_admin, org_admin veya operator olmalı")
 	}
 	if req.Password != nil {
 		if err := model.ValidatePassword(*req.Password); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
+			return err
 		}
 	}
-	if err := validateProfile(req.FullName, req.Phone, req.TwoFactorChannel); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+	return validateProfile(req.FullName, req.Phone, req.TwoFactorChannel)
+}
+
+func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("kullanıcı güncellenemedi")
+	id, err := pathID(r, "geçersiz kullanıcı kimliği")
+	if err != nil {
+		return err
+	}
+	req, err := bind[updateUserRequest](r)
+	if err != nil {
+		return err
 	}
 
 	user, err := d.users.Update(r.Context(), id, req.Email, req.Role)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "kullanıcı bulunamadı")
-			return
-		}
-		if errors.Is(err, store.ErrConflict) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		slog.ErrorContext(r.Context(), "update user", "err", err)
-		writeError(w, http.StatusInternalServerError, "kullanıcı güncellenemedi")
-		return
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return notFound("kullanıcı bulunamadı")
+	case errors.Is(err, store.ErrConflict):
+		return conflict(err.Error())
+	case err != nil:
+		return fail("update user", err)
 	}
 
 	if req.FullName != nil || req.Phone != nil || req.TwoFactorEnabled != nil || req.TwoFactorChannel != nil {
@@ -228,35 +206,26 @@ func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			FullName: trimPtr(req.FullName), Phone: trimPtr(req.Phone),
 			TwoFactorEnabled: req.TwoFactorEnabled, TwoFactorChannel: req.TwoFactorChannel,
 		})
+		if errors.Is(err, store.ErrConflict) {
+			return conflict(err.Error())
+		}
 		if err != nil {
-			if errors.Is(err, store.ErrConflict) {
-				writeError(w, http.StatusConflict, err.Error())
-				return
-			}
-			slog.ErrorContext(r.Context(), "update user: profile", "err", err)
-			writeError(w, http.StatusInternalServerError, "kullanıcı güncellenemedi")
-			return
+			return fail("update user: profile", err)
 		}
 	}
 
 	if req.Password != nil {
 		hash, err := authsvc.HashPassword(*req.Password)
 		if err != nil {
-			slog.ErrorContext(r.Context(), "update user: hash password", "err", err)
-			writeError(w, http.StatusInternalServerError, "kullanıcı güncellenemedi")
-			return
+			return fail("update user: hash password", err)
 		}
 		if err := d.users.UpdatePassword(r.Context(), id, hash); err != nil {
-			slog.ErrorContext(r.Context(), "update user: update password", "err", err)
-			writeError(w, http.StatusInternalServerError, "kullanıcı güncellenemedi")
-			return
+			return fail("update user: update password", err)
 		}
 		// Şifre değişikliği mevcut oturumları sonlandırmalı — genellikle bu yüzden değiştirilir.
 		// (Zaten verilmiş access token'lar kısa TTL'lerini doldurur; tek tek iptal edilemezler.)
 		if err := d.refreshTokens.RevokeAllForUser(r.Context(), id); err != nil {
-			slog.ErrorContext(r.Context(), "update user: revoke sessions", "err", err)
-			writeError(w, http.StatusInternalServerError, "şifre değişti ancak mevcut oturumlar sonlandırılamadı")
-			return
+			return serverErr("şifre değişti ancak mevcut oturumlar sonlandırılamadı", "update user: revoke sessions", err)
 		}
 	}
 
@@ -265,105 +234,92 @@ func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 
 	user.PasswordHash = ""
 	writeJSON(w, http.StatusOK, user)
+	return nil
 }
 
-func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID(r, "geçersiz kullanıcı kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kullanıcı kimliği")
-		return
+		return err
 	}
 
 	if callerID, ok := userIDFromContext(r.Context()); ok && callerID == id {
-		writeError(w, http.StatusBadRequest, "kendi hesabınızı silemezsiniz")
-		return
+		return badRequest("kendi hesabınızı silemezsiniz")
 	}
 
-	if err := d.users.Delete(r.Context(), id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "kullanıcı bulunamadı")
-			return
-		}
-		if errors.Is(err, store.ErrConflict) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		slog.ErrorContext(r.Context(), "delete user", "err", err)
-		writeError(w, http.StatusInternalServerError, "kullanıcı silinemedi")
-		return
+	err = d.users.Delete(r.Context(), id)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return notFound("kullanıcı bulunamadı")
+	case errors.Is(err, store.ErrConflict):
+		return conflict(err.Error())
+	case err != nil:
+		return serverErr("kullanıcı silinemedi", "delete user", err)
 	}
 
 	targetID := id.String()
 	d.logAudit(r, "user.delete", "user", &targetID, nil)
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
-func (d *Deps) handleGetUserOrganizations(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleGetUserOrganizations(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("atamalar alınamadı")
+	id, err := pathID(r, "geçersiz kullanıcı kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kullanıcı kimliği")
-		return
+		return err
 	}
 	ids, err := d.userOrgs.ListOrganizationIDs(r.Context(), id)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list user organizations", "err", err)
-		writeError(w, http.StatusInternalServerError, "atamalar alınamadı")
-		return
+		return fail("list user organizations", err)
 	}
 	orgs, err := d.organizations.ListByIDs(r.Context(), ids)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list organizations by ids", "err", err)
-		writeError(w, http.StatusInternalServerError, "atamalar alınamadı")
-		return
+		return fail("list organizations by ids", err)
 	}
 	writeJSON(w, http.StatusOK, orgs)
+	return nil
 }
 
 type setOrganizationsRequest struct {
 	OrganizationIDs []uuid.UUID `json:"organization_ids"`
 }
 
-func (d *Deps) handleSetUserOrganizations(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleSetUserOrganizations(w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID(r, "geçersiz kullanıcı kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kullanıcı kimliği")
-		return
+		return err
+	}
+	req, err := bind[setOrganizationsRequest](r)
+	if err != nil {
+		return err
 	}
 
-	var req setOrganizationsRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
+	err = d.userOrgs.Set(r.Context(), id, req.OrganizationIDs)
+	if errors.Is(err, store.ErrNotFound) {
+		return badRequest("kullanıcı ya da organizasyonlardan biri yok")
 	}
-
-	if err := d.userOrgs.Set(r.Context(), id, req.OrganizationIDs); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusBadRequest, "kullanıcı ya da organizasyonlardan biri yok")
-			return
-		}
-		slog.ErrorContext(r.Context(), "set user organizations", "err", err)
-		writeError(w, http.StatusInternalServerError, "atamalar güncellenemedi")
-		return
+	if err != nil {
+		return serverErr("atamalar güncellenemedi", "set user organizations", err)
 	}
 
 	targetID := id.String()
 	d.logAudit(r, "user.assign_organizations", "user", &targetID, map[string]any{"organization_ids": req.OrganizationIDs})
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
-func (d *Deps) handleGetUserHosts(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleGetUserHosts(w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID(r, "geçersiz kullanıcı kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kullanıcı kimliği")
-		return
+		return err
 	}
 	ids, err := d.userHosts.ListHostIDs(r.Context(), id)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list user hosts", "err", err)
-		writeError(w, http.StatusInternalServerError, "atamalar alınamadı")
-		return
+		return serverErr("atamalar alınamadı", "list user hosts", err)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"host_ids": ids})
+	return nil
 }
 
 type setHostsRequest struct {
@@ -372,59 +328,57 @@ type setHostsRequest struct {
 
 // handleSetUserHosts, kullanıcının tüm host atamasını değiştirir ("sunucuları
 // tek tek seç" — bkz. docs/MIMARI.md bölüm 4).
-func (d *Deps) handleSetUserHosts(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleSetUserHosts(w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID(r, "geçersiz kullanıcı kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kullanıcı kimliği")
-		return
+		return err
+	}
+	req, err := bind[setHostsRequest](r)
+	if err != nil {
+		return err
 	}
 
-	var req setHostsRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
+	err = d.userHosts.Set(r.Context(), id, req.HostIDs)
+	if errors.Is(err, store.ErrNotFound) {
+		return badRequest("kullanıcı ya da sunuculardan biri yok")
 	}
-
-	if err := d.userHosts.Set(r.Context(), id, req.HostIDs); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusBadRequest, "kullanıcı ya da sunuculardan biri yok")
-			return
-		}
-		slog.ErrorContext(r.Context(), "set user hosts", "err", err)
-		writeError(w, http.StatusInternalServerError, "atamalar güncellenemedi")
-		return
+	if err != nil {
+		return serverErr("atamalar güncellenemedi", "set user hosts", err)
 	}
 
 	targetID := id.String()
 	d.logAudit(r, "user.assign_hosts", "user", &targetID, map[string]any{"host_ids": req.HostIDs})
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 type assignHostsByOrgRequest struct {
 	OrganizationID uuid.UUID `json:"organization_id"`
 }
 
+func (req *assignHostsByOrgRequest) Validate() error {
+	if req.OrganizationID == uuid.Nil {
+		return errors.New("organization_id zorunlu")
+	}
+	return nil
+}
+
 // handleAddUserHostsByOrganization, verilen organizasyondaki her host'ı kullanıcının
 // atamasına, mevcut atamalara dokunmadan ekler ("organizasyondaki tüm sunucuları ekle" —
 // bkz. bölüm 4).
-func (d *Deps) handleAddUserHostsByOrganization(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleAddUserHostsByOrganization(w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID(r, "geçersiz kullanıcı kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kullanıcı kimliği")
-		return
+		return err
 	}
-
-	var req assignHostsByOrgRequest
-	if err := decodeJSON(r, &req); err != nil || req.OrganizationID == uuid.Nil {
-		writeError(w, http.StatusBadRequest, "organization_id zorunlu")
-		return
+	req, err := bind[assignHostsByOrgRequest](r)
+	if err != nil {
+		return badRequest("organization_id zorunlu") // çözülemeyen gövde de aynı yanıtı alır
 	}
 
 	added, err := d.userHosts.AddByOrganization(r.Context(), id, req.OrganizationID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "add user hosts by organization", "err", err)
-		writeError(w, http.StatusInternalServerError, "atamalar güncellenemedi")
-		return
+		return serverErr("atamalar güncellenemedi", "add user hosts by organization", err)
 	}
 
 	targetID := id.String()
@@ -433,4 +387,5 @@ func (d *Deps) handleAddUserHostsByOrganization(w http.ResponseWriter, r *http.R
 		"hosts_added":     added,
 	})
 	writeJSON(w, http.StatusOK, map[string]any{"hosts_added": added})
+	return nil
 }

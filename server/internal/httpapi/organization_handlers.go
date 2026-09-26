@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
 	"strings"
 
@@ -14,21 +13,20 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("organizasyonlar listelenemedi")
 	role, _ := roleFromContext(r.Context())
 
 	if role == model.RoleSuperAdmin {
 		orgs, err := d.organizations.List(r.Context())
 		if err != nil {
-			slog.ErrorContext(r.Context(), "list organizations", "err", err)
-			writeError(w, http.StatusInternalServerError, "organizasyonlar listelenemedi")
-			return
+			return fail("list organizations", err)
 		}
 		for i := range orgs {
 			orgs[i].Access = model.OrgAccessFull
 		}
 		writeJSON(w, http.StatusOK, orgs)
-		return
+		return nil
 	}
 
 	// org_admin: atandığı organizasyonlar ve altındaki dallar tam erişimlidir; üst zincirleri yalnızca bağlam olarak
@@ -36,21 +34,15 @@ func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromContext(r.Context())
 	fullIDs, err := d.userOrgs.ListOrganizationIDs(r.Context(), userID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list user organizations", "err", err)
-		writeError(w, http.StatusInternalServerError, "organizasyonlar listelenemedi")
-		return
+		return fail("list user organizations", err)
 	}
 	contextIDs, err := d.userOrgs.ListContextIDs(r.Context(), userID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list user context organizations", "err", err)
-		writeError(w, http.StatusInternalServerError, "organizasyonlar listelenemedi")
-		return
+		return fail("list user context organizations", err)
 	}
 	orgs, err := d.organizations.ListByIDs(r.Context(), append(append([]uuid.UUID{}, fullIDs...), contextIDs...))
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list organizations by ids", "err", err)
-		writeError(w, http.StatusInternalServerError, "organizasyonlar listelenemedi")
-		return
+		return fail("list organizations by ids", err)
 	}
 	full := make(map[uuid.UUID]struct{}, len(fullIDs))
 	for _, id := range fullIDs {
@@ -65,6 +57,7 @@ func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) {
 		orgs[i].Address = nil
 	}
 	writeJSON(w, http.StatusOK, orgs)
+	return nil
 }
 
 const (
@@ -79,56 +72,51 @@ type createOrganizationRequest struct {
 }
 
 // validateOrgText, ad ve adres uzunluk sınırlarını denetler.
-func validateOrgText(name string, address *string) string {
+func validateOrgText(name string, address *string) error {
 	if len(name) > maxOrgNameLen {
-		return "ad çok uzun"
+		return errors.New("ad çok uzun")
 	}
 	if address != nil && len(*address) > maxOrgAddressLen {
-		return "adres çok uzun"
+		return errors.New("adres çok uzun")
 	}
-	return ""
+	return nil
 }
 
-func (d *Deps) handleCreateOrganization(w http.ResponseWriter, r *http.Request) {
-	var req createOrganizationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
+func (req *createOrganizationRequest) Validate() error {
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return errors.New("ad zorunlu")
 	}
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
-		writeError(w, http.StatusBadRequest, "ad zorunlu")
-		return
+	if err := validateOrgText(req.Name, req.Address); err != nil {
+		return err
 	}
-
-	if msg := validateOrgText(name, req.Address); msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
-		return
-	}
-	var address *string
 	if req.Address != nil {
 		trimmed := strings.TrimSpace(*req.Address)
-		address = &trimmed
+		req.Address = &trimmed
+	}
+	return nil
+}
+
+func (d *Deps) handleCreateOrganization(w http.ResponseWriter, r *http.Request) error {
+	req, err := bind[createOrganizationRequest](r)
+	if err != nil {
+		return err
 	}
 
-	org, err := d.organizations.Create(r.Context(), name, req.ParentOrganizationID, address)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, err.Error())
-			return
-		}
-		if errors.Is(err, store.ErrConflict) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		slog.ErrorContext(r.Context(), "create organization", "err", err)
-		writeError(w, http.StatusInternalServerError, "organizasyon oluşturulamadı")
-		return
+	org, err := d.organizations.Create(r.Context(), req.Name, req.ParentOrganizationID, req.Address)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return notFound(err.Error())
+	case errors.Is(err, store.ErrConflict):
+		return conflict(err.Error())
+	case err != nil:
+		return serverErr("organizasyon oluşturulamadı", "create organization", err)
 	}
 
 	targetID := org.ID.String()
 	d.logAudit(r, "organization.create", "organization", &targetID, map[string]any{"name": org.Name, "parent_organization_id": org.ParentOrganizationID})
 	writeJSON(w, http.StatusCreated, org)
+	return nil
 }
 
 // requireOrgAccess, çağıranın orgID üzerinde işlem yapabileceğini denetler: super_admin her
@@ -164,39 +152,34 @@ func (d *Deps) orgAccessLevel(r *http.Request, orgID uuid.UUID) (string, error) 
 	return "", nil
 }
 
-func (d *Deps) handleGetOrganization(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleGetOrganization(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("organizasyon alınamadı")
+	id, err := pathID(r, "geçersiz organizasyon kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz organizasyon kimliği")
-		return
+		return err
 	}
 
 	access, err := d.orgAccessLevel(r, id)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "check org access", "err", err)
-		writeError(w, http.StatusInternalServerError, "organizasyon alınamadı")
-		return
+		return fail("check org access", err)
 	}
 	if access == "" {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return
+		return forbidden()
 	}
 
 	org, err := d.organizations.GetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		return notFound("organizasyon bulunamadı")
+	}
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "get organization", "err", err)
-		writeError(w, http.StatusInternalServerError, "organizasyon alınamadı")
-		return
+		return fail("get organization", err)
 	}
 	org.Access = access
 	if access == model.OrgAccessContext {
 		org.Address = nil // yalnızca üst zincir bilgisi: içerik görünmez
 	}
 	writeJSON(w, http.StatusOK, org)
+	return nil
 }
 
 type updateOrganizationRequest struct {
@@ -204,96 +187,87 @@ type updateOrganizationRequest struct {
 	Address *string `json:"address"`
 	// ParentOrganizationID: verilmemiş = değişmez; null = kök yap; bir kimlik = o organizasyonun altına taşı.
 	ParentOrganizationID json.RawMessage `json:"parent_organization_id"`
+
+	patch store.OrgPatch // Validate'in ürettiği değişiklik
 }
 
-func (d *Deps) handleUpdateOrganization(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz organizasyon kimliği")
-		return
-	}
-
-	var req updateOrganizationRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
-	}
-	patch := store.OrgPatch{}
+func (req *updateOrganizationRequest) Validate() error {
 	if req.Name != nil {
 		name := strings.TrimSpace(*req.Name)
 		if name == "" {
-			writeError(w, http.StatusBadRequest, "ad boş olamaz")
-			return
+			return errors.New("ad boş olamaz")
 		}
-		patch.Name = &name
+		req.patch.Name = &name
 	}
 	if req.Address != nil {
 		trimmed := strings.TrimSpace(*req.Address)
-		patch.Address = &trimmed
+		req.patch.Address = &trimmed
 	}
 	name := ""
-	if patch.Name != nil {
-		name = *patch.Name
+	if req.patch.Name != nil {
+		name = *req.patch.Name
 	}
-	if msg := validateOrgText(name, patch.Address); msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
-		return
+	if err := validateOrgText(name, req.patch.Address); err != nil {
+		return err
 	}
 	if raw := bytes.TrimSpace(req.ParentOrganizationID); len(raw) > 0 {
-		patch.ParentSet = true
+		req.patch.ParentSet = true
 		if string(raw) != "null" {
 			var parent uuid.UUID
 			if err := json.Unmarshal(raw, &parent); err != nil {
-				writeError(w, http.StatusBadRequest, "parent_organization_id geçerli bir kimlik ya da null olmalı")
-				return
+				return errors.New("parent_organization_id geçerli bir kimlik ya da null olmalı")
 			}
-			patch.Parent = &parent
+			req.patch.Parent = &parent
 		}
 	}
+	return nil
+}
 
-	org, err := d.organizations.Update(r.Context(), id, patch)
+func (d *Deps) handleUpdateOrganization(w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID(r, "geçersiz organizasyon kimliği")
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
-			return
-		}
-		if errors.Is(err, store.ErrConflict) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		slog.ErrorContext(r.Context(), "update organization", "err", err)
-		writeError(w, http.StatusInternalServerError, "organizasyon güncellenemedi")
-		return
+		return err
+	}
+	req, err := bind[updateOrganizationRequest](r)
+	if err != nil {
+		return err
+	}
+
+	org, err := d.organizations.Update(r.Context(), id, req.patch)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return notFound("organizasyon bulunamadı")
+	case errors.Is(err, store.ErrConflict):
+		return conflict(err.Error())
+	case err != nil:
+		return serverErr("organizasyon güncellenemedi", "update organization", err)
 	}
 
 	targetID := org.ID.String()
 	d.logAudit(r, "organization.update", "organization", &targetID, map[string]any{"name": org.Name, "parent_organization_id": org.ParentOrganizationID})
 	org.Access = model.OrgAccessFull
 	writeJSON(w, http.StatusOK, org)
+	return nil
 }
 
-func (d *Deps) handleDeleteOrganization(w http.ResponseWriter, r *http.Request) {
-	id, err := uuid.Parse(r.PathValue("id"))
+func (d *Deps) handleDeleteOrganization(w http.ResponseWriter, r *http.Request) error {
+	id, err := pathID(r, "geçersiz organizasyon kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz organizasyon kimliği")
-		return
+		return err
 	}
 
-	if err := d.organizations.Delete(r.Context(), id); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
-			return
-		}
-		if errors.Is(err, store.ErrConflict) {
-			writeError(w, http.StatusConflict, err.Error())
-			return
-		}
-		slog.ErrorContext(r.Context(), "delete organization", "err", err)
-		writeError(w, http.StatusInternalServerError, "organizasyon silinemedi")
-		return
+	err = d.organizations.Delete(r.Context(), id)
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		return notFound("organizasyon bulunamadı")
+	case errors.Is(err, store.ErrConflict):
+		return conflict(err.Error())
+	case err != nil:
+		return serverErr("organizasyon silinemedi", "delete organization", err)
 	}
 
 	targetID := id.String()
 	d.logAudit(r, "organization.delete", "organization", &targetID, nil)
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }

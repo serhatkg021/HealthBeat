@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -30,7 +29,7 @@ type auditListResponse struct {
 // handleListAuditLogs, GET /api/v1/audit-logs'u sunar (audit.view ile korunur; seed bunu yalnızca
 // super_admin'e verir). En yeni önce, keyset ile sayfalanır; böylece yeni satırlar gelmeye
 // devam ederken sayfalama doğru ve ucuz kalır.
-func (d *Deps) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleListAuditLogs(w http.ResponseWriter, r *http.Request) error {
 	q := r.URL.Query()
 	f := store.AuditFilter{
 		ActionPrefix: q.Get("action"),
@@ -42,16 +41,14 @@ func (d *Deps) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("limit"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 || n > maxAuditPageSize {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("limit 1 ile %d arasında olmalı", maxAuditPageSize))
-			return
+			return badRequest(fmt.Sprintf("limit 1 ile %d arasında olmalı", maxAuditPageSize))
 		}
 		f.Limit = n
 	}
 	if v := q.Get("user_id"); v != "" {
 		id, err := uuid.Parse(v)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "geçersiz user_id")
-			return
+			return badRequest("geçersiz user_id")
 		}
 		f.UserID = &id
 	}
@@ -59,8 +56,7 @@ func (d *Deps) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		if v := q.Get(name); v != "" {
 			t, err := time.Parse(time.RFC3339, v)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, name+" RFC3339 biçiminde olmalı")
-				return
+				return badRequest(name + " RFC3339 biçiminde olmalı")
 			}
 			*dst = &t
 		}
@@ -68,17 +64,14 @@ func (d *Deps) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	if v := q.Get("cursor"); v != "" {
 		c, err := decodeAuditCursor(v)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "geçersiz imleç")
-			return
+			return badRequest("geçersiz imleç")
 		}
 		f.Before = &c
 	}
 
 	logs, err := d.audit.List(r.Context(), f)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list audit logs", "err", err)
-		writeError(w, http.StatusInternalServerError, "denetim kayıtları listelenemedi")
-		return
+		return serverErr("denetim kayıtları listelenemedi", "list audit logs", err)
 	}
 
 	resp := auditListResponse{Items: logs}
@@ -89,6 +82,7 @@ func (d *Deps) handleListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		resp.NextCursor = &c
 	}
 	writeJSON(w, http.StatusOK, resp)
+	return nil
 }
 
 // İmleç istemciler için opaktır: base64url("<RFC3339Nano created_at>|<id>").

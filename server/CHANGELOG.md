@@ -45,6 +45,12 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Çözülemeyen istek gövdesinde hatalı alan adlandırılıyor:** mesaj yine `geçersiz istek gövdesi`, ama sorun bir alana
+  bağlanabiliyorsa yanıt artık `fields` taşıyor: yanlış türde değer (`{"interval_seconds": "tam sayı olmalı"}`) ya da
+  bilinmeyen alan (`{"colour": "bilinmeyen alan"}`). Eklemeli: `error`, `code` ve durum kodları değişmedi. Şifre ve token
+  uçları (`/auth/refresh`, `/auth/logout`, `/me/password`, `/auth/reset-password`, `/users/:id/hosts/by-organization`)
+  çözülemeyen gövdeye eskisi gibi kendi "… zorunlu" mesajlarını veriyor. Beklenmeyen hataların log satırlarının bir kısmı
+  işlem adıyla yeniden adlandırıldı (ör. `lookup host` → `get disk alerts: lookup host`; `failure` alanı kalktı).
 - **Arka plan loglarına seviye ve alan:** alert motoru, pull scheduler, offline izleyici, retention, TLS yenileme ve istemci
   IP çözücüsünün satırları artık hepsi INFO değil: veritabanı hataları ve gönderilemeyen alert e-postaları `ERROR`,
   ulaşılamayan pull agent / dolan e-posta kuyruğu / uygulanmamış kanal `WARN` (önceden `LOG_LEVEL=warn`'da kayboluyordu).
@@ -112,6 +118,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- Handler'lar ortak hata akışına taşındı: her handler hatasını döndürüyor (`handle`), yoldaki kimlik (`pathID`), 404/403/409
+  yanıtları ve 500'ün loglanması tek yerde; istek gövdeleri `bind[T]` ile çözülüp tipin `Validate()` kuralıyla doğrulanıyor.
+  Sunucu/organizasyon/eşik/kişi/kural için "yükle + yetki denetle" blokları yardımcılara (`viewableHost`, `managedHost`,
+  `managedOrg`…) toplandı. Yanıt mesajları ve durum kodları aynı.
 - Kod yorumlarındaki eskimiş atıflar düzeltildi: artık var olmayan migration'lar (`000013`, `000016`) ve `PROGRESS.md`
   kararları yerine gerekçe yorumun kendisine yazıldı; pull secret'ın "düz metin saklanır" ve docker_restart'ın "alert'e
   bağlanmadı" ifadeleri güncel davranışa göre düzeltildi.

@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -25,21 +24,23 @@ type contactRequest struct {
 	ManagerContactID *uuid.UUID `json:"manager_contact_id"`
 	Phone            *string    `json:"phone"`
 	Email            *string    `json:"email"`
+
+	input store.ContactInput // Validate'in ürettiği kırpılmış girdi
 }
 
-// toInput, isteği doğrular ve kırpılmış bir store.ContactInput'a çevirir.
-func (req contactRequest) toInput() (store.ContactInput, string) {
+// Validate, isteği doğrular ve kırpılmış bir store.ContactInput'a çevirir (req.input).
+func (req *contactRequest) Validate() error {
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		return store.ContactInput{}, "ad zorunlu"
+		return errors.New("ad zorunlu")
 	}
 	for _, v := range []*string{req.Department, req.Title} {
 		if v != nil && len(strings.TrimSpace(*v)) > maxContactTextLen {
-			return store.ContactInput{}, "departman ve unvan en fazla 200 karakter olabilir"
+			return errors.New("departman ve unvan en fazla 200 karakter olabilir")
 		}
 	}
 	if len(name) > maxContactTextLen {
-		return store.ContactInput{}, "ad çok uzun"
+		return errors.New("ad çok uzun")
 	}
 	in := store.ContactInput{
 		Department: trimPtr(req.Department), Title: trimPtr(req.Title), Name: name,
@@ -47,172 +48,151 @@ func (req contactRequest) toInput() (store.ContactInput, string) {
 	}
 	if in.Phone != nil {
 		if err := validatePhone(*in.Phone); err != nil {
-			return store.ContactInput{}, err.Error()
+			return err
 		}
 	}
 	if in.Email != nil && *in.Email != "" {
 		addr, err := mail.ParseAddress(*in.Email)
 		if err != nil || addr.Address != *in.Email || strings.ContainsAny(*in.Email, " \t\r\n<>,;") {
-			return store.ContactInput{}, "e-posta ad@ornek.com gibi sade bir adres olmalı"
+			return errors.New("e-posta ad@ornek.com gibi sade bir adres olmalı")
 		}
 	}
 	empty := func(p *string) bool { return p == nil || *p == "" }
 	if empty(in.Phone) && empty(in.Email) {
-		return store.ContactInput{}, "telefon ya da e-postadan en az biri zorunlu"
+		return errors.New("telefon ya da e-postadan en az biri zorunlu")
 	}
-	return in, ""
+	req.input = in
+	return nil
 }
 
-func (d *Deps) handleListContacts(w http.ResponseWriter, r *http.Request) {
-	orgID, ok := d.orgFromPath(w, r, "iletişim kişileri alınamadı")
-	if !ok {
-		return
+func (d *Deps) handleListContacts(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("iletişim kişileri alınamadı")
+	orgID, err := d.managedOrg(r, "list contacts", fail)
+	if err != nil {
+		return err
 	}
 	contacts, err := d.contacts.ListByOrganization(r.Context(), orgID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "list contacts", "err", err)
-		writeError(w, http.StatusInternalServerError, "iletişim kişileri alınamadı")
-		return
+		return fail("list contacts", err)
 	}
 	writeJSON(w, http.StatusOK, contacts)
+	return nil
 }
 
-func (d *Deps) handleCreateContact(w http.ResponseWriter, r *http.Request) {
-	orgID, ok := d.orgFromPath(w, r, "iletişim kişisi oluşturulamadı")
-	if !ok {
-		return
-	}
-	var req contactRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
-	}
-	in, msg := req.toInput()
-	if msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
-		return
-	}
-	c, err := d.contacts.Create(r.Context(), orgID, in)
+func (d *Deps) handleCreateContact(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("iletişim kişisi oluşturulamadı")
+	orgID, err := d.managedOrg(r, "create contact", fail)
 	if err != nil {
-		d.writeContactError(w, r, err, "iletişim kişisi oluşturulamadı")
-		return
+		return err
+	}
+	req, err := bind[contactRequest](r)
+	if err != nil {
+		return err
+	}
+	c, err := d.contacts.Create(r.Context(), orgID, req.input)
+	if err != nil {
+		return contactSaveError(err, "create contact", fail)
 	}
 	targetID := c.ID.String()
 	d.logAudit(r, "contact.create", "contact", &targetID, map[string]any{"organization_id": orgID, "name": c.Name})
 	writeJSON(w, http.StatusCreated, c)
+	return nil
 }
 
-func (d *Deps) handleUpdateContact(w http.ResponseWriter, r *http.Request) {
-	existing, ok := d.contactFromPath(w, r, "iletişim kişisi güncellenemedi")
-	if !ok {
-		return
-	}
-	var req contactRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
-	}
-	in, msg := req.toInput()
-	if msg != "" {
-		writeError(w, http.StatusBadRequest, msg)
-		return
-	}
-	c, err := d.contacts.Update(r.Context(), existing.ID, in)
+func (d *Deps) handleUpdateContact(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("iletişim kişisi güncellenemedi")
+	existing, err := d.managedContact(r, "update contact", fail)
 	if err != nil {
-		d.writeContactError(w, r, err, "iletişim kişisi güncellenemedi")
-		return
+		return err
+	}
+	req, err := bind[contactRequest](r)
+	if err != nil {
+		return err
+	}
+	c, err := d.contacts.Update(r.Context(), existing.ID, req.input)
+	if err != nil {
+		return contactSaveError(err, "update contact", fail)
 	}
 	targetID := c.ID.String()
 	d.logAudit(r, "contact.update", "contact", &targetID, map[string]any{"organization_id": c.OrganizationID, "name": c.Name})
 	writeJSON(w, http.StatusOK, c)
+	return nil
 }
 
-func (d *Deps) handleDeleteContact(w http.ResponseWriter, r *http.Request) {
-	existing, ok := d.contactFromPath(w, r, "iletişim kişisi silinemedi")
-	if !ok {
-		return
+func (d *Deps) handleDeleteContact(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("iletişim kişisi silinemedi")
+	existing, err := d.managedContact(r, "delete contact", fail)
+	if err != nil {
+		return err
 	}
-	if err := d.contacts.Delete(r.Context(), existing.ID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "iletişim kişisi bulunamadı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "delete contact", "err", err)
-		writeError(w, http.StatusInternalServerError, "iletişim kişisi silinemedi")
-		return
+	err = d.contacts.Delete(r.Context(), existing.ID)
+	if errors.Is(err, store.ErrNotFound) {
+		return notFound("iletişim kişisi bulunamadı")
+	}
+	if err != nil {
+		return fail("delete contact", err)
 	}
 	targetID := existing.ID.String()
 	d.logAudit(r, "contact.delete", "contact", &targetID, map[string]any{"organization_id": existing.OrganizationID, "name": existing.Name})
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
-func (d *Deps) writeContactError(w http.ResponseWriter, r *http.Request, err error, failure string) {
+// contactSaveError, kayıt hatasını yanıta çevirir; çakışma (ör. yönetici döngüsü) istemcinin düzeltebileceği bir
+// istek hatasıdır.
+func contactSaveError(err error, op string, fail failFunc) error {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		writeError(w, http.StatusNotFound, "kayıt bulunamadı")
+		return notFound("kayıt bulunamadı")
 	case errors.Is(err, store.ErrConflict):
-		writeError(w, http.StatusBadRequest, err.Error())
+		return badRequest(err.Error())
 	default:
-		slog.ErrorContext(r.Context(), "save contact", "failure", failure, "err", err)
-		writeError(w, http.StatusInternalServerError, failure)
+		return fail(op, err)
 	}
 }
 
-// orgFromPath, yoldaki organizasyonu doğrular: geçerli kimlik, var olan organizasyon ve TAM erişim. Değilse yanıtı kendisi yazar.
-func (d *Deps) orgFromPath(w http.ResponseWriter, r *http.Request, failure string) (uuid.UUID, bool) {
-	orgID, err := uuid.Parse(r.PathValue("id"))
+// managedOrg, yoldaki organizasyonu doğrular: geçerli kimlik, var olan organizasyon ve TAM erişim.
+func (d *Deps) managedOrg(r *http.Request, op string, fail failFunc) (uuid.UUID, error) {
+	orgID, err := pathID(r, "geçersiz organizasyon kimliği")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz organizasyon kimliği")
-		return uuid.Nil, false
+		return uuid.Nil, err
 	}
-	if _, err := d.organizations.GetByID(r.Context(), orgID); err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "organizasyon bulunamadı")
-			return uuid.Nil, false
-		}
-		slog.ErrorContext(r.Context(), "lookup organization", "failure", failure, "err", err)
-		writeError(w, http.StatusInternalServerError, failure)
-		return uuid.Nil, false
+	_, err = d.organizations.GetByID(r.Context(), orgID)
+	if errors.Is(err, store.ErrNotFound) {
+		return uuid.Nil, notFound("organizasyon bulunamadı")
+	}
+	if err != nil {
+		return uuid.Nil, fail(op+": lookup organization", err)
 	}
 	allowed, err := d.requireOrgAccess(r, orgID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "check organization access", "failure", failure, "err", err)
-		writeError(w, http.StatusInternalServerError, failure)
-		return uuid.Nil, false
+		return uuid.Nil, fail(op+": check organization access", err)
 	}
 	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return uuid.Nil, false
+		return uuid.Nil, forbidden()
 	}
-	return orgID, true
+	return orgID, nil
 }
 
-// contactFromPath, yoldaki iletişim kişisini yükler ve organizasyonuna erişimi denetler.
-func (d *Deps) contactFromPath(w http.ResponseWriter, r *http.Request, failure string) (model.OrganizationContact, bool) {
-	id, err := uuid.Parse(r.PathValue("id"))
+// managedContact, yoldaki iletişim kişisini yükler ve organizasyonuna erişimi denetler.
+func (d *Deps) managedContact(r *http.Request, op string, fail failFunc) (model.OrganizationContact, error) {
+	id, err := pathID(r, "geçersiz kimlik")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz kimlik")
-		return model.OrganizationContact{}, false
+		return model.OrganizationContact{}, err
 	}
 	c, err := d.contacts.GetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		return model.OrganizationContact{}, notFound("iletişim kişisi bulunamadı")
+	}
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "iletişim kişisi bulunamadı")
-			return model.OrganizationContact{}, false
-		}
-		slog.ErrorContext(r.Context(), "lookup contact", "failure", failure, "err", err)
-		writeError(w, http.StatusInternalServerError, failure)
-		return model.OrganizationContact{}, false
+		return model.OrganizationContact{}, fail(op+": lookup contact", err)
 	}
 	allowed, err := d.requireOrgAccess(r, c.OrganizationID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "check organization access", "failure", failure, "err", err)
-		writeError(w, http.StatusInternalServerError, failure)
-		return model.OrganizationContact{}, false
+		return model.OrganizationContact{}, fail(op+": check organization access", err)
 	}
 	if !allowed {
-		writeError(w, http.StatusForbidden, "yetkiniz yok")
-		return model.OrganizationContact{}, false
+		return model.OrganizationContact{}, forbidden()
 	}
-	return c, true
+	return c, nil
 }

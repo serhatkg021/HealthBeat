@@ -4,11 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-26 — Log göçü tamamlandı: kodda `log.Printf` kalmadı; arka plan işlerinin (alert motoru,
-pull scheduler, offline izleyici, retention, TLS, istemci IP) satırları seviyeli ve alanlı, ingest/poll bağlamının
-`request_id`'sini taşıyor; istek satırında `duration_ms`. Önceki adımlar: Docker log kopyasına sınır (#15), kalıcı log
-dosyası (#14), hata kodları + request_id (#13), slog + maskeli hata ayrıntısı + panic kurtarma (#12). Sırada: B1+B2
-(handler hata akışı, istek bağlama/doğrulama).
+**Son güncelleme:** 2026-09-26 — Handler hata akışı ve istek doğrulaması ortak yardımcılara taşındı (B1+B2): handler'lar
+hatasını döndürüyor (`handle`, `failWith`, `pathID`, `notFound`/`forbidden`/`conflict`), gövdeler `bind[T]` + `Validate()` ile
+çözülüyor; çözülemeyen gövdede hatalı alan `fields`'ta. Yanıt mesajları ve durum kodları aynı. Önceki adımlar: log göçü (#16),
+Docker log kopyasına sınır (#15), kalıcı log dosyası (#14), hata kodları + request_id (#13), slog + panic kurtarma (#12).
+Sırada: B3 (erişim kapsamı paketi `internal/access`).
 
 ## Durum
 

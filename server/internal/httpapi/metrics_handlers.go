@@ -20,7 +20,7 @@ func agentInfoFromRequest(r *http.Request, unknown []string) model.AgentInfo {
 // handleIngestMetrics, push modu host'ın tek endpoint'idir (bkz. docs/MIMARI.md
 // bölüm 7). requirePermission ile değil requireHostAuth ile erişilir — burada hiçbir
 // panel kullanıcısı ya da rol söz konusu değildir.
-func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) error {
 	hostID, _ := hostIDFromContext(r.Context())
 	orgID, _ := hostOrgIDFromContext(r.Context())
 
@@ -33,25 +33,21 @@ func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) {
 		h.Set(version.HeaderLatestAgent, d.agentPolicy.Latest)
 	}
 
+	// bind kullanılmaz: ingest bilinmeyen alanları reddetmez, bildirir (bkz. model.ParseMetricsIngest).
 	body, err := readJSONBody(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
+		return badRequest("geçersiz istek gövdesi")
 	}
 	req, unknown, err := model.ParseMetricsIngest(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
+		return badRequest("geçersiz istek gövdesi")
 	}
 	if err := req.Validate(); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return badRequest(err.Error())
 	}
 
 	if err := d.metrics.Insert(r.Context(), hostID, req.CPUUsagePct, req.RAMUsagePct, req.Disk); err != nil {
-		slog.ErrorContext(r.Context(), "ingest metrics: insert", "err", err)
-		writeError(w, http.StatusInternalServerError, "metrikler kaydedilemedi")
-		return
+		return serverErr("metrikler kaydedilemedi", "ingest metrics: insert", err)
 	}
 
 	// Hatalı biçimli bir container raporu (ör. tanınmayan bir durum değeri) tüm alımı başarısız
@@ -69,4 +65,5 @@ func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) {
 	d.alertEngine.EvaluateMetrics(r.Context(), hostID, orgID, req.CPUUsagePct, req.RAMUsagePct, req.Disk)
 
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }

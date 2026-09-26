@@ -123,35 +123,40 @@ type forgotPasswordRequest struct {
 	Email string `json:"email"`
 }
 
-func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
+// Validate, e-postayı küçük harfe çevirip kırpar (req.Email).
+func (req *forgotPasswordRequest) Validate() error {
+	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
+	if !plausibleEmail(req.Email) {
+		return errors.New("geçerli bir e-posta adresi girin")
+	}
+	return nil
+}
+
+func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) error {
 	ip := remoteIP(r)
 	if ok, retry := d.resetIPs.Allow(ip); !ok {
 		writeTooManyRequests(w, retry)
-		return
+		return nil
 	}
 
-	var req forgotPasswordRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
+	req, err := bind[forgotPasswordRequest](r)
+	if err != nil {
+		return err
 	}
-	email := strings.ToLower(strings.TrimSpace(req.Email))
-	if !plausibleEmail(email) {
-		writeError(w, http.StatusBadRequest, "geçerli bir e-posta adresi girin")
-		return
-	}
+	email := req.Email
 
 	// Bundan sonra yanıt her zaman 204'tür: hesabın varlığı, sınırlama ve yapılandırma durumu dışarıdan ayırt edilemez.
-	respond := func() { w.WriteHeader(http.StatusNoContent) }
+	respond := func() error {
+		w.WriteHeader(http.StatusNoContent)
+		return nil
+	}
 
 	if !d.passwordResetEnabled() {
 		slog.WarnContext(r.Context(), "password reset requested but not available: set SMTP_HOST and PANEL_BASE_URL to enable it")
-		respond()
-		return
+		return respond()
 	}
 	if ok, _ := d.resetEmails.Allow(email); !ok {
-		respond()
-		return
+		return respond()
 	}
 
 	user, err := d.users.GetByEmail(r.Context(), email)
@@ -159,20 +164,17 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 		if !errors.Is(err, store.ErrNotFound) {
 			slog.ErrorContext(r.Context(), "password reset: lookup user", "err", err)
 		}
-		respond()
-		return
+		return respond()
 	}
 
 	token, err := newResetToken()
 	if err != nil {
 		slog.ErrorContext(r.Context(), "password reset: generate token", "err", err)
-		respond()
-		return
+		return respond()
 	}
 	if err := d.resets.Issue(r.Context(), user.ID, hashResetToken(token), time.Now().Add(passwordResetTTL)); err != nil {
 		slog.ErrorContext(r.Context(), "password reset: store token", "err", err)
-		respond()
-		return
+		return respond()
 	}
 
 	targetID := user.ID.String()
@@ -181,7 +183,7 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) {
 	}
 
 	d.sendMailAsync(user.Email, resetMailSubject, resetMailBody(user.Email, fmt.Sprintf(resetLinkPathFmt, d.panelBaseURL, token), passwordResetTTL))
-	respond()
+	return respond()
 }
 
 type resetPasswordRequest struct {
@@ -189,39 +191,47 @@ type resetPasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
-func (d *Deps) handleResetPassword(w http.ResponseWriter, r *http.Request) {
-	ip := remoteIP(r)
-	if rejectIfThrottled(w, d.loginFailures, ip) {
-		return
-	}
-
-	var req resetPasswordRequest
-	if err := decodeJSON(r, &req); err != nil || req.Token == "" || req.NewPassword == "" || len(req.Token) > maxResetTokenLen {
-		writeError(w, http.StatusBadRequest, "token ve new_password zorunlu")
-		return
+func (req *resetPasswordRequest) Validate() error {
+	if req.Token == "" || req.NewPassword == "" || len(req.Token) > maxResetTokenLen {
+		return errMissingResetFields
 	}
 	// Şifre politikası token'dan ÖNCE denetlenir: zayıf bir şifre denemesi bağlantıyı yakmaz.
-	if err := model.ValidatePassword(req.NewPassword); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+	return model.ValidatePassword(req.NewPassword)
+}
+
+var errMissingResetFields = errors.New("token ve new_password zorunlu")
+
+func (d *Deps) handleResetPassword(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("şifre değiştirilemedi")
+	ip := remoteIP(r)
+	if rejectIfThrottled(w, d.loginFailures, ip) {
+		return nil
+	}
+
+	req, err := bind[resetPasswordRequest](r)
+	var apiErr *apiError
+	if errors.As(err, &apiErr) && apiErr.Message == "geçersiz istek gövdesi" {
+		return badRequest(errMissingResetFields.Error()) // çözülemeyen gövde de eksik alanla aynı yanıtı alır
+	}
+	if err != nil {
+		return err
 	}
 	hash, err := authsvc.HashPassword(req.NewPassword)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "password reset: hash", "err", err)
-		writeError(w, http.StatusInternalServerError, "şifre değiştirilemedi")
-		return
+		return fail("password reset: hash", err)
 	}
 
 	user, err := d.resets.Complete(r.Context(), hashResetToken(req.Token), hash)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			d.loginFailures.Allow(ip)
-			writeErrorCode(w, http.StatusBadRequest, "sıfırlama bağlantısı geçersiz ya da süresi dolmuş; yeni bir bağlantı isteyin", errorCodeResetLinkInvalid)
-			return
+	if errors.Is(err, store.ErrNotFound) {
+		d.loginFailures.Allow(ip)
+		return &apiError{
+			Status:  http.StatusBadRequest,
+			Message: "sıfırlama bağlantısı geçersiz ya da süresi dolmuş; yeni bir bağlantı isteyin",
+			Code:    errorCodeResetLinkInvalid,
 		}
-		slog.ErrorContext(r.Context(), "password reset: complete", "err", err)
-		writeError(w, http.StatusInternalServerError, "şifre değiştirilemedi")
-		return
+	}
+	if err != nil {
+		return fail("password reset: complete", err)
 	}
 
 	targetID := user.ID.String()
@@ -232,6 +242,7 @@ func (d *Deps) handleResetPassword(w http.ResponseWriter, r *http.Request) {
 		d.sendMailAsync(user.Email, resetDoneSubject, resetDoneMailBody(user.Email))
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 // newResetToken, 256 bitlik rastgele bir token üretir (URL'de taşınabilir biçimde).

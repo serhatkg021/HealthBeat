@@ -2,7 +2,6 @@ package httpapi
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"time"
 
@@ -26,28 +25,22 @@ type dashboardSummaryResponse struct {
 // aşan/kritik durumdaki host'lar"). Bölüm 7'nin örnek endpoint listesinde yok —
 // eklendi, çünkü "kaç host/alert görebiliyorum" sorusunu, host her satırı kendisi
 // çekip saymadan başka hiçbir şey yanıtlayamaz.
-func (d *Deps) handleDashboardSummary(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleDashboardSummary(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("özet oluşturulamadı")
 	role, _ := roleFromContext(r.Context())
 	userID, _ := userIDFromContext(r.Context())
 
 	hostIDs, err := d.dashboardScope(r.Context(), role, userID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "dashboard summary: resolve scope", "err", err)
-		writeError(w, http.StatusInternalServerError, "özet oluşturulamadı")
-		return
+		return fail("dashboard summary: resolve scope", err)
 	}
-
 	online, offline, err := d.hosts.CountByStatus(r.Context(), hostIDs)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "dashboard summary: count hosts", "err", err)
-		writeError(w, http.StatusInternalServerError, "özet oluşturulamadı")
-		return
+		return fail("dashboard summary: count hosts", err)
 	}
 	critical, warning, err := d.alerts.CountOpenByLevel(r.Context(), hostIDs)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "dashboard summary: count alerts", "err", err)
-		writeError(w, http.StatusInternalServerError, "özet oluşturulamadı")
-		return
+		return fail("dashboard summary: count alerts", err)
 	}
 
 	writeJSON(w, http.StatusOK, dashboardSummaryResponse{
@@ -58,6 +51,7 @@ func (d *Deps) handleDashboardSummary(w http.ResponseWriter, r *http.Request) {
 		OpenCriticalAlerts: critical,
 		OpenWarningAlerts:  warning,
 	})
+	return nil
 }
 
 // dashboardScope, çağıranın görebildiği host kimliklerini döndürür. nil "kapsamsız" demektir
@@ -109,40 +103,32 @@ type dashboardOverviewResponse struct {
 // çağıranın görebildiği host'lar, bunların açık alert'leri ve organizasyon adları. Süzme panelde
 // yapılır; böylece her süzgeç değişiminde istek atılmaz ve sayılar birbiriyle tutarlı kalır.
 // Operatör organizasyon adlarını almaz (organization.view yetkisi yok) — organization_id alanı yeter.
-func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) error {
 	role, _ := roleFromContext(r.Context())
 	userID, _ := userIDFromContext(r.Context())
-
-	fail := func(step string, err error) {
-		slog.ErrorContext(r.Context(), "dashboard overview: "+step, "err", err)
-		writeError(w, http.StatusInternalServerError, "özet oluşturulamadı")
-	}
+	failed := failWith("özet oluşturulamadı")
+	fail := func(step string, err error) error { return failed("dashboard overview: "+step, err) }
 
 	hostIDs, err := d.dashboardScope(r.Context(), role, userID)
 	if err != nil {
-		fail("resolve scope", err)
-		return
+		return fail("resolve scope", err)
 	}
 
 	var hosts []model.Host
 	var alerts []model.Alert
 	if hostIDs == nil {
 		if hosts, err = d.hosts.ListAll(r.Context()); err != nil {
-			fail("list hosts", err)
-			return
+			return fail("list hosts", err)
 		}
 		if alerts, _, err = d.alerts.List(r.Context(), model.AlertStatusOpen, store.ListParams{}); err != nil {
-			fail("list alerts", err)
-			return
+			return fail("list alerts", err)
 		}
 	} else {
 		if hosts, err = d.hosts.ListByIDs(r.Context(), hostIDs); err != nil {
-			fail("list hosts", err)
-			return
+			return fail("list hosts", err)
 		}
 		if alerts, _, err = d.alerts.ListForHosts(r.Context(), model.AlertStatusOpen, hostIDs, store.ListParams{}); err != nil {
-			fail("list alerts", err)
-			return
+			return fail("list alerts", err)
 		}
 	}
 
@@ -158,8 +144,7 @@ func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if err != nil {
-			fail("list organizations", err)
-			return
+			return fail("list organizations", err)
 		}
 		for _, o := range list {
 			orgs = append(orgs, overviewOrganization{ID: o.ID, Name: o.Name})
@@ -175,4 +160,5 @@ func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, dashboardOverviewResponse{Organizations: orgs, Hosts: out, Alerts: alerts})
+	return nil
 }

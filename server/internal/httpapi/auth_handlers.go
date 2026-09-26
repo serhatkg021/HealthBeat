@@ -28,46 +28,46 @@ type tokenPairResponse struct {
 	User                  *model.User `json:"user,omitempty"`
 }
 
-func (d *Deps) handleLogin(w http.ResponseWriter, r *http.Request) {
+func (req *loginRequest) Validate() error {
+	if req.Email == "" || req.Password == "" {
+		return errors.New("e-posta ve şifre zorunlu")
+	}
+	return nil
+}
+
+func (d *Deps) handleLogin(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("giriş yapılamadı")
 	ip := remoteIP(r)
 	if rejectIfThrottled(w, d.loginFailures, ip) {
-		return
+		return nil
 	}
 
-	var req loginRequest
-	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "geçersiz istek gövdesi")
-		return
+	req, err := bind[loginRequest](r)
+	if err != nil {
+		return err
 	}
-	if req.Email == "" || req.Password == "" {
-		writeError(w, http.StatusBadRequest, "e-posta ve şifre zorunlu")
-		return
+	// Bilinmeyen e-posta ve yanlış şifre aynı yanıtı alır ve kaynak IP'nin başarısızlık bütçesinden düşer.
+	deny := func() error {
+		d.loginFailures.Allow(ip)
+		return newError(http.StatusUnauthorized, "e-posta veya şifre hatalı")
 	}
 
 	user, err := d.users.GetByEmail(r.Context(), strings.ToLower(strings.TrimSpace(req.Email)))
+	if errors.Is(err, store.ErrNotFound) {
+		authsvc.BurnPasswordCheck(req.Password) // yanlış şifreyle aynı maliyet
+		return deny()
+	}
 	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			authsvc.BurnPasswordCheck(req.Password) // yanlış şifreyle aynı maliyet
-			d.loginFailures.Allow(ip)
-			writeError(w, http.StatusUnauthorized, "e-posta veya şifre hatalı")
-			return
-		}
-		slog.ErrorContext(r.Context(), "login: lookup user", "err", err)
-		writeError(w, http.StatusInternalServerError, "giriş yapılamadı")
-		return
+		return fail("login: lookup user", err)
 	}
 
 	if !authsvc.VerifyPassword(user.PasswordHash, req.Password) {
-		d.loginFailures.Allow(ip)
-		writeError(w, http.StatusUnauthorized, "e-posta veya şifre hatalı")
-		return
+		return deny()
 	}
 
 	pair, err := d.issueTokenPair(r.Context(), user, uuid.New()) // yeni giriş = yeni token ailesi
 	if err != nil {
-		slog.ErrorContext(r.Context(), "login: issue tokens", "err", err)
-		writeError(w, http.StatusInternalServerError, "giriş yapılamadı")
-		return
+		return fail("login: issue tokens", err)
 	}
 
 	if err := d.users.TouchLastLogin(r.Context(), user.ID); err != nil {
@@ -82,6 +82,7 @@ func (d *Deps) handleLogin(w http.ResponseWriter, r *http.Request) {
 	user.PasswordHash = ""
 	pair.User = &user
 	writeJSON(w, http.StatusOK, pair)
+	return nil
 }
 
 // issueTokenPair, bir access token ile yeni bir refresh token üretir ve ikincisini (jti ile)
@@ -111,6 +112,24 @@ type refreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
+func (req *refreshRequest) Validate() error {
+	if req.RefreshToken == "" {
+		return errMissingRefreshToken
+	}
+	return nil
+}
+
+// bindRefreshRequest, çözülemeyen gövdeye de eksik token'la aynı yanıtı verir.
+func bindRefreshRequest(r *http.Request) (refreshRequest, error) {
+	req, err := bind[refreshRequest](r)
+	if err != nil {
+		return req, errMissingRefreshToken
+	}
+	return req, nil
+}
+
+var errMissingRefreshToken = errors.New("refresh_token zorunlu")
+
 // refreshTokenGrace, az önce döndürülmüş bir refresh token'ın birkaç saniye içinde yeniden
 // sunulmasına (iki sekmenin aynı anda yenilemesi) hırsızlık saymak yerine tolerans gösterir.
 // Pencere geçince yeniden kullanım tüm token ailesini iptal eder.
@@ -120,32 +139,30 @@ const refreshTokenGrace = 10 * time.Second
 // değiştirir (rotasyon): sunulan token kullanılmış işaretlenir; böylece çalınmış bir kopya
 // meşru istemci yenilediği anda çalışmayı bırakır ve eski birinin tekrar oynatılması
 // algılanıp oturum ailesini öldürür.
-func (d *Deps) handleRefresh(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleRefresh(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("token yenilenemedi")
 	ip := remoteIP(r)
 	if rejectIfThrottled(w, d.loginFailures, ip) {
-		return
+		return nil
 	}
 
-	var req refreshRequest
-	if err := decodeJSON(r, &req); err != nil || req.RefreshToken == "" {
-		writeError(w, http.StatusBadRequest, "refresh_token zorunlu")
-		return
+	req, err := bindRefreshRequest(r)
+	if err != nil {
+		return badRequest(err.Error())
 	}
 
-	deny := func() {
+	deny := func() error {
 		d.loginFailures.Allow(ip)
-		writeError(w, http.StatusUnauthorized, "geçersiz ya da süresi dolmuş refresh token")
+		return newError(http.StatusUnauthorized, "geçersiz ya da süresi dolmuş refresh token")
 	}
 
 	claims, err := d.tokenSvc.ParseRefreshToken(req.RefreshToken)
 	if err != nil {
-		deny()
-		return
+		return deny()
 	}
 	jti, err := uuid.Parse(claims.ID)
 	if err != nil { // jti yok: token izleme başlamadan önce üretilmiş
-		deny()
-		return
+		return deny()
 	}
 
 	consumed, err := d.refreshTokens.Consume(r.Context(), jti, refreshTokenGrace)
@@ -156,60 +173,50 @@ func (d *Deps) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		if err := d.audit.Write(r.Context(), &claims.UserID, claims.Email, "auth.token_reuse_detected", "user", &targetID, map[string]any{"ip": ip}, remoteIP(r)); err != nil {
 			slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 		}
-		deny()
-		return
+		return deny()
 	case errors.Is(err, store.ErrNotFound):
-		deny()
-		return
+		return deny()
 	case err != nil:
-		slog.ErrorContext(r.Context(), "refresh: consume token", "err", err)
-		writeError(w, http.StatusInternalServerError, "token yenilenemedi")
-		return
+		return fail("refresh: consume token", err)
 	}
 
 	// Token'ın gömülü rolüne güvenmek yerine kullanıcıyı yeniden getir: token üretildikten sonra
 	// değişmiş olabilir (ya da kullanıcı silinmiş olabilir).
 	user, err := d.users.GetByID(r.Context(), consumed.UserID)
 	if err != nil {
-		deny()
-		return
+		return deny()
 	}
 
 	pair, err := d.issueTokenPair(r.Context(), user, consumed.FamilyID)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "refresh: issue tokens", "err", err)
-		writeError(w, http.StatusInternalServerError, "token yenilenemedi")
-		return
+		return fail("refresh: issue tokens", err)
 	}
 	writeJSON(w, http.StatusOK, pair)
+	return nil
 }
 
 // handleLogout, verilen refresh token'ın ait olduğu oturumu (token ailesini) iptal eder.
 // İdempotenttir ve access token gerektirmez; böylece access token'ı zaten süresi dolmuş
 // bir istemci yine de çıkış yapabilir.
-func (d *Deps) handleLogout(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleLogout(w http.ResponseWriter, r *http.Request) error {
 	ip := remoteIP(r)
 	if rejectIfThrottled(w, d.loginFailures, ip) {
-		return
+		return nil
 	}
 
-	var req refreshRequest
-	if err := decodeJSON(r, &req); err != nil || req.RefreshToken == "" {
-		writeError(w, http.StatusBadRequest, "refresh_token zorunlu")
-		return
+	req, err := bindRefreshRequest(r)
+	if err != nil {
+		return badRequest(err.Error())
 	}
 
 	claims, err := d.tokenSvc.ParseRefreshToken(req.RefreshToken)
 	if err != nil {
 		d.loginFailures.Allow(ip)
-		writeError(w, http.StatusUnauthorized, "geçersiz ya da süresi dolmuş refresh token")
-		return
+		return newError(http.StatusUnauthorized, "geçersiz ya da süresi dolmuş refresh token")
 	}
 	if jti, err := uuid.Parse(claims.ID); err == nil {
 		if err := d.refreshTokens.RevokeFamilyOf(r.Context(), jti); err != nil {
-			slog.ErrorContext(r.Context(), "logout: revoke token family", "err", err)
-			writeError(w, http.StatusInternalServerError, "çıkış yapılamadı")
-			return
+			return serverErr("çıkış yapılamadı", "logout: revoke token family", err)
 		}
 	}
 
@@ -218,6 +225,7 @@ func (d *Deps) handleLogout(w http.ResponseWriter, r *http.Request) {
 		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 	w.WriteHeader(http.StatusNoContent)
+	return nil
 }
 
 type changePasswordRequest struct {
@@ -225,62 +233,63 @@ type changePasswordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
+// Validate yalnızca varlığı denetler; yeni şifrenin kuralları mevcut şifre doğrulandıktan sonra denetlenir (yanlış
+// mevcut şifre her zaman 403 alır).
+func (req *changePasswordRequest) Validate() error {
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		return errMissingPasswords
+	}
+	return nil
+}
+
+var errMissingPasswords = errors.New("current_password ve new_password zorunlu")
+
 // handleChangeOwnPassword, oturum açmış her kullanıcının yeni bir şifre seçmesini sağlar.
 // must_change_password'dan çıkışın tek yoludur ve mevcut tüm oturumları sonlandırır (şifre
 // değişikliği genellikle "başkası bilebilir"e bir yanıttır) — çağıran yeni bir token çifti
 // alır; böylece panel devam edebilir.
-func (d *Deps) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
+func (d *Deps) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("şifre değiştirilemedi")
 	ip := remoteIP(r)
 	// Çalınmış bir access token ile yapılan yanlış "mevcut şifre" denemeleri giriş denemeleri
 	// kadar değerlidir, bu yüzden aynı başarısızlık bütçesinden düşer.
 	if rejectIfThrottled(w, d.loginFailures, ip) {
-		return
+		return nil
 	}
 
-	var req changePasswordRequest
-	if err := decodeJSON(r, &req); err != nil || req.CurrentPassword == "" || req.NewPassword == "" {
-		writeError(w, http.StatusBadRequest, "current_password ve new_password zorunlu")
-		return
+	req, err := bind[changePasswordRequest](r)
+	if err != nil {
+		return badRequest(errMissingPasswords.Error()) // çözülemeyen gövde de aynı yanıtı alır
 	}
 
 	userID, _ := userIDFromContext(r.Context())
 	user, err := d.users.GetByID(r.Context(), userID)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, "geçersiz ya da süresi dolmuş token")
-		return
+		return newError(http.StatusUnauthorized, "geçersiz ya da süresi dolmuş token")
 	}
 
 	// 401 değil 403: panel 401'i "oturum süresi doldu" sayar ve mesajı göstermek yerine
 	// kullanıcının oturumunu kapatırdı.
 	if !authsvc.VerifyPassword(user.PasswordHash, req.CurrentPassword) {
 		d.loginFailures.Allow(ip)
-		writeError(w, http.StatusForbidden, "mevcut şifre hatalı")
-		return
+		return newError(http.StatusForbidden, "mevcut şifre hatalı")
 	}
 	if err := model.ValidatePassword(req.NewPassword); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+		return badRequest(err.Error())
 	}
 	if req.NewPassword == req.CurrentPassword {
-		writeError(w, http.StatusBadRequest, "yeni şifre mevcut şifreden farklı olmalı")
-		return
+		return badRequest("yeni şifre mevcut şifreden farklı olmalı")
 	}
 
 	hash, err := authsvc.HashPassword(req.NewPassword)
 	if err != nil {
-		slog.ErrorContext(r.Context(), "change password: hash", "err", err)
-		writeError(w, http.StatusInternalServerError, "şifre değiştirilemedi")
-		return
+		return fail("change password: hash", err)
 	}
 	if err := d.users.SetOwnPassword(r.Context(), userID, hash); err != nil {
-		slog.ErrorContext(r.Context(), "change password: store", "err", err)
-		writeError(w, http.StatusInternalServerError, "şifre değiştirilemedi")
-		return
+		return fail("change password: store", err)
 	}
 	if err := d.refreshTokens.RevokeAllForUser(r.Context(), userID); err != nil {
-		slog.ErrorContext(r.Context(), "change password: revoke sessions", "err", err)
-		writeError(w, http.StatusInternalServerError, "şifre değişti ancak mevcut oturumlar sonlandırılamadı")
-		return
+		return serverErr("şifre değişti ancak mevcut oturumlar sonlandırılamadı", "change password: revoke sessions", err)
 	}
 
 	targetID := userID.String()
@@ -291,11 +300,10 @@ func (d *Deps) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) {
 	user.MustChangePassword = false
 	pair, err := d.issueTokenPair(r.Context(), user, uuid.New())
 	if err != nil {
-		slog.ErrorContext(r.Context(), "change password: issue tokens", "err", err)
-		writeError(w, http.StatusInternalServerError, "şifre değişti; lütfen yeniden giriş yapın")
-		return
+		return serverErr("şifre değişti; lütfen yeniden giriş yapın", "change password: issue tokens", err)
 	}
 	user.PasswordHash = ""
 	pair.User = &user
 	writeJSON(w, http.StatusOK, pair)
+	return nil
 }
