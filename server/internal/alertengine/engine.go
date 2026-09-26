@@ -3,39 +3,40 @@
 // ACKNOWLEDGED (bir panel kullanıcısınca, bkz. httpapi). Metrik okuması kaydedildikten sonra
 // hem push ingest handler'ından hem pull scheduler'dan çağrılır; böylece iki toplama yolu
 // tek bir alert yolunu paylaşır.
+//
+// Dosyalar: engine.go değerlendirme ve alert yaşam döngüsü; dispatch.go bildirim kuyruğu ve kanallara teslim;
+// message.go bildirim metni; stores.go motorun kullandığı depo arayüzleri.
 package alertengine
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/notify"
 	"healthbeat-server/internal/store"
 )
 
+// Engine, eşikleri değerlendirir, alert'leri açar/günceller/çözer ve bildirimlerini kuyruğa alır.
 type Engine struct {
-	thresholds    *store.Thresholds
-	metrics       *store.Metrics
-	alerts        *store.Alerts
-	hosts         *store.Hosts
-	organizations *store.Organizations
-	notifs        *store.Notifications
-	mailer        *notify.Mailer
-	// panelBaseURL, e-postalarda alert'e doğrudan giden bir bağlantı eklemek için (boşsa satır hiç eklenmez).
+	thresholds    ThresholdStore
+	metrics       MetricStore
+	alerts        AlertStore
+	hosts         HostStore
+	organizations OrgStore
+	notifs        RecipientStore
+	// notifiers, kanal adına göre bildirim kanallarıdır (bkz. notify.Notifier); olmayan kanalın alıcıları atlanır.
+	notifiers map[string]notify.Notifier
+	// panelBaseURL, bildirimlerde alert'e doğrudan giden bir bağlantı eklemek için (boşsa satır hiç eklenmez).
 	panelBaseURL string
 
-	// Alert e-postaları arka plan işçileri tarafından teslim edilir; alert'i açan ingest/poll
+	// Bildirimler arka plan işçileri tarafından teslim edilir (dispatch.go); alert'i açan ingest/poll
 	// çağrısının içinde asla değil: yavaş ya da ölü bir SMTP relay metrik alımını durdurmamalı.
 	// Kuyruk sınırlıdır; dolduğunda yeni bildirimler bloklamak yerine atılır (ve loglanır) —
 	// alert'in kendisi zaten kaydedilmiş ve panelde görünürdür.
@@ -46,74 +47,42 @@ type Engine struct {
 	workers   sync.WaitGroup // çalışan işçi goroutine'leri (Close)
 }
 
-type mailJob struct {
-	orgID uuid.UUID
-	alert model.Alert
-	// logInfo, alert'i doğuran isteğin log kimlikleridir (varsa): teslim satırları o isteğin request_id'sini taşır,
-	// böylece "e-posta gitmedi" satırı alert'i açan agent raporuna bağlanır.
-	logInfo *logging.RequestInfo
-}
-
-const (
-	defaultMailQueueSize = 256
-	defaultMailWorkers   = 2
-	// mailDeliveryTimeout, alert başına alıcı aramasını + SMTP oturumunu sınırlar.
-	mailDeliveryTimeout = 45 * time.Second
-)
-
 func New(pool *pgxpool.Pool, mailer *notify.Mailer, panelBaseURL string) *Engine {
 	return newEngine(pool, mailer, panelBaseURL, defaultMailQueueSize, defaultMailWorkers)
 }
 
 func newEngine(pool *pgxpool.Pool, mailer *notify.Mailer, panelBaseURL string, queueSize, workers int) *Engine {
+	return newEngineWith(Stores{
+		Thresholds:    store.NewThresholds(pool),
+		Metrics:       store.NewMetrics(pool),
+		Alerts:        store.NewAlerts(pool),
+		Hosts:         store.NewHosts(pool, nil), // yalnızca host adlarını okur; pull secret'lara asla dokunmaz
+		Organizations: store.NewOrganizations(pool),
+		Recipients:    store.NewNotifications(pool),
+	}, []notify.Notifier{notify.EmailChannel{Mailer: mailer}}, panelBaseURL, queueSize, workers)
+}
+
+// newEngineWith, motoru verilen depolar ve kanallarla kurar; DB'siz testler sahte depolar ve sahte kanallar verir.
+func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, queueSize, workers int) *Engine {
 	e := &Engine{
-		thresholds:    store.NewThresholds(pool),
-		metrics:       store.NewMetrics(pool),
-		alerts:        store.NewAlerts(pool),
-		hosts:         store.NewHosts(pool, nil), // yalnızca host adlarını okur; pull secret'lara asla dokunmaz
-		organizations: store.NewOrganizations(pool),
-		notifs:        store.NewNotifications(pool),
-		mailer:        mailer,
+		thresholds:    st.Thresholds,
+		metrics:       st.Metrics,
+		alerts:        st.Alerts,
+		hosts:         st.Hosts,
+		organizations: st.Organizations,
+		notifs:        st.Recipients,
+		notifiers:     make(map[string]notify.Notifier, len(notifiers)),
 		panelBaseURL:  strings.TrimSuffix(panelBaseURL, "/"),
 		mailQueue:     make(chan mailJob, queueSize),
+	}
+	for _, n := range notifiers {
+		e.notifiers[n.Channel()] = n
 	}
 	for i := 0; i < workers; i++ {
 		e.workers.Add(1)
 		go e.mailWorker()
 	}
 	return e
-}
-
-func (e *Engine) mailWorker() {
-	defer e.workers.Done()
-	for job := range e.mailQueue {
-		e.deliver(job)
-		e.pending.Done()
-	}
-}
-
-// Flush, şimdiye kadar kuyruğa alınan her bildirim teslim edilene (ya da başarısız olana)
-// kadar bloklar. Testler ve düzenli kapanış içindir.
-func (e *Engine) Flush() { e.pending.Wait() }
-
-// Close, bildirim kabul etmeyi bırakır, kuyruktakileri teslim eder ve işçileri durdurur;
-// ctx bitince vazgeçer. Birden fazla kez çağrılması güvenlidir.
-func (e *Engine) Close(ctx context.Context) error {
-	e.mailMu.Lock()
-	if !e.closed {
-		e.closed = true
-		close(e.mailQueue)
-	}
-	e.mailMu.Unlock()
-
-	done := make(chan struct{})
-	go func() { e.workers.Wait(); close(done) }()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 // EvaluateMetrics, bir metrik alımından sonra cpu/ram/disk eşik denetimlerini çalıştırır.
@@ -470,268 +439,4 @@ func (e *Engine) RaiseOffline(ctx context.Context, hostID, orgID uuid.UUID) {
 		return // eşzamanlı açıldı; bildirimi o çağıran yapar
 	}
 	e.notify(ctx, orgID, alert)
-}
-
-// notify alert e-postasını kuyruğa alır. Asla bloklamaz ve çağıranı asla başarısız kılmaz.
-func (e *Engine) notify(ctx context.Context, orgID uuid.UUID, alert model.Alert) {
-	e.enqueue(ctx, mailJob{orgID: orgID, alert: alert})
-}
-
-// resolveAndNotify bir alert'i çözer ve gerçekten değiştiyse (daha önce zaten çözülmemişse) "çözüldü"
-// e-postasını kuyruğa alır. Eşzamanlı bir çağrı önce davranmışsa (store.ErrNotFound) sessizce döner —
-// aynı çözülme için ikinci bir bildirim gitmesin diye. value/threshold, store.Alerts.Resolve'a olduğu
-// gibi geçer: eşik-tabanlı çözülmede güncel okumayı taşır, diğer yollarda nil'dir.
-func (e *Engine) resolveAndNotify(ctx context.Context, id, orgID uuid.UUID, value, threshold *float64) {
-	alert, err := e.alerts.Resolve(ctx, id, value, threshold)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			return
-		}
-		slog.ErrorContext(ctx, "alert engine: resolve alert", "alert_id", id.String(), "err", err)
-		return
-	}
-	e.enqueue(ctx, mailJob{orgID: orgID, alert: alert})
-}
-
-func (e *Engine) enqueue(ctx context.Context, job mailJob) {
-	alert := job.alert
-	job.logInfo = logging.RequestInfoFrom(ctx)
-	e.mailMu.RLock()
-	defer e.mailMu.RUnlock()
-	if e.closed {
-		return
-	}
-
-	e.pending.Add(1)
-	select {
-	case e.mailQueue <- job:
-	default:
-		e.pending.Done()
-		slog.WarnContext(ctx, "alert engine: mail queue full, dropping notification; it is still visible in the panel",
-			"alert_id", alert.ID.String(), "alert_type", alert.AlertType, "level", alert.Level)
-	}
-}
-
-// deliver, kendi süre sınırıyla bir işçide çalışır: alert'i açan istek genellikle bu noktada
-// bitmiş (ve context'ini iptal etmiş) olur.
-//
-// Bir panic yalnızca o e-postayı düşürür; işçi kuyruğu tüketmeye devam eder.
-func (e *Engine) deliver(job mailJob) {
-	ctx, cancel := context.WithTimeout(context.Background(), mailDeliveryTimeout)
-	defer cancel()
-	if job.logInfo != nil {
-		ctx = logging.WithRequestInfo(ctx, job.logInfo)
-	}
-	defer logging.Recover(ctx, "alert mail delivery")
-	orgID, alert := job.orgID, job.alert
-
-	recipients, err := e.notifs.ResolveRecipients(ctx, alert.HostID, orgID, alert.Level)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: resolve recipients", "alert_id", alert.ID.String(), "host_id", alert.HostID.String(), "err", err)
-		return
-	}
-	var emails []string
-	for _, r := range recipients {
-		if r.Channel == model.ChannelEmail {
-			emails = append(emails, r.Address)
-			continue
-		}
-		// Diğer kanallar (sms, slack…) şemada hazır ama henüz uygulanmadı; API bunlara kural yazdırmaz.
-		slog.WarnContext(ctx, "alert engine: channel is not implemented, skipping recipient", "channel", r.Channel, "recipient", r.Name, "alert_id", alert.ID.String())
-	}
-	if len(emails) == 0 {
-		return
-	}
-
-	// Sunucu bağlamı: 150 sunucu arasında hangisi olduğu yalnızca "Title"tan anlaşılmaz (aynı ad
-	// birden çok müşteride tekrar edebilir) — organizasyon, IP ve makinenin kendi hostname'i de gerekir.
-	hostTitle, hostIP, hostname := alert.HostID.String(), "", "—"
-	if host, err := e.hosts.GetByID(ctx, alert.HostID); err == nil {
-		hostTitle, hostIP = host.Title, host.IP
-		if host.HostInfo != nil && host.HostInfo.Hostname != "" {
-			hostname = host.HostInfo.Hostname
-		}
-	}
-	orgName := orgID.String()
-	if org, err := e.organizations.GetByID(ctx, orgID); err == nil {
-		orgName = org.Name
-	}
-	hostLabel := hostTitle
-	if hostIP != "" {
-		hostLabel = fmt.Sprintf("%s(%s)", hostTitle, hostIP)
-	}
-
-	resolved := alert.Status == model.AlertStatusResolved
-	levelWord := alertLevelLabel(alert.Level)
-	if resolved {
-		levelWord = "ÇÖZÜLDÜ"
-	}
-	headline := alertHeadline(alert.AlertType, resolved) + alertSubjectSuffix(alert.AlertType, alert.Subject)
-	subject := fmt.Sprintf("[HealthBeat] -- %s / %s / %s - %s.", levelWord, orgName, hostLabel, headline)
-
-	var body strings.Builder
-	fmt.Fprintf(&body, "Sunucu:\n")
-	fmt.Fprintf(&body, "Organizasyon: %s\n", orgName)
-	fmt.Fprintf(&body, "Title: %s\n", hostTitle)
-	fmt.Fprintf(&body, "Hostname: %s\n", hostname)
-	fmt.Fprintf(&body, "Sunucu IP: %s\n", hostIP)
-	fmt.Fprintf(&body, "\nAlert:\n")
-	fmt.Fprintf(&body, "ID: %s\n", alert.ID)
-	fmt.Fprintf(&body, "Seviye: %s\n", levelWord)
-	fmt.Fprintf(&body, "Tür: %s\n", alertMetricLabel(alert.AlertType))
-	if alert.Subject != "" {
-		label := "Container"
-		if alert.AlertType == model.MetricTypeDisk || alert.AlertType == model.AlertTypeDiskMissing {
-			label = "Mount"
-		}
-		fmt.Fprintf(&body, "%s: %s\n", label, alert.Subject)
-	}
-	if alert.AlertType == model.AlertTypeDiskMissing {
-		fmt.Fprintf(&body, "Ayrıntı: %s mount'u son %d raporda görünmedi (unmount edilmiş, hata vermiş ya da yanıt vermiyor).\n", alert.Subject, missingMountReports)
-	}
-	if alert.Value != nil && alert.Threshold != nil {
-		fmt.Fprintf(&body, "Değer: %s\n", formatAlertReading(alert.AlertType, *alert.Value, *alert.Threshold))
-	}
-	fmt.Fprintf(&body, "Oluşturulma: %s\n", formatAlertTime(alert.CreatedAt))
-	if resolved && alert.ResolvedAt != nil {
-		fmt.Fprintf(&body, "Çözülme: %s\n", formatAlertTime(*alert.ResolvedAt))
-		fmt.Fprintf(&body, "Çözüm Süresi: %s\n", formatResolutionDuration(alert.ResolvedAt.Sub(alert.CreatedAt)))
-	}
-	if e.panelBaseURL != "" {
-		fmt.Fprintf(&body, "\nPanel: %s/hosts/%s?sekme=alertler\n", e.panelBaseURL, alert.HostID)
-	}
-
-	if err := e.mailer.Send(ctx, emails, subject, body.String()); err != nil {
-		slog.ErrorContext(ctx, "alert engine: send email", "alert_id", alert.ID.String(), "err", err)
-	}
-}
-
-// formatAlertReading bir alert'in ölçümünü ve eşiğini birimiyle (yüzde ya da restart sayısı) tek
-// satırda, panelle aynı biçimde (virgül ondalık ayracı) yazar.
-func formatAlertReading(alertType string, value, threshold float64) string {
-	if alertType == model.MetricTypeDockerRestart {
-		return fmt.Sprintf("%s restart (eşik: %s restart)", formatCount(value), formatCount(threshold))
-	}
-	return fmt.Sprintf("%%%s (eşik: %%%s)", formatPercent(value), formatPercent(threshold))
-}
-
-// formatPercent, yüzde değerlerini iki ondalıkla ve virgül ayracıyla yazar (34.703... -> "34,70").
-func formatPercent(v float64) string {
-	return strings.Replace(strconv.FormatFloat(v, 'f', 2, 64), ".", ",", 1)
-}
-
-// formatCount, restart gibi tam sayı ölçümleri ondalıksız yazar.
-func formatCount(v float64) string {
-	return strconv.FormatFloat(v, 'f', 0, 64)
-}
-
-// formatAlertTime, e-postadaki zamanları tek biçimde ve saat dilimi açıkça belirtilerek yazar.
-// Sunucu UTC'de çalışır; dönüştürmek yerine dilimi parantezde göstermek daha az yanıltıcı
-// (yanlış bir dönüşüm hatasına açık kapı bırakmaz).
-func formatAlertTime(t time.Time) string {
-	return t.UTC().Format("02.01.2006 15:04:05") + " (UTC)"
-}
-
-// formatResolutionDuration, bir alert'in ne kadar açık kaldığını insan-okur biçimde yazar; baştaki
-// sıfır birimler atlanır (5 dakikalık bir alert için "0 Gün 0 Saat 5 Dakika" değil "5 Dakika").
-func formatResolutionDuration(d time.Duration) string {
-	if d < 0 {
-		d = 0
-	}
-	d = d.Round(time.Second)
-	days := int(d / (24 * time.Hour))
-	d -= time.Duration(days) * 24 * time.Hour
-	hours := int(d / time.Hour)
-	d -= time.Duration(hours) * time.Hour
-	minutes := int(d / time.Minute)
-	d -= time.Duration(minutes) * time.Minute
-	seconds := int(d / time.Second)
-
-	var parts []string
-	if days > 0 {
-		parts = append(parts, fmt.Sprintf("%d Gün", days))
-	}
-	if hours > 0 || len(parts) > 0 {
-		parts = append(parts, fmt.Sprintf("%d Saat", hours))
-	}
-	if minutes > 0 || len(parts) > 0 {
-		parts = append(parts, fmt.Sprintf("%d Dakika", minutes))
-	}
-	parts = append(parts, fmt.Sprintf("%d Saniye", seconds))
-	return strings.Join(parts, " ")
-}
-
-// alertSubjectSuffix, konu satırına alert'in subject'ini (mount yolu/container adı) ekler — 150
-// sunucu arasında yalnızca "disk uyarısı" değil, hangi mount olduğunu da göstermek için.
-func alertSubjectSuffix(alertType, subject string) string {
-	if subject == "" {
-		return ""
-	}
-	return " (" + subject + ")"
-}
-
-// alertHeadline, konu satırındaki insan-okur açıklamadır; açık/yükselmiş ve çözülmüş hâller için ayrıdır.
-func alertHeadline(alertType string, resolved bool) string {
-	open, done, ok := alertHeadlinePair(alertType)
-	if !ok {
-		label := alertMetricLabel(alertType)
-		open, done = label+" uyarısı", label+" normale döndü"
-	}
-	if resolved {
-		return done
-	}
-	return open
-}
-
-func alertHeadlinePair(alertType string) (open, done string, ok bool) {
-	switch alertType {
-	case model.MetricTypeCPU:
-		return "CPU kullanım uyarısı", "CPU kullanımı normale döndü", true
-	case model.MetricTypeRAM:
-		return "RAM kullanım uyarısı", "RAM kullanımı normale döndü", true
-	case model.MetricTypeDisk:
-		return "disk kullanım uyarısı", "disk kullanımı normale döndü", true
-	case model.MetricTypeDockerRestart:
-		return "container restart uyarısı", "container restart sayısı normale döndü", true
-	case model.AlertTypeHostOffline:
-		return "sunucu çevrimdışı", "sunucu tekrar çevrimiçi", true
-	case model.AlertTypeDiskMissing:
-		return "disk kayboldu", "disk tekrar görünür oldu", true
-	default:
-		return "", "", false
-	}
-}
-
-// alertLevelLabel, e-postada gösterilen alert seviyesi adıdır (konu satırında büyük harfle).
-func alertLevelLabel(level string) string {
-	switch level {
-	case model.AlertLevelCritical:
-		return "KRİTİK"
-	case model.AlertLevelWarning:
-		return "UYARI"
-	case model.AlertLevelInfo:
-		return "BİLGİ"
-	default:
-		return strings.ToUpper(level)
-	}
-}
-
-// alertMetricLabel, e-postada gösterilen metrik adıdır.
-func alertMetricLabel(metricType string) string {
-	switch metricType {
-	case model.MetricTypeCPU:
-		return "CPU"
-	case model.MetricTypeRAM:
-		return "RAM"
-	case model.MetricTypeDisk:
-		return "disk"
-	case model.MetricTypeDockerRestart:
-		return "docker restart"
-	case model.AlertTypeHostOffline:
-		return "sunucu çevrimdışı"
-	case model.AlertTypeDiskMissing:
-		return "disk kayboldu"
-	default:
-		return metricType
-	}
 }
