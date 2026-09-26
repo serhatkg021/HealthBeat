@@ -124,6 +124,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- Alert motoru bölündü (`engine.go` değerlendirme, `dispatch.go` kuyruk ve teslim, `message.go` bildirim metni) ve depolara
+  dar arayüzlerle bağlandı; bildirimler kanal arayüzünden (`notify.Notifier`, e-posta için `notify.EmailChannel`) gidiyor.
+  Yeni bir kanal (SMS, Slack…) yeni bir `Notifier`'dır. E-posta metni ve kuyruk davranışı aynı.
 - Push ve pull alımı ortak `internal/ingest` servisine taşındı: `Decode` (çözme + doğrulama) ve `Service.Record` (metrik,
   container'lar, çevrimiçi işareti, alert motoru) iki yolun da tek kopyası.
 - Erişim kapsamı `internal/access` paketinde toplandı: istek başına bir `Scope`, organizasyon/sunucu atamalarını istek içinde
