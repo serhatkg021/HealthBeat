@@ -11,14 +11,14 @@
 # Tek imaj her ortamda çalışır: API_BASE_URL bundle'a gömülmez, açılışta uygulanır
 # (config.js + CSP başlığı).
 
-FROM node:22-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+FROM nginxinc/nginx-unprivileged:1.31-alpine
 # Sertifika dosyaları server'ın kullanıcısına (healthbeat, GID 10001) ait ve 640'tır (bkz.
 # deploy/certs-init/init-certs.sh); nginx'i aynı gruba ekleyip özel anahtarı dünyaya açmadan
 # okuyabilmesini sağlıyoruz. Bu adımlar için geçici olarak root, sonda yine yetkisiz kullanıcı.

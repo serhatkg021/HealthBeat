@@ -60,6 +60,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Container taban imajları güncellendi:** server ve certs-init `alpine` 3.21 → 3.24; panel `nginx-unprivileged`
+  1.27 → 1.31, panelin derleme aşaması `node` 22 → 24 (LTS). CI'daki panel işi de Node 24 kullanıyor.
 - **Kapanışta arka plan işleri bekleniyor:** `SIGTERM`'de HTTP kapandıktan sonra pull zamanlayıcısı, offline izleyici,
   temizlik işleri ve bildirim işçilerinin durması beklenir (en çok 5 sn), veritabanı havuzu ancak sonra kapanır; yarıda
   kalan bir sorgu kapanmış havuza çarpıp hata loglamaz. Yeni log satırı: `background jobs stopped` (süre aşılırsa
