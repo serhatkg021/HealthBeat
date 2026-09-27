@@ -245,8 +245,8 @@ func TestBadResponsesStoreNothing(t *testing.T) {
 	}
 
 	for name, h := range map[string]http.HandlerFunc{
-		"server error":       func(w http.ResponseWriter, r *http.Request) { http.Error(w, "boom", 500) },
-		"wrong secret (401)": func(w http.ResponseWriter, r *http.Request) { http.Error(w, "unauthorized", 401) },
+		"server error":       func(w http.ResponseWriter, r *http.Request) { http.Error(w, "boom", http.StatusInternalServerError) },
+		"wrong secret (401)": func(w http.ResponseWriter, r *http.Request) { http.Error(w, "unauthorized", http.StatusUnauthorized) },
 		"not json":           func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, "<html>hi</html>") },
 		"empty body":         func(w http.ResponseWriter, r *http.Request) {},
 		"cpu out of range":   report(150, 10),

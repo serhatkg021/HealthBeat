@@ -2,8 +2,6 @@ package migrate_test
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -477,11 +475,4 @@ func TestMigrationAndItsHistoryRowAreOneTransaction(t *testing.T) {
 	if tableExists(t, pool, "b") {
 		t.Fatal("migration 2's changes were committed although recording it failed; a retry would run it twice")
 	}
-}
-
-// ---- yorumu değişen migration'lar --------------------------------------------------------------
-
-func sum(s string) string {
-	h := sha256.Sum256([]byte(s))
-	return hex.EncodeToString(h[:])
 }

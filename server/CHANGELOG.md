@@ -163,6 +163,7 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- `staticcheck`'in bulduğu kullanılmayan kod (`routeScope` tipi, bir test yardımcısı) silindi.
 - Store'daki satır okuma döngüleri `pgx.CollectRows` üstündeki ortak `collect` / `collectIDs` yardımcılarına taşındı; SQL'e
   gömülü rol adları parametre oldu. Çözülemeyen sunucu envanteri artık sessizce yutulmuyor, `hosts: decode inventory`
   uyarısıyla loglanıyor.

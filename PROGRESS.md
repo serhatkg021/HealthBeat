@@ -4,12 +4,12 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — Server bağımlılıkları güncellendi (`pgx` v5.11.0, `x/text` v0.42.0 ve diğerleri);
-`govulncheck` kodun çağırdığı açık bulmuyor. Önceki adımlar: Go 1.27 (#27), store temizliği (#26), alert değerlendirme
-bağlamı (#25), yanıt tipleri (#24), store hata nedenleri (#23), alert bildirim geçmişi (#22), kalıcı bildirim kuyruğu
-(#21), alert motoru bölme (#20), ortak ingest (#19), erişim kapsamı (#18), handler hata akışı (#17), log/Faz A (#12–#16).
-Sırada: E2b (CI'a `staticcheck`, `govulncheck`, Dependabot), E3 (`DB_MAX_CONNS`, `/readyz`), E4 (arka plan işleri
-kapanışta beklenir).
+**Son güncelleme:** 2026-09-27 — CI'a `server lint` işi (`staticcheck`, `govulncheck`) ve Dependabot (server Go, panel
+npm, Docker taban imajları, GitHub Actions; haftalık, küçük sürümler gruplu) eklendi. Önceki adımlar: bağımlılık
+güncellemesi (#28), Go 1.27 (#27), store temizliği (#26), alert değerlendirme bağlamı (#25), yanıt tipleri (#24), store hata
+nedenleri (#23), alert bildirim geçmişi (#22), kalıcı bildirim kuyruğu (#21), alert motoru bölme (#20), ortak ingest (#19),
+erişim kapsamı (#18), handler hata akışı (#17), log/Faz A (#12–#16). Sırada: E3 (`DB_MAX_CONNS`, `/readyz`), E4 (arka plan
+işleri kapanışta beklenir).
 
 ## Durum
 
