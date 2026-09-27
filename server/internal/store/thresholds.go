@@ -63,11 +63,11 @@ func (s *Thresholds) Create(ctx context.Context, p CreateThresholdParams) (model
 	if err != nil {
 		switch pgErrorCode(err) {
 		case pgUniqueViolation:
-			return model.ThresholdConfig{}, fmt.Errorf("%w: bu kapsam ve metrik için zaten bir eşik var", ErrConflict)
+			return model.ThresholdConfig{}, ErrThresholdExists
 		case pgForeignKeyViolation:
-			return model.ThresholdConfig{}, fmt.Errorf("%w: organizasyon yok", ErrNotFound)
+			return model.ThresholdConfig{}, ErrOrganizationMissing
 		case pgCheckViolation:
-			return model.ThresholdConfig{}, fmt.Errorf("%w: warning_level, critical_level'dan büyük olamaz", ErrConflict)
+			return model.ThresholdConfig{}, ErrThresholdLevelsInvalid
 		}
 		return model.ThresholdConfig{}, err
 	}
@@ -142,7 +142,7 @@ func (s *Thresholds) Update(ctx context.Context, id uuid.UUID, warningLevel, cri
 			return model.ThresholdConfig{}, ErrNotFound
 		}
 		if pgErrorCode(err) == pgCheckViolation {
-			return model.ThresholdConfig{}, fmt.Errorf("%w: warning_level, critical_level'dan büyük olamaz", ErrConflict)
+			return model.ThresholdConfig{}, ErrThresholdLevelsInvalid
 		}
 		return model.ThresholdConfig{}, err
 	}
@@ -322,9 +322,9 @@ func applyOne(ctx context.Context, tx pgx.Tx, hostID uuid.UUID, metricType, subj
 	if err != nil {
 		switch pgErrorCode(err) {
 		case pgForeignKeyViolation:
-			return fmt.Errorf("%w: sunucu yok", ErrNotFound)
+			return ErrHostMissing
 		case pgCheckViolation:
-			return fmt.Errorf("%w: %q için geçersiz eşik", ErrConflict, metricType)
+			return fmt.Errorf("%w (%s)", ErrHostThresholdInvalid, metricType)
 		}
 		return err
 	}

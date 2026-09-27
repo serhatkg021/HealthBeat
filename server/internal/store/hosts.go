@@ -180,11 +180,11 @@ func (s *Hosts) Create(ctx context.Context, p CreateHostParams) (model.Host, err
 	if err != nil {
 		switch pgErrorCode(err) {
 		case pgForeignKeyViolation:
-			return model.Host{}, fmt.Errorf("%w: organizasyon yok", ErrNotFound)
+			return model.Host{}, ErrOrganizationMissing
 		case pgCheckViolation:
-			return model.Host{}, fmt.Errorf("%w: alanlar seçilen moda uymuyor", ErrConflict)
+			return model.Host{}, ErrHostModeMismatch
 		case pgUniqueViolation:
-			return model.Host{}, fmt.Errorf("%w: bu organizasyonda aynı adlı bir sunucu zaten var", ErrConflict)
+			return model.Host{}, ErrHostTitleTaken
 		}
 		return model.Host{}, err
 	}
@@ -331,7 +331,7 @@ func (s *Hosts) Update(ctx context.Context, id uuid.UUID, title, ip *string, int
 	)
 	if err != nil {
 		if pgErrorCode(err) == pgUniqueViolation {
-			return model.Host{}, fmt.Errorf("%w: bu organizasyonda aynı adlı bir sunucu zaten var", ErrConflict)
+			return model.Host{}, ErrHostTitleTaken
 		}
 		return model.Host{}, err
 	}

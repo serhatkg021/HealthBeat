@@ -7,7 +7,6 @@ import (
 	"sort"
 
 	"healthbeat-server/internal/model"
-	"healthbeat-server/internal/store"
 )
 
 // thresholdLevelsInput işaretçi alanlara sahiptir; böylece yarım doldurulmuş çift sessizce 0
@@ -29,7 +28,7 @@ func (in thresholdOverridesInput) toOverrides() (model.ThresholdOverrides, error
 			continue
 		}
 		if levels.WarningLevel == nil || levels.CriticalLevel == nil {
-			return nil, fmt.Errorf("%s: warning_level and critical_level are both required (or null to use the default)", metricType)
+			return nil, fmt.Errorf("%s: warning_level ve critical_level birlikte verilmeli (ya da varsayılan için null)", metricType)
 		}
 		out[metricType] = &model.ThresholdLevels{WarningLevel: *levels.WarningLevel, CriticalLevel: *levels.CriticalLevel}
 	}
@@ -214,12 +213,8 @@ func (d *Deps) handleSetHostThresholds(w http.ResponseWriter, r *http.Request) e
 		return badRequest("container_thresholds: " + err.Error())
 	}
 
-	err = d.thresholds.SetHostOverrides(r.Context(), host.ID, overrides, mounts, containers)
-	if errors.Is(err, store.ErrNotFound) {
-		return notFound("sunucu bulunamadı")
-	}
-	if err != nil {
-		return fail("set host thresholds", err)
+	if err := d.thresholds.SetHostOverrides(r.Context(), host.ID, overrides, mounts, containers); err != nil {
+		return storeError(err, "sunucu bulunamadı", fail, "set host thresholds")
 	}
 
 	targetID := host.ID.String()

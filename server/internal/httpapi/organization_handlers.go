@@ -103,13 +103,8 @@ func (d *Deps) handleCreateOrganization(w http.ResponseWriter, r *http.Request) 
 	}
 
 	org, err := d.organizations.Create(r.Context(), req.Name, req.ParentOrganizationID, req.Address)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound(err.Error())
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return serverErr("organizasyon oluşturulamadı", "create organization", err)
+	if err != nil {
+		return storeError(err, "üst organizasyon bulunamadı", failWith("organizasyon oluşturulamadı"), "create organization")
 	}
 
 	targetID := org.ID.String()
@@ -200,13 +195,8 @@ func (d *Deps) handleUpdateOrganization(w http.ResponseWriter, r *http.Request) 
 	}
 
 	org, err := d.organizations.Update(r.Context(), id, req.patch)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("organizasyon bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return serverErr("organizasyon güncellenemedi", "update organization", err)
+	if err != nil {
+		return storeError(err, "organizasyon bulunamadı", failWith("organizasyon güncellenemedi"), "update organization")
 	}
 
 	targetID := org.ID.String()
@@ -222,14 +212,8 @@ func (d *Deps) handleDeleteOrganization(w http.ResponseWriter, r *http.Request) 
 		return err
 	}
 
-	err = d.organizations.Delete(r.Context(), id)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("organizasyon bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return serverErr("organizasyon silinemedi", "delete organization", err)
+	if err := d.organizations.Delete(r.Context(), id); err != nil {
+		return storeError(err, "organizasyon bulunamadı", failWith("organizasyon silinemedi"), "delete organization")
 	}
 
 	targetID := id.String()

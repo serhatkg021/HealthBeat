@@ -56,6 +56,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **İş kuralı hata mesajlarında "çakışma: " / "bulunamadı: " öneki kalktı:** ör. `çakışma: bu e-posta zaten kullanımda`
+  → `bu e-posta zaten kullanımda`. Durum kodları aynı. Bazı 404 metinleri netleşti (`üst organizasyon bulunamadı`,
+  bildirim kuralında `organizasyon, sunucu, kullanıcı ya da iletişim kişisi bulunamadı`); sunucu eşiklerindeki İngilizce
+  "warning_level and critical_level are both required" mesajı Türkçeleşti.
 - **Bildirimler kalıcı kuyruktan, yeniden denemeyle gidiyor.** Alert e-postaları önceden bellekteki bir kuyruktaydı:
   server yeniden başlarsa ya da çökerse bekleyenler kayboluyor, SMTP hatasında yeniden denenmiyor, kuyruk dolunca yeni
   bildirimler atılıyordu. Artık bildirim alert değişikliğiyle aynı transaction'da yeni `notification_outbox` tablosuna
@@ -148,6 +152,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- Store iş kuralı hataları adlandırılmış nedenler oldu (`store.ErrEmailTaken`, `ErrHostTitleTaken`…; `ErrNotFound` ya da
+  `ErrConflict`'i sarar); Türkçe metinler ve durum kodları `httpapi/store_errors.go`'da tek tabloda.
 - Alert motoru bölündü (`engine.go` değerlendirme, `dispatch.go` kuyruk ve teslim, `message.go` bildirim metni) ve depolara
   dar arayüzlerle bağlandı; bildirimler kanal arayüzünden (`notify.Notifier`, e-posta için `notify.EmailChannel`) gidiyor.
   Yeni bir kanal (SMS, Slack…) yeni bir `Notifier`'dır. E-posta metni ve kuyruk davranışı aynı.

@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,11 +31,11 @@ func scanOrganization(row interface{ Scan(...any) error }) (model.Organization, 
 func mapOrgError(err error) error {
 	switch pgErrorCode(err) {
 	case pgUniqueViolation:
-		return fmt.Errorf("%w: aynı üst şirketin altında bu ada sahip bir organizasyon zaten var", ErrConflict)
+		return ErrOrganizationNameTaken
 	case pgForeignKeyViolation:
-		return fmt.Errorf("%w: üst organizasyon yok", ErrNotFound)
+		return ErrParentOrganizationMissing
 	case pgCheckViolation:
-		return fmt.Errorf("%w: organizasyon ağacında döngü oluşturulamaz (bir organizasyon kendi altındaki bir dalın altına taşınamaz)", ErrConflict)
+		return ErrOrganizationCycle
 	}
 	return err
 }
@@ -133,7 +132,7 @@ func (s *Organizations) Delete(ctx context.Context, id uuid.UUID) error {
 	tag, err := s.pool.Exec(ctx, `DELETE FROM organizations WHERE id = $1`, id)
 	if err != nil {
 		if pgErrorCode(err) == pgForeignKeyViolation {
-			return fmt.Errorf("%w: organizasyonda hâlâ alt organizasyon ya da sunucu var", ErrConflict)
+			return ErrOrganizationNotEmpty
 		}
 		return err
 	}

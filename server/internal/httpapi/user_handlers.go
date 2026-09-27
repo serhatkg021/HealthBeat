@@ -117,11 +117,8 @@ func (d *Deps) handleCreateUser(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	user, err := d.users.Create(r.Context(), req.Email, passwordHash, req.Role, trimPtr(req.FullName), trimPtr(req.Phone))
-	if errors.Is(err, store.ErrConflict) {
-		return conflict(err.Error())
-	}
 	if err != nil {
-		return fail("create user", err)
+		return storeError(err, "kullanıcı bulunamadı", fail, "create user")
 	}
 
 	targetID := user.ID.String()
@@ -192,13 +189,8 @@ func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	user, err := d.users.Update(r.Context(), id, req.Email, req.Role)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("kullanıcı bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return fail("update user", err)
+	if err != nil {
+		return storeError(err, "kullanıcı bulunamadı", fail, "update user")
 	}
 
 	if req.FullName != nil || req.Phone != nil || req.TwoFactorEnabled != nil || req.TwoFactorChannel != nil {
@@ -206,11 +198,8 @@ func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) error {
 			FullName: trimPtr(req.FullName), Phone: trimPtr(req.Phone),
 			TwoFactorEnabled: req.TwoFactorEnabled, TwoFactorChannel: req.TwoFactorChannel,
 		})
-		if errors.Is(err, store.ErrConflict) {
-			return conflict(err.Error())
-		}
 		if err != nil {
-			return fail("update user: profile", err)
+			return storeError(err, "kullanıcı bulunamadı", fail, "update user: profile")
 		}
 	}
 
@@ -247,14 +236,8 @@ func (d *Deps) handleDeleteUser(w http.ResponseWriter, r *http.Request) error {
 		return badRequest("kendi hesabınızı silemezsiniz")
 	}
 
-	err = d.users.Delete(r.Context(), id)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("kullanıcı bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return serverErr("kullanıcı silinemedi", "delete user", err)
+	if err := d.users.Delete(r.Context(), id); err != nil {
+		return storeError(err, "kullanıcı bulunamadı", failWith("kullanıcı silinemedi"), "delete user")
 	}
 
 	targetID := id.String()

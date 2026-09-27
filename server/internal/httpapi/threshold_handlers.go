@@ -82,13 +82,8 @@ func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) err
 		WarningLevel:   req.WarningLevel,
 		CriticalLevel:  req.CriticalLevel,
 	})
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("organizasyon bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return fail("create threshold", err)
+	if err != nil {
+		return storeError(err, "organizasyon bulunamadı", fail, "create threshold")
 	}
 
 	targetID := threshold.ID.String()
@@ -184,13 +179,8 @@ func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) err
 	}
 
 	threshold, err := d.thresholds.Update(r.Context(), id, req.WarningLevel, req.CriticalLevel)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("eşik bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return fail("update threshold", err)
+	if err != nil {
+		return storeError(err, "eşik bulunamadı", fail, "update threshold")
 	}
 
 	targetID := threshold.ID.String()

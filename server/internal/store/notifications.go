@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -88,11 +87,11 @@ func (s *Notifications) Create(ctx context.Context, in model.NotificationRoute) 
 	if err != nil {
 		switch pgErrorCode(err) {
 		case pgUniqueViolation:
-			return model.NotificationRoute{}, fmt.Errorf("%w: bu alıcı ve kanal için bu kapsamda zaten bir kural var", ErrConflict)
+			return model.NotificationRoute{}, ErrRouteExists
 		case pgForeignKeyViolation:
-			return model.NotificationRoute{}, fmt.Errorf("%w: organizasyon, sunucu, kullanıcı ya da iletişim kişisi yok", ErrNotFound)
+			return model.NotificationRoute{}, ErrRouteTargetMissing
 		case pgCheckViolation:
-			return model.NotificationRoute{}, fmt.Errorf("%w: kuralın tam olarak bir kapsamı ve bir alıcısı olmalı", ErrConflict)
+			return model.NotificationRoute{}, ErrRouteShape
 		}
 		return model.NotificationRoute{}, err
 	}
@@ -104,7 +103,7 @@ func (s *Notifications) Update(ctx context.Context, id uuid.UUID, channel, minLe
 	tag, err := s.pool.Exec(ctx, `UPDATE notification_routes SET channel = $2, min_level = $3 WHERE id = $1`, id, channel, minLevel)
 	if err != nil {
 		if pgErrorCode(err) == pgUniqueViolation {
-			return model.NotificationRoute{}, fmt.Errorf("%w: bu alıcı ve kanal için bu kapsamda zaten bir kural var", ErrConflict)
+			return model.NotificationRoute{}, ErrRouteExists
 		}
 		return model.NotificationRoute{}, err
 	}

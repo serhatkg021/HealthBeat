@@ -91,7 +91,7 @@ func (d *Deps) handleCreateContact(w http.ResponseWriter, r *http.Request) error
 	}
 	c, err := d.contacts.Create(r.Context(), orgID, req.input)
 	if err != nil {
-		return contactSaveError(err, "create contact", fail)
+		return storeError(err, "kayıt bulunamadı", fail, "create contact")
 	}
 	targetID := c.ID.String()
 	d.logAudit(r, "contact.create", "contact", &targetID, map[string]any{"organization_id": orgID, "name": c.Name})
@@ -111,7 +111,7 @@ func (d *Deps) handleUpdateContact(w http.ResponseWriter, r *http.Request) error
 	}
 	c, err := d.contacts.Update(r.Context(), existing.ID, req.input)
 	if err != nil {
-		return contactSaveError(err, "update contact", fail)
+		return storeError(err, "kayıt bulunamadı", fail, "update contact")
 	}
 	targetID := c.ID.String()
 	d.logAudit(r, "contact.update", "contact", &targetID, map[string]any{"organization_id": c.OrganizationID, "name": c.Name})
@@ -136,19 +136,6 @@ func (d *Deps) handleDeleteContact(w http.ResponseWriter, r *http.Request) error
 	d.logAudit(r, "contact.delete", "contact", &targetID, map[string]any{"organization_id": existing.OrganizationID, "name": existing.Name})
 	w.WriteHeader(http.StatusNoContent)
 	return nil
-}
-
-// contactSaveError, kayıt hatasını yanıta çevirir; çakışma (ör. yönetici döngüsü) istemcinin düzeltebileceği bir
-// istek hatasıdır.
-func contactSaveError(err error, op string, fail failFunc) error {
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("kayıt bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return badRequest(err.Error())
-	default:
-		return fail(op, err)
-	}
 }
 
 // managedOrg, yoldaki organizasyonu doğrular: geçerli kimlik, var olan organizasyon ve TAM erişim.
