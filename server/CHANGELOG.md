@@ -173,7 +173,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
-- Panel: geliştirme bağımlılıkları güncellendi — TypeScript 6 → 7, `vite` 8.3.1, `lucide-react` 1.48, `oxlint` 1.85.
+- Panel: geliştirme bağımlılıkları güncellendi — TypeScript 6 → 7, `vite` 8.3.1, `lucide-react` 1.48, `oxlint` 1.85,
+  `@types/node` 24.13.6.
 - Arka plan döngüleri `internal/jobs` çalıştırıcısında toplandı; süresi dolmuş token temizliği `httpapi`'den
   `retention.TokenPurger`'a taşındı.
 - `staticcheck`'in bulduğu kullanılmayan kod (`routeScope` tipi, bir test yardımcısı) silindi.
