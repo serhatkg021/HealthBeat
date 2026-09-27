@@ -1472,3 +1472,28 @@ func TestOnlyDiskAndDockerRestartThresholdsMayHaveASubject(t *testing.T) {
 		t.Fatalf("disk overrides = %v, want only /x (a container must not appear as a mount)", disk)
 	}
 }
+
+// SearchPattern, kullanıcının yazdığı LIKE özel karakterlerini kaçışlar.
+func TestSearchPatternEscapesLikeWildcards(t *testing.T) {
+	got := store.ListParams{Search: `50%_a\b`}.SearchPattern()
+	if want := `%50\%\_a\\b%`; got != want {
+		t.Fatalf("SearchPattern = %q, want %q", got, want)
+	}
+}
+
+// Çözülemeyen envanter sunucuyu okunamaz yapmaz: çözülebilen alanlarla döner (ve uyarı loglanır).
+func TestHostWithUndecodableInventoryStillLoads(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "o"), "h", "h")
+	if _, err := pool.Exec(ctx, `UPDATE host_inventory SET hostname = 'web-1', info = '{"os": 5}' WHERE host_id = $1`, host); err != nil {
+		t.Fatal(err)
+	}
+	h, err := store.NewHosts(pool, nil).GetByID(ctx, host)
+	if err != nil {
+		t.Fatalf("GetByID: %v", err)
+	}
+	if h.HostInfo == nil || h.HostInfo.Hostname != "web-1" {
+		t.Fatalf("host info = %+v, want the readable hostname", h.HostInfo)
+	}
+}

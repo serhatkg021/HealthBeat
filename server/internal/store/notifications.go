@@ -31,29 +31,12 @@ func scanRoute(row interface{ Scan(...any) error }) (model.NotificationRoute, er
 	return r, err
 }
 
-func scanRoutes(rows interface {
-	Next() bool
-	Scan(...any) error
-	Err() error
-}) ([]model.NotificationRoute, error) {
-	out := []model.NotificationRoute{}
-	for rows.Next() {
-		r, err := scanRoute(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
-}
-
 func (s *Notifications) ListByOrganization(ctx context.Context, orgID uuid.UUID) ([]model.NotificationRoute, error) {
 	rows, err := s.pool.Query(ctx, routeSelect+` WHERE r.organization_id = $1 ORDER BY r.created_at`, orgID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanRoutes(rows)
+	return collect(rows, scanRoute)
 }
 
 func (s *Notifications) ListByHost(ctx context.Context, hostID uuid.UUID) ([]model.NotificationRoute, error) {
@@ -61,8 +44,7 @@ func (s *Notifications) ListByHost(ctx context.Context, hostID uuid.UUID) ([]mod
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanRoutes(rows)
+	return collect(rows, scanRoute)
 }
 
 func (s *Notifications) GetByID(ctx context.Context, id uuid.UUID) (model.NotificationRoute, error) {
@@ -168,7 +150,7 @@ func (s *Notifications) effectiveRoutes(ctx context.Context, hostID, orgID uuid.
 	if err != nil {
 		return nil, err
 	}
-	hostRoutes, err := scanRoutes(rows)
+	hostRoutes, err := collect(rows, scanRoute)
 	rows.Close()
 	if err != nil {
 		return nil, err
@@ -208,12 +190,12 @@ func (s *Notifications) defaultRecipients(ctx context.Context, orgID uuid.UUID, 
 	}
 	rows, err := s.pool.Query(ctx,
 		orgChainCTE(1)+`
-		 SELECT u.email, COALESCE(u.full_name, u.email) FROM users u WHERE u.role = 'super_admin'
+		 SELECT u.email, COALESCE(u.full_name, u.email) FROM users u WHERE u.role = $2
 		 UNION
 		 SELECT u.email, COALESCE(u.full_name, u.email) FROM users u
 		 JOIN user_organizations uo ON uo.user_id = u.id
 		 JOIN chain c ON c.id = uo.organization_id
-		 WHERE u.role = 'org_admin'`, orgID)
+		 WHERE u.role = $3`, orgID, model.RoleSuperAdmin, model.RoleOrgAdmin)
 	if err != nil {
 		return nil, err
 	}
@@ -248,14 +230,14 @@ func (s *Notifications) Candidates(ctx context.Context, orgID uuid.UUID, hostID 
 	out := []Candidate{}
 	rows, err := s.pool.Query(ctx,
 		orgChainCTE(1)+`
-		 SELECT u.id, COALESCE(u.full_name, u.email), u.email, COALESCE(u.phone, ''), u.role FROM users u WHERE u.role = 'super_admin'
+		 SELECT u.id, COALESCE(u.full_name, u.email), u.email, COALESCE(u.phone, ''), u.role FROM users u WHERE u.role = $3
 		 UNION
 		 SELECT u.id, COALESCE(u.full_name, u.email), u.email, COALESCE(u.phone, ''), u.role FROM users u
-		 JOIN user_organizations uo ON uo.user_id = u.id JOIN chain c ON c.id = uo.organization_id WHERE u.role = 'org_admin'
+		 JOIN user_organizations uo ON uo.user_id = u.id JOIN chain c ON c.id = uo.organization_id WHERE u.role = $4
 		 UNION
 		 SELECT u.id, COALESCE(u.full_name, u.email), u.email, COALESCE(u.phone, ''), u.role FROM users u
-		 JOIN user_hosts uh ON uh.user_id = u.id WHERE $2::uuid IS NOT NULL AND uh.host_id = $2 AND u.role = 'operator'
-		 ORDER BY 2`, orgID, hostID)
+		 JOIN user_hosts uh ON uh.user_id = u.id WHERE $2::uuid IS NOT NULL AND uh.host_id = $2 AND u.role = $5
+		 ORDER BY 2`, orgID, hostID, model.RoleSuperAdmin, model.RoleOrgAdmin, model.RoleOperator)
 	if err != nil {
 		return nil, err
 	}

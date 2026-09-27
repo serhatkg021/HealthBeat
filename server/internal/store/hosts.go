@@ -60,23 +60,29 @@ func scanHost(row interface{ Scan(...any) error }) (model.Host, error) {
 	if err != nil {
 		return h, err
 	}
-	h.HostInfo = mergeHostInfo(hostname, machineID, info, runtime)
+	h.HostInfo = mergeHostInfo(h.ID, hostname, machineID, info, runtime)
 	return h, nil
 }
 
 // mergeHostInfo, envanterin yavaş değişen kısmını (info), her raporda değişen kısmını (runtime) ve ayrı kolonlara
 // alınmış hostname / machine_id_hash'i tek model.HostInfo'da birleştirir. Hiçbiri yoksa nil (henüz bildirilmedi).
-func mergeHostInfo(hostname, machineID *string, info, runtime []byte) *model.HostInfo {
+// Çözülemeyen bir parça uyarı olarak loglanır ve çözülebilen alanlarla devam edilir: bozuk envanter sunucuyu listeden
+// düşürmemeli.
+func mergeHostInfo(hostID uuid.UUID, hostname, machineID *string, info, runtime []byte) *model.HostInfo {
 	if hostname == nil && machineID == nil && len(info) == 0 && len(runtime) == 0 {
 		return nil
 	}
 	var h model.HostInfo
-	if len(info) > 0 {
-		_ = json.Unmarshal(info, &h)
+	decode := func(part string, raw []byte) {
+		if len(raw) == 0 {
+			return
+		}
+		if err := json.Unmarshal(raw, &h); err != nil {
+			slog.Warn("hosts: decode inventory", "host_id", hostID.String(), "part", part, "err", err)
+		}
 	}
-	if len(runtime) > 0 {
-		_ = json.Unmarshal(runtime, &h) // alanlar info ile ayrıktır; yalnızca gelenler üzerine yazılır
-	}
+	decode("info", info)
+	decode("runtime", runtime) // alanlar info ile ayrıktır; yalnızca gelenler üzerine yazılır
 	if hostname != nil {
 		h.Hostname = *hostname
 	}
@@ -232,7 +238,7 @@ func (s *Hosts) ListByOrganization(ctx context.Context, orgID uuid.UUID, p ListP
 	where := "WHERE h.organization_id = $1"
 	args := []any{orgID}
 	if p.Search != "" {
-		args = append(args, "%"+p.Search+"%")
+		args = append(args, p.SearchPattern())
 		where += fmt.Sprintf(" AND (h.title ILIKE $%d OR host(h.ip) ILIKE $%d)", len(args), len(args))
 	}
 	return s.listFiltered(ctx, where, args, p)
@@ -250,8 +256,7 @@ func (s *Hosts) ListByIDs(ctx context.Context, ids []uuid.UUID) ([]model.Host, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanHosts(rows)
+	return collect(rows, scanHost)
 }
 
 // ListAll her organizasyondaki tüm host'ları döndürür — yalnızca kapsamsız (super_admin) görünümler içindir.
@@ -260,8 +265,7 @@ func (s *Hosts) ListAll(ctx context.Context) ([]model.Host, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanHosts(rows)
+	return collect(rows, scanHost)
 }
 
 // ListByOrganizationFiltered, ListByOrganization'ın operator kapsamlı halidir: yalnızca
@@ -273,7 +277,7 @@ func (s *Hosts) ListByOrganizationFiltered(ctx context.Context, orgID uuid.UUID,
 	where := "WHERE h.organization_id = $1 AND h.id = ANY($2)"
 	args := []any{orgID, allowedIDs}
 	if p.Search != "" {
-		args = append(args, "%"+p.Search+"%")
+		args = append(args, p.SearchPattern())
 		where += fmt.Sprintf(" AND (h.title ILIKE $%d OR host(h.ip) ILIKE $%d)", len(args), len(args))
 	}
 	return s.listFiltered(ctx, where, args, p)
@@ -297,24 +301,8 @@ func (s *Hosts) listFiltered(ctx context.Context, where string, args []any, p Li
 		return nil, 0, err
 	}
 	defer rows.Close()
-	hosts, err := scanHosts(rows)
+	hosts, err := collect(rows, scanHost)
 	return hosts, total, err
-}
-
-func scanHosts(rows interface {
-	Next() bool
-	Scan(...any) error
-	Err() error
-}) ([]model.Host, error) {
-	hosts := []model.Host{}
-	for rows.Next() {
-		h, err := scanHost(rows)
-		if err != nil {
-			return nil, err
-		}
-		hosts = append(hosts, h)
-	}
-	return hosts, rows.Err()
 }
 
 // Update yalnızca moddan bağımsız alanlarda kısmi güncelleme uygular. Mod ve kimlik bilgileri
@@ -529,8 +517,7 @@ func (s *Hosts) ListStale(ctx context.Context, graceMultiplier int) ([]model.Hos
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanHosts(rows)
+	return collect(rows, scanHost)
 }
 
 func (s *Hosts) MarkOffline(ctx context.Context, id uuid.UUID) error {
@@ -581,17 +568,7 @@ func (s *Hosts) ListIDsByOrganizations(ctx context.Context, orgIDs []uuid.UUID) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	ids := []uuid.UUID{}
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return collectIDs(rows)
 }
 
 func (s *Hosts) Delete(ctx context.Context, id uuid.UUID) error {

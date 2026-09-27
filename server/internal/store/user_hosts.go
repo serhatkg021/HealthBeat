@@ -22,17 +22,7 @@ func (s *UserHosts) ListHostIDs(ctx context.Context, userID uuid.UUID) ([]uuid.U
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	ids := []uuid.UUID{}
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return collectIDs(rows)
 }
 
 func (s *UserHosts) IsAssigned(ctx context.Context, userID, hostID uuid.UUID) (bool, error) {

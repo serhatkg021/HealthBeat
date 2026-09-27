@@ -29,6 +29,12 @@ func userDest(u *model.User) []any {
 	return []any{&u.ID, &u.Email, &u.FullName, &u.Role, &u.Phone, &u.TwoFactorEnabled, &u.TwoFactorChannel, &u.CreatedAt, &u.LastLoginAt, &u.MustChangePassword}
 }
 
+func scanUser(row interface{ Scan(...any) error }) (model.User, error) {
+	var u model.User
+	err := row.Scan(userDest(&u)...)
+	return u, err
+}
+
 // Create, kullanıcı oluşturur. fullName ve phone isteğe bağlıdır (nil/boş = yok).
 func (s *Users) Create(ctx context.Context, email, passwordHash, role string, fullName, phone *string) (model.User, error) {
 	email = strings.ToLower(email) // şema küçük harf zorunlu kılar (users_email_lowercase_chk)
@@ -97,7 +103,7 @@ func (s *Users) List(ctx context.Context, p ListParams) (users []model.User, tot
 	where := ""
 	args := []any{}
 	if p.Search != "" {
-		args = append(args, "%"+p.Search+"%")
+		args = append(args, p.SearchPattern())
 		where = fmt.Sprintf("WHERE email ILIKE $%d OR full_name ILIKE $%d", len(args), len(args))
 	}
 
@@ -114,16 +120,8 @@ func (s *Users) List(ctx context.Context, p ListParams) (users []model.User, tot
 	if err != nil {
 		return nil, 0, err
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var u model.User
-		if err := rows.Scan(userDest(&u)...); err != nil {
-			return nil, 0, err
-		}
-		users = append(users, u)
-	}
-	return users, total, rows.Err()
+	users, err = collect(rows, scanUser)
+	return users, total, err
 }
 
 // guardLastSuperAdmin, id kalan tek super_admin ise ErrLastSuperAdmin ile başarısız olur.
@@ -131,7 +129,7 @@ func (s *Users) List(ctx context.Context, p ListParams) (users []model.User, tot
 // girmez) transaction'ın geri kalanı için kilitler; iki yöneticinin aynı anda birbirini
 // düşürmesi/silmesini güvenli kılan budur — ikincisi bekler, sonra birincinin sonucunu görür.
 func guardLastSuperAdmin(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
-	rows, err := tx.Query(ctx, `SELECT id FROM users WHERE role = 'super_admin' ORDER BY id FOR UPDATE`)
+	rows, err := tx.Query(ctx, `SELECT id FROM users WHERE role = $1 ORDER BY id FOR UPDATE`, model.RoleSuperAdmin)
 	if err != nil {
 		return err
 	}
@@ -283,7 +281,7 @@ func (s *Users) SetOwnPassword(ctx context.Context, id uuid.UUID, passwordHash s
 // CountSuperAdmins, kaç super_admin olduğunu söyler.
 func (s *Users) CountSuperAdmins(ctx context.Context) (int, error) {
 	var n int
-	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE role = 'super_admin'`).Scan(&n)
+	err := s.pool.QueryRow(ctx, `SELECT count(*) FROM users WHERE role = $1`, model.RoleSuperAdmin).Scan(&n)
 	return n, err
 }
 
@@ -293,10 +291,10 @@ func (s *Users) CountSuperAdmins(ctx context.Context) (int, error) {
 func (s *Users) BootstrapSuperAdmin(ctx context.Context, email, passwordHash string) (created bool, err error) {
 	tag, err := s.pool.Exec(ctx,
 		`INSERT INTO users (email, password_hash, role, must_change_password)
-		 SELECT $1, $2, 'super_admin', true
-		 WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = 'super_admin')
+		 SELECT $1, $2, $3, true
+		 WHERE NOT EXISTS (SELECT 1 FROM users WHERE role = $3)
 		 ON CONFLICT DO NOTHING`,
-		strings.ToLower(email), passwordHash)
+		strings.ToLower(email), passwordHash, model.RoleSuperAdmin)
 	if err != nil {
 		return false, err
 	}

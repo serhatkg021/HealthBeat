@@ -176,8 +176,7 @@ func (s *Alerts) ListActive(ctx context.Context, hostID uuid.UUID, alertType str
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanAlerts(rows)
+	return collect(rows, scanAlert)
 }
 
 // ListActiveForHost, host'un bütün aktif (açık ya da onaylanmış) alert'leridir, türüne bakılmaksızın; alert motoru
@@ -188,8 +187,7 @@ func (s *Alerts) ListActiveForHost(ctx context.Context, hostID uuid.UUID) ([]mod
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanAlerts(rows)
+	return collect(rows, scanAlert)
 }
 
 // Acknowledge yalnızca şu an açık bir alert'te başarılı olur; onaylayan kullanıcı by ile kaydedilir — ErrNotFound hem "yok" hem
@@ -243,7 +241,7 @@ func (s *Alerts) listWhere(ctx context.Context, scopeClause string, scopeArgs []
 		conds = append(conds, fmt.Sprintf("a.status = $%d", len(args)))
 	}
 	if p.Search != "" {
-		args = append(args, "%"+p.Search+"%")
+		args = append(args, p.SearchPattern())
 		n := len(args)
 		conds = append(conds, fmt.Sprintf("(a.subject ILIKE $%d OR a.alert_type ILIKE $%d OR c.title ILIKE $%d)", n, n, n))
 	}
@@ -322,20 +320,4 @@ func (s *Alerts) CountOpenByLevel(ctx context.Context, ids []uuid.UUID) (critica
 		}
 	}
 	return critical, warning, rows.Err()
-}
-
-func scanAlerts(rows interface {
-	Next() bool
-	Scan(...any) error
-	Err() error
-}) ([]model.Alert, error) {
-	alerts := []model.Alert{}
-	for rows.Next() {
-		a, err := scanAlert(rows)
-		if err != nil {
-			return nil, err
-		}
-		alerts = append(alerts, a)
-	}
-	return alerts, rows.Err()
 }

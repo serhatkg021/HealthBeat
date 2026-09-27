@@ -67,8 +67,7 @@ func (s *Organizations) List(ctx context.Context) ([]model.Organization, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanOrganizations(rows)
+	return collect(rows, scanOrganization)
 }
 
 // ListByIDs yalnızca ids içindeki organizasyonları döndürür — bir org_admin'in görünümünü
@@ -81,24 +80,7 @@ func (s *Organizations) ListByIDs(ctx context.Context, ids []uuid.UUID) ([]model
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanOrganizations(rows)
-}
-
-func scanOrganizations(rows interface {
-	Next() bool
-	Scan(...any) error
-	Err() error
-}) ([]model.Organization, error) {
-	orgs := []model.Organization{}
-	for rows.Next() {
-		o, err := scanOrganization(rows)
-		if err != nil {
-			return nil, err
-		}
-		orgs = append(orgs, o)
-	}
-	return orgs, rows.Err()
+	return collect(rows, scanOrganization)
 }
 
 // OrgPatch, bir organizasyonun kısmi güncellemesidir. nil alan değişmez; Address "" ise adres temizlenir;
@@ -142,22 +124,6 @@ func (s *Organizations) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func scanIDs(rows interface {
-	Next() bool
-	Scan(...any) error
-	Err() error
-}) ([]uuid.UUID, error) {
-	ids := []uuid.UUID{}
-	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
-}
-
 // WithDescendants, ids'in kendisini ve altındaki tüm dalı (çocuklar, torunlar…) döndürür.
 func (s *Organizations) WithDescendants(ctx context.Context, ids []uuid.UUID) ([]uuid.UUID, error) {
 	if len(ids) == 0 {
@@ -172,8 +138,7 @@ func (s *Organizations) WithDescendants(ctx context.Context, ids []uuid.UUID) ([
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanIDs(rows)
+	return collectIDs(rows)
 }
 
 // Ancestors, ids'in üst zincirini (üst şirket, onun üst şirketi… köke kadar) döndürür; ids'in kendisi dahil değildir.
@@ -190,8 +155,7 @@ func (s *Organizations) Ancestors(ctx context.Context, ids []uuid.UUID) ([]uuid.
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanIDs(rows)
+	return collectIDs(rows)
 }
 
 // Chain, orgID'den köke doğru zinciri döndürür (orgID dahil, en yakın önce).
@@ -205,6 +169,5 @@ func (s *Organizations) Chain(ctx context.Context, orgID uuid.UUID) ([]uuid.UUID
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanIDs(rows)
+	return collectIDs(rows)
 }
