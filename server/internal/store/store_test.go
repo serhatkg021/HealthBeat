@@ -1022,6 +1022,12 @@ func TestBootstrapSuperAdmin(t *testing.T) {
 	if err != nil || u.Role != "super_admin" || !u.MustChangePassword {
 		t.Fatalf("bootstrapped user = %+v err=%v; want a super_admin that must change its password", u, err)
 	}
+	if withHash, hash, err := users.GetByEmailWithHash(ctx, "ROOT@x.test"); err != nil || withHash.ID != u.ID || hash != "hash" {
+		t.Fatalf("GetByEmailWithHash = %v, %q, %v; want the same user and its hash", withHash.ID, hash, err)
+	}
+	if _, _, err := users.GetByEmailWithHash(ctx, "nobody@x.test"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("GetByEmailWithHash(unknown) err = %v, want ErrNotFound", err)
+	}
 
 	// İdempotenttir ve — başka bir e-postayla bile — asla İKİNCİ bir super_admin eklemez.
 	for _, email := range []string{"root@x.test", "another@x.test"} {
@@ -1066,15 +1072,15 @@ func TestSetOwnPasswordClearsTheFlagButAdminResetDoesNot(t *testing.T) {
 	if err := users.UpdatePassword(ctx, id, "admin-chosen-hash"); err != nil {
 		t.Fatal(err)
 	}
-	if u, _ := users.GetByID(ctx, id); !u.MustChangePassword || u.PasswordHash != "admin-chosen-hash" {
-		t.Fatalf("after admin reset: %+v; the flag must stay set", u)
+	if u, hash, _ := users.GetByIDWithHash(ctx, id); !u.MustChangePassword || hash != "admin-chosen-hash" {
+		t.Fatalf("after admin reset: %+v hash=%q; the flag must stay set", u, hash)
 	}
 
 	if err := users.SetOwnPassword(ctx, id, "self-chosen-hash"); err != nil {
 		t.Fatal(err)
 	}
-	if u, _ := users.GetByID(ctx, id); u.MustChangePassword || u.PasswordHash != "self-chosen-hash" {
-		t.Fatalf("after the user's own change: %+v; the flag must be cleared", u)
+	if u, hash, _ := users.GetByIDWithHash(ctx, id); u.MustChangePassword || hash != "self-chosen-hash" {
+		t.Fatalf("after the user's own change: %+v hash=%q; the flag must be cleared", u, hash)
 	}
 	if err := users.SetOwnPassword(ctx, uuid.New(), "x"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("unknown user: err=%v, want ErrNotFound", err)

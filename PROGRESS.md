@@ -4,10 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — Store iş kuralı hataları adlandırılmış nedenlere dönüştü; Türkçe metinler httpapi'de tek
-tabloda, API mesajlarındaki "çakışma: " / "bulunamadı: " öneki kalktı. Önceki adımlar: alert bildirim geçmişi (#22), kalıcı
+**Son güncelleme:** 2026-09-27 — Kullanıcı okumaları şifre hash'ini seçmiyor (yalnızca giriş ve şifre değiştirme okuyor);
+organizasyon erişimi yanıt tipine taşındı. Önceki adımlar: store hata nedenleri (#23), alert bildirim geçmişi (#22), kalıcı
 bildirim kuyruğu (#21), alert motoru bölme (#20), ortak ingest (#19), erişim kapsamı (#18), handler hata akışı (#17),
-log/Faz A (#12–#16). Sırada: B5 (yanıt DTO'ları, kullanıcı okumalarında `password_hash` seçilmemesi).
+log/Faz A (#12–#16). Sırada: C4 (alert değerlendirme sorgularını ölçüp azaltma).
 
 ## Durum
 
