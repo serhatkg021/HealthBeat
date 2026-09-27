@@ -136,6 +136,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   `docs/DEPLOYMENT.md`, "Gerçek sertifika kullanmak".
 
 ### Düzeltildi
+- **Bağımlılıklardaki iki güvenlik açığı kapandı:** `pgx` v5.7.0 → v5.11.0 (GO-2026-5004, dolar tırnaklı metinlerde yer
+  tutucu karışması) ve `golang.org/x/text` v0.22.0 → v0.42.0 (GO-2026-5970, bozuk girdide sonsuz döngü). Diğer Go
+  bağımlılıkları da güncellendi (`x/crypto` v0.57.0, `golang-jwt` v5.3.1, `x/sync`, `puddle`).
 - **Aramada `%` ve `_` artık joker değil:** sunucu, alert ve kullanıcı aramalarında (`?q=`) `web_1` yalnızca içinde
   `web_1` geçenleri buluyor (önceden `webx1` de eşleşiyordu), `%` her şeyi getirmiyor.
 - **Eşleşmesiz kullanıcı araması `null` yerine `[]` döndürüyor** (`GET /users?q=…`).
