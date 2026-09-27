@@ -134,6 +134,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   `docs/DEPLOYMENT.md`, "Gerçek sertifika kullanmak".
 
 ### Düzeltildi
+- **Aramada `%` ve `_` artık joker değil:** sunucu, alert ve kullanıcı aramalarında (`?q=`) `web_1` yalnızca içinde
+  `web_1` geçenleri buluyor (önceden `webx1` de eşleşiyordu), `%` her şeyi getirmiyor.
+- **Eşleşmesiz kullanıcı araması `null` yerine `[]` döndürüyor** (`GET /users?q=…`).
 - **Onaylanan alert artık "sustur ama izle":** önceden onaylanan bir alert hiç çözülmüyor, metrik hâlâ eşiğin üstündeyse bir
   sonraki raporda (≈30 sn içinde) aynı olay için yeni bir alert ve yeni bir e-posta açılıyordu. Artık onaylanan alert çözülene
   kadar aktif kalıyor: yeni alert/e-posta açılmıyor; eşik altına inince (ya da mount/container kaybolunca, sunucu tekrar rapor
@@ -155,6 +158,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- Store'daki satır okuma döngüleri `pgx.CollectRows` üstündeki ortak `collect` / `collectIDs` yardımcılarına taşındı; SQL'e
+  gömülü rol adları parametre oldu. Çözülemeyen sunucu envanteri artık sessizce yutulmuyor, `hosts: decode inventory`
+  uyarısıyla loglanıyor.
 - Kullanıcı okumaları şifre hash'ini seçmiyor; hash yalnızca giriş ve şifre değiştirmede ayrı metotlarla
   (`GetByEmailWithHash`, `GetByIDWithHash`) okunuyor. Organizasyonun erişim bilgisi modelden `organizationResponse`'a taşındı.
 - Store iş kuralı hataları adlandırılmış nedenler oldu (`store.ErrEmailTaken`, `ErrHostTitleTaken`…; `ErrNotFound` ya da

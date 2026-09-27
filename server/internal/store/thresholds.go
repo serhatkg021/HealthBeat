@@ -91,8 +91,7 @@ func (s *Thresholds) List(ctx context.Context) ([]model.ThresholdConfig, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanThresholds(rows)
+	return collect(rows, scanThreshold)
 }
 
 // ListForOrganizations, genel varsayılanları ve orgIDs'e ait varsayılanları döndürür — bir org_admin'in görebildiği küme.
@@ -106,24 +105,7 @@ func (s *Thresholds) ListForOrganizations(ctx context.Context, orgIDs []uuid.UUI
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanThresholds(rows)
-}
-
-func scanThresholds(rows interface {
-	Next() bool
-	Scan(...any) error
-	Err() error
-}) ([]model.ThresholdConfig, error) {
-	configs := []model.ThresholdConfig{}
-	for rows.Next() {
-		t, err := scanThreshold(rows)
-		if err != nil {
-			return nil, err
-		}
-		configs = append(configs, t)
-	}
-	return configs, rows.Err()
+	return collect(rows, scanThreshold)
 }
 
 func (s *Thresholds) Update(ctx context.Context, id uuid.UUID, warningLevel, criticalLevel *float64) (model.ThresholdConfig, error) {
@@ -385,7 +367,7 @@ func (s *Thresholds) ResolveHost(ctx context.Context, hostID, orgID uuid.UUID) (
 	if err != nil {
 		return nil, err
 	}
-	all, err := scanThresholds(rows)
+	all, err := collect(rows, scanThreshold)
 	rows.Close()
 	if err != nil {
 		return nil, err

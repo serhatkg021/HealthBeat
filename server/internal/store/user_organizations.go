@@ -24,8 +24,7 @@ func (s *UserOrganizations) ListAssignedIDs(ctx context.Context, userID uuid.UUI
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanIDs(rows)
+	return collectIDs(rows)
 }
 
 // ListOrganizationIDs, kullanıcının TAM erişimi olan tüm organizasyonları döndürür: atandıkları ve altlarındaki
@@ -40,8 +39,7 @@ func (s *UserOrganizations) ListOrganizationIDs(ctx context.Context, userID uuid
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanIDs(rows)
+	return collectIDs(rows)
 }
 
 // ListContextIDs, kullanıcının yalnızca bilgi olarak gördüğü organizasyonları döndürür: tam erişimli organizasyonların
@@ -63,8 +61,7 @@ func (s *UserOrganizations) ListContextIDs(ctx context.Context, userID uuid.UUID
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	return scanIDs(rows)
+	return collectIDs(rows)
 }
 
 // IsAssigned, kullanıcının orgID üzerinde TAM erişimi olup olmadığını söyler: doğrudan atanmış ya da atandığı bir

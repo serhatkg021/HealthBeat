@@ -50,16 +50,7 @@ func (s *Contacts) ListByOrganization(ctx context.Context, orgID uuid.UUID) ([]m
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []model.OrganizationContact{}
-	for rows.Next() {
-		c, err := scanContact(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
+	return collect(rows, scanContact)
 }
 
 func (s *Contacts) GetByID(ctx context.Context, id uuid.UUID) (model.OrganizationContact, error) {
