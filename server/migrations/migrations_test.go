@@ -234,3 +234,53 @@ func TestNotificationOutboxMigrationRollsBackWithDownFile(t *testing.T) {
 		t.Fatalf("upgrading again: applied=%d err=%v, want 000003 re-applied", len(applied), err)
 	}
 }
+
+// 000004: çözülmüş alert'lerin saklama temizliği için indeks. Yalnızca indeks eklenir; .down.sql onu kaldırır ve eski
+// binary yeniden açılır.
+func TestResolvedAlertsIndexMigrationRollsBackWithDownFile(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.NewEmpty(t)
+	runner := func(fsys fs.FS) *migrate.Runner {
+		t.Helper()
+		r, err := migrate.New(pool, fsys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	latest, old := runner(upTo(t, "000004")), runner(upTo(t, "000003"))
+	if _, err := latest.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+	indexExists := func() bool {
+		t.Helper()
+		var n int
+		if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_indexes WHERE indexname = 'alerts_resolved_at_idx' AND schemaname = current_schema()`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n == 1
+	}
+	if !indexExists() {
+		t.Fatal("alerts_resolved_at_idx missing after 000004")
+	}
+	if err := old.RequireUpToDate(ctx); !errors.Is(err, migrate.ErrDatabaseNewer) {
+		t.Fatalf("old binary on the new schema: err=%v, want ErrDatabaseNewer", err)
+	}
+
+	down, err := fs.ReadFile(migrations.FS, "000004_alerts_resolved_at_idx.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM healthbeat_migrations WHERE version = 4`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.RequireUpToDate(ctx); err != nil || indexExists() {
+		t.Fatalf("after the down migration: old binary err=%v, index still there=%v", err, indexExists())
+	}
+	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 || !indexExists() {
+		t.Fatalf("upgrading again: applied=%d err=%v, want 000004 re-applied", len(applied), err)
+	}
+}

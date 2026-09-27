@@ -161,27 +161,10 @@ func (s *Metrics) ListByHostAndRange(ctx context.Context, hostID uuid.UUID, from
 // kilitleri uzun süre tutmasın ya da WAL'ı şişirmesin diye gruplar halinde siler. Kaç satır
 // sildiğini döndürür ve ctx biterse erken durur.
 func (s *Metrics) PurgeOlderThan(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
-	if batchSize < 1 {
-		batchSize = 1
-	}
-	var total int64
-	for {
-		tag, err := s.pool.Exec(ctx,
-			`DELETE FROM metrics WHERE (host_id, recorded_at) IN (
-			     SELECT host_id, recorded_at FROM metrics WHERE recorded_at < $1 ORDER BY recorded_at LIMIT $2)`,
-			cutoff, batchSize,
-		)
-		if err != nil {
-			return total, err
-		}
-		total += tag.RowsAffected()
-		if tag.RowsAffected() < int64(batchSize) {
-			return total, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return total, err
-		}
-	}
+	return purgeInBatches(ctx, s.pool,
+		`DELETE FROM metrics WHERE (host_id, recorded_at) IN (
+		     SELECT host_id, recorded_at FROM metrics WHERE recorded_at < $1 ORDER BY recorded_at LIMIT $2)`,
+		cutoff, batchSize)
 }
 
 // LatestDockerContainers, her container'ın en son raporlanan durumunu döndürür (bkz.

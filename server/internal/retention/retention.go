@@ -1,6 +1,6 @@
-// Package retention, metrics tablosu sınırlı kalsın diye eski metrik örneklerini siler.
-// Agent'lar birkaç saniyede bir rapor verir; bu olmadan tablo sınırsız büyür (10 sn interval x
-// 100 host yılda ~315M satırdır).
+// Package retention, sınırsız büyüyen tabloları saklama sürelerine göre temizler: metrik örnekleri, denetim kayıtları ve
+// çözülmüş alert'ler. Agent'lar birkaç saniyede bir rapor verir; metrik temizliği olmadan tablo sınırsız büyür (10 sn
+// interval x 100 host yılda ~315M satırdır).
 package retention
 
 import (
@@ -20,35 +20,90 @@ const (
 	batchSize     = 10000
 )
 
+// Days, her tablonun saklama süresidir (gün); 0 o tabloyu sonsuza dek tutar.
+type Days struct {
+	Metrics        int // METRICS_RETENTION_DAYS
+	Audit          int // AUDIT_RETENTION_DAYS
+	ResolvedAlerts int // RESOLVED_ALERT_RETENTION_DAYS
+}
+
+// Stores, temizliğin sildiği tablolardır.
+type Stores struct {
+	Metrics *store.Metrics
+	Audit   *store.Audit
+	Alerts  *store.Alerts
+}
+
+// target, saklama süresi olan bir tablodur.
+type target struct {
+	what  string // log için: "metric samples", "audit log entries", "resolved alerts"
+	env   string // süreyi veren ortam değişkeni
+	days  int
+	purge func(ctx context.Context, cutoff time.Time, batchSize int) (int64, error)
+}
+
 type Purger struct {
-	metrics *store.Metrics
-	// days, metrik örneklerinin ne kadar saklandığıdır; 0 temizliği kapatır.
-	days int
-
-	now func() time.Time
+	targets []target
+	now     func() time.Time
 }
 
-func New(metrics *store.Metrics, days int) *Purger {
-	return &Purger{metrics: metrics, days: days, now: time.Now}
-}
-
-// RunOnce, saklama penceresinden eski örnekleri siler ve kaç tane kaldırdığını döndürür.
-// Saklama kapalıyken (days == 0) etkisizdir.
-func (p *Purger) RunOnce(ctx context.Context) (int64, error) {
-	if p.days <= 0 {
-		return 0, nil
+func New(st Stores, days Days) *Purger {
+	p := &Purger{now: time.Now}
+	add := func(what, env string, d int, purge func(context.Context, time.Time, int) (int64, error)) {
+		p.targets = append(p.targets, target{what: what, env: env, days: d, purge: purge})
 	}
-	cutoff := p.now().Add(-time.Duration(p.days) * 24 * time.Hour)
-	return p.metrics.PurgeOlderThan(ctx, cutoff, batchSize)
+	if st.Metrics != nil {
+		add("metric samples", "METRICS_RETENTION_DAYS", days.Metrics, st.Metrics.PurgeOlderThan)
+	}
+	if st.Audit != nil {
+		add("audit log entries", "AUDIT_RETENTION_DAYS", days.Audit, st.Audit.PurgeOlderThan)
+	}
+	if st.Alerts != nil {
+		add("resolved alerts", "RESOLVED_ALERT_RETENTION_DAYS", days.ResolvedAlerts, st.Alerts.PurgeResolvedBefore)
+	}
+	return p
+}
+
+// RunOnce, saklama süresi dolan satırları siler ve tablo başına kaç tane kaldırdığını döndürür (anahtar: target.what).
+// Saklaması kapalı (0 gün) tablolara dokunmaz. Bir tablo başarısız olursa diğerleri yine denenir; ilk hata döner.
+func (p *Purger) RunOnce(ctx context.Context) (map[string]int64, error) {
+	deleted := map[string]int64{}
+	var firstErr error
+	for _, t := range p.targets {
+		if t.days <= 0 {
+			continue
+		}
+		cutoff := p.now().Add(-time.Duration(t.days) * 24 * time.Hour)
+		n, err := t.purge(ctx, cutoff, batchSize)
+		deleted[t.what] = n
+		if err != nil {
+			slog.ErrorContext(ctx, "retention: purge failed", "table", t.what, "deleted", n, "err", err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if n > 0 {
+			slog.InfoContext(ctx, "retention: deleted expired "+t.what, "count", n)
+		}
+	}
+	return deleted, firstErr
 }
 
 // Run, ctx iptal edilene kadar periyodik olarak temizler. Kendi goroutine'inde çalıştırın.
 func (p *Purger) Run(ctx context.Context) {
-	if p.days <= 0 {
-		slog.InfoContext(ctx, "retention: METRICS_RETENTION_DAYS=0, metric samples are kept forever")
+	enabled := false
+	for _, t := range p.targets {
+		if t.days > 0 {
+			enabled = true
+			slog.InfoContext(ctx, "retention: keeping "+t.what, "days", t.days)
+		} else {
+			slog.InfoContext(ctx, "retention: "+t.env+"=0, "+t.what+" are kept forever")
+		}
+	}
+	if !enabled {
 		return
 	}
-	slog.InfoContext(ctx, "retention: keeping metric samples", "days", p.days)
 
 	timer := time.NewTimer(firstRunDelay)
 	defer timer.Stop()
@@ -57,11 +112,7 @@ func (p *Purger) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-timer.C:
-			if n, err := p.RunOnce(ctx); err != nil {
-				slog.ErrorContext(ctx, "retention: purge failed", "deleted", n, "err", err)
-			} else if n > 0 {
-				slog.InfoContext(ctx, "retention: deleted expired metric samples", "count", n)
-			}
+			_, _ = p.RunOnce(ctx) // hatalar RunOnce'ta loglanır
 			timer.Reset(purgeEvery)
 		}
 	}

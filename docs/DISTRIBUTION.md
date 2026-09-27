@@ -238,7 +238,8 @@ migrations this binary does not know"; `docs/COMPATIBILITY.md` kural 6). İki yo
    uygula ve geçmişten satırını sil, sonra `HB_VERSION`'ı geri al. `.down.sql` dosyaları binary'de değil, repodadır
    (`server/migrations/`, ilgili `server/vX.Y.Z` etiketinde):
    ```sh
-   # ör. 000003 ve 000002 içeren bir sürümden 000001'e: önce 3, sonra 2
+   # ör. 000003 ve 000002 içeren bir sürümden 000001'e: önce 3, sonra 2 (000004 varsa ondan başla:
+   # 000004_alerts_resolved_at_idx.down.sql ve "version = 4"; yalnızca indeksi kaldırır)
    docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < server/migrations/000003_notification_outbox.down.sql
    docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "DELETE FROM healthbeat_migrations WHERE version = 3"'
    docker compose exec -T db sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < server/migrations/000002_alert_acknowledged_active.down.sql

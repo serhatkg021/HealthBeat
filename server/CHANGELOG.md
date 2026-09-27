@@ -11,6 +11,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 ## [Yayınlanmamış]
 
 ### Eklendi
+- **`AUDIT_RETENTION_DAYS` ve `RESOLVED_ALERT_RETENTION_DAYS`:** denetim kayıtlarının ve çözülmüş alert'lerin saklanma
+  süresi (gün). **Varsayılan `0` = sonsuza kadar sakla**; güncelleme hiçbir kaydı silmez. Ayarlanırsa metrik saklamayla
+  aynı saatlik iş parti parti siler; açık ve onaylanmış alert'lere dokunulmaz. Docker Compose `.env`'den aktarıyor.
+  Migration `000004` yalnızca bir indeks ekler (`alerts_resolved_at_idx`); geri dönüş: `000004_…down.sql`
+  (`docs/DISTRIBUTION.md` §8.3).
 - **`GET /readyz`:** veritabanına ping atar; ulaşılabiliyorsa `200`, değilse `503` (`code: database_unavailable`). Yük
   dengeleyici/orkestratör denetimi içindir; `/healthz` yalnızca sürecin ayakta olduğunu söylemeye devam ediyor.
 - **`DB_MAX_CONNS`:** veritabanı bağlantı havuzunun üst sınırı (varsayılan değişmedi: 4 ile CPU sayısından büyüğü).
