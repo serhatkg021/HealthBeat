@@ -67,7 +67,7 @@ func TestBindDecodeErrorsNameTheField(t *testing.T) {
 		{`{"name": "a", "enabled": "evet"}`, map[string]string{"enabled": "true ya da false olmalı"}},
 		{`{"name": "a", "org_id": 7}`, map[string]string{"org_id": "metin olmalı"}},
 		{`{"name": "a", "tags": "x"}`, map[string]string{"tags": "dizi olmalı"}},
-		{`{"name": "a", "levels": {"cpu": {"level": "yüksek"}}}`, map[string]string{"levels.level": "sayı olmalı"}},
+		{`{"name": "a", "levels": {"cpu": {"level": "yüksek"}}}`, map[string]string{"levels.cpu.level": "sayı olmalı"}},
 		{`{"name": "a", "colour": "red"}`, map[string]string{"colour": "bilinmeyen alan"}},
 		// Alana bağlanamayan hatalar yalnızca genel mesajı taşır.
 		{`{"name": "a"`, nil},

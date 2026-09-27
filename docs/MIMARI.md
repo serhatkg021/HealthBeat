@@ -193,7 +193,7 @@ Her hata yanıtı aynı biçimdedir ve her yanıt `X-Request-ID` başlığını 
   olanın anlamı değişmez.
 - `request_id`: o isteğin log satırlarındaki kimlik (`docs/DEPLOYMENT.md`, "Loglama"). Panel onu yalnızca `5xx`'te gösterir.
 - `fields`: yalnızca istek gövdesi çözülemediğinde ve sorun bir alana bağlanabildiğinde (yanlış tür, bilinmeyen alan): alan
-  adı → sorun; iç içe alanlar noktayla (`thresholds.warning_level`). Bozuk JSON gibi alana bağlanamayan hatalarda yoktur.
+  adı → sorun; iç içe alanlar noktayla, map anahtarı dahil (`thresholds.cpu.warning_level`). Bozuk JSON gibi alana bağlanamayan hatalarda yoktur.
   Kural ihlalleri (ör. `ip geçerli bir IP adresi olmalı`) yalnızca `error` ile döner.
 
 Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
