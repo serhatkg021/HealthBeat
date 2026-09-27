@@ -26,7 +26,8 @@ SECRET="Zy9XwVuTsRqPoNmLkJiHgFeDcBa_-0987654321zzzz"
 UUID="123e4567-e89b-12d3-a456-426614174000"
 
 # run_install ARGS... -> OUT'u (stdout+stderr) ve RC'yi ayarlar; ROOT önceden ayarlanmadıkça her çağrı taze bir kök alır.
-new_root() { ROOT="$WORK/root.$RANDOM"; mkdir -p "$ROOT"; }
+# mktemp: $RANDOM ile adlandırılan kökler ~45 senaryoda arada çakışıp önceki senaryonun dosyalarını taşıyordu.
+new_root() { ROOT="$(mktemp -d "$WORK/root.XXXXXX")"; }
 run_install() {
   OUT="$(./install.sh install --root "$ROOT" --binary "$BIN" --no-start "$@" </dev/null 2>&1)"
   RC=$?

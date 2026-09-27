@@ -9,6 +9,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### İç değişiklikler (davranış değişmedi)
+- `install_test.sh`: senaryoların kök dizinleri `mktemp` ile açılıyor; `$RANDOM` adları arada çakışıp testi dengesizleştiriyordu.
+
 ## [1.0.0] - 2026-09-22
 
 İlk kararlı sürüm.
