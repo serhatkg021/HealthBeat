@@ -8,7 +8,9 @@ Sahada onlarca/yüzlerce sunucuda agent çalışır. İki şey **her zaman** do�
   metriklerle (CPU/RAM/disk/Docker) düşer, server güncellenince kendiliğinden tam moda döner.
 
 Bu belge bunu sağlayan sözleşmeyi, panelde nasıl izlendiğini ve yeni alan/özellik eklerken uyulacak
-kuralları anlatır. Deploy sırası önerisi: **önce server, sonra agent'lar** (zorunlu değil, aşağıya bak).
+kuralları anlatır. Panel bu sözleşmenin dışındadır: server ile tek ürün olarak aynı sürümde yayımlanır ve birlikte
+dağıtılır, bu yüzden panel ↔ server API'si için geriye uyumluluk aranmaz (`CONTRIBUTING.md` §3).
+Deploy sırası önerisi: **önce server, sonra agent'lar** (zorunlu değil, aşağıya bak).
 
 ## 1. Sözleşme
 

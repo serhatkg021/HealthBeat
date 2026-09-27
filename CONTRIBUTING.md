@@ -33,6 +33,10 @@ girer; sürüm etiketleri yalnızca `main`'dan atılır.** (GitFlow'daki gibi `d
 - **Hangi hat?** `agent/` değiştiyse **agent** hattı, `server/` ve `server/panel/` değiştiyse **server + panel** hattı etkilenir
   (bkz. `docs/DISTRIBUTION.md` §11.2). Her PR, etkilediği hattın değişiklik günlüğüne (`agent/CHANGELOG.md` ya da
   `server/CHANGELOG.md`, "Yayınlanmamış" bölümü) bir madde ekler; panel maddeleri "Panel:" ile başlar.
+- **Server ve panel tek üründür.** Her zaman aynı sürümle yayımlanır ve birlikte dağıtılır; aralarındaki API için geriye
+  uyumluluk aranmaz. Panelin kullandığı bir yanıt değişiyorsa panel aynı PR'da uyarlanır; server'a panelin kullanacağı bir
+  yetenek eklendiğinde panel tarafı da aynı işin parçasıdır. Geriye uyumluluk yalnızca **agent ↔ server** arasında zorunludur
+  (`docs/COMPATIBILITY.md`).
 - **Madde hangi başlığa?** Değişiklik günlüğü sürüm notunun kendisidir (`scripts/release-notes.sh` onu GitHub Release sayfasına
   koyar); maddenin yeri tek soruyla belirlenir: *"Bu sürümü kuran biri bir fark görür mü, ya da bilmesi gerekir mi?"* API yanıtı
   ya da hata metni, panel, e-posta, ortam değişkeni/yapılandırma, log biçimi, performans ya da şema değişiyorsa **evet**: madde
