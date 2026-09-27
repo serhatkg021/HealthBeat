@@ -80,8 +80,8 @@ func (s *Service) Record(ctx context.Context, r Report) error {
 		logErr("ingest: mark host online", err)
 	}
 
-	s.engine.ResolveOffline(ctx, r.HostID, r.OrgID)
-	s.engine.EvaluateDocker(ctx, r.HostID, r.OrgID, p.DockerContainers)
-	s.engine.EvaluateMetrics(ctx, r.HostID, r.OrgID, p.CPUUsagePct, p.RAMUsagePct, p.Disk)
+	s.engine.EvaluateReport(ctx, r.HostID, r.OrgID, alertengine.Report{
+		CPUPct: p.CPUUsagePct, RAMPct: p.RAMUsagePct, Disks: p.Disk, Containers: p.DockerContainers,
+	})
 	return nil
 }

@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -77,13 +78,99 @@ func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, 
 	return e
 }
 
+// Report, bir agent raporunun alert motorunu ilgilendiren kısmıdır.
+type Report struct {
+	CPUPct, RAMPct float64
+	Disks          []model.DiskUsage
+	Containers     []model.DockerContainerReport
+}
+
+// EvaluateReport, bir alımdan sonra bütün alert denetimlerini çalıştırır: aktif host_offline alert'ini çözer, sonra
+// container'ları ve metrikleri değerlendirir. Host'un aktif alert'leri ve eşikleri rapor başına bir kez okunur.
+func (e *Engine) EvaluateReport(ctx context.Context, hostID, orgID uuid.UUID, r Report) {
+	st, ok := e.loadState(ctx, hostID, orgID)
+	if !ok {
+		return
+	}
+	if a, ok := st.take(model.AlertTypeHostOffline, ""); ok {
+		e.resolveAndNotify(ctx, a, orgID, nil, nil)
+	}
+	e.evaluateDocker(ctx, st, r.Containers)
+	e.evaluateMetrics(ctx, st, r.CPUPct, r.RAMPct, r.Disks)
+}
+
 // EvaluateMetrics, bir metrik alımından sonra cpu/ram/disk eşik denetimlerini çalıştırır.
 // docker_restart, container başına EvaluateDocker tarafından ayrıca değerlendirilir.
 func (e *Engine) EvaluateMetrics(ctx context.Context, hostID, orgID uuid.UUID, cpuPct, ramPct float64, disks []model.DiskUsage) {
-	e.evaluate(ctx, hostID, orgID, model.MetricTypeCPU, cpuPct)
-	e.evaluate(ctx, hostID, orgID, model.MetricTypeRAM, ramPct)
-	e.evaluateDisks(ctx, hostID, orgID, disks)
-	e.evaluateMissingMounts(ctx, hostID, orgID, disks)
+	if st, ok := e.loadState(ctx, hostID, orgID); ok {
+		e.evaluateMetrics(ctx, st, cpuPct, ramPct, disks)
+	}
+}
+
+// hostState, bir raporun değerlendirmesinde bir kez okunan durumdur: host'un aktif alert'leri ve bütün eşikleri. Her
+// kalem (metrik, mount, container) veritabanına ayrı ayrı gitmek yerine buradan okur; motorun yaptığı değişiklikler de
+// buraya yansıtılır. Aynı anda açılmaya karşı koruma yine veritabanındadır (CreateIfNoneActive).
+type hostState struct {
+	hostID, orgID uuid.UUID
+	thresholds    store.HostThresholds
+	active        map[alertKey]model.Alert
+}
+
+type alertKey struct{ alertType, subject string }
+
+func (e *Engine) loadState(ctx context.Context, hostID, orgID uuid.UUID) (*hostState, bool) {
+	thresholds, err := e.thresholds.ResolveHost(ctx, hostID, orgID)
+	if err != nil {
+		slog.ErrorContext(ctx, "alert engine: resolve thresholds", "host_id", hostID.String(), "err", err)
+		return nil, false
+	}
+	active, err := e.alerts.ListActiveForHost(ctx, hostID)
+	if err != nil {
+		slog.ErrorContext(ctx, "alert engine: list active alerts", "host_id", hostID.String(), "err", err)
+		return nil, false
+	}
+	st := &hostState{hostID: hostID, orgID: orgID, thresholds: thresholds, active: make(map[alertKey]model.Alert, len(active))}
+	for _, a := range active {
+		st.active[alertKey{a.AlertType, a.Subject}] = a
+	}
+	return st, true
+}
+
+// take, bu tür+subject'in aktif alert'ini durumdan çıkarıp döndürür (çözülmek üzere).
+func (s *hostState) take(alertType, subject string) (model.Alert, bool) {
+	k := alertKey{alertType, subject}
+	a, ok := s.active[k]
+	delete(s.active, k)
+	return a, ok
+}
+
+// activeOf, bu türün aktif alert'leridir, subject sırasıyla.
+func (s *hostState) activeOf(alertType string) []model.Alert {
+	var out []model.Alert
+	for k, a := range s.active {
+		if k.alertType == alertType {
+			out = append(out, a)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Subject < out[j].Subject })
+	return out
+}
+
+func (e *Engine) evaluateMetrics(ctx context.Context, st *hostState, cpuPct, ramPct float64, disks []model.DiskUsage) {
+	e.evaluate(ctx, st, model.MetricTypeCPU, cpuPct)
+	e.evaluate(ctx, st, model.MetricTypeRAM, ramPct)
+	// BOŞ bir disk listesi hiçbir şeyi değiştirmez (bkz. evaluateDisks).
+	if len(disks) == 0 {
+		return
+	}
+	allMounts, selection, err := e.hosts.DiskAlertMounts(ctx, st.hostID)
+	if err != nil {
+		// Seçim olmadan hangi mount'ların istendiğini bilemeyiz; tahmin etmek yerine hiçbir şey yapma.
+		slog.ErrorContext(ctx, "alert engine: read disk alert mounts", "host_id", st.hostID.String(), "err", err)
+		return
+	}
+	e.evaluateDisks(ctx, st, disks, allMounts, selection)
+	e.evaluateMissingMounts(ctx, st, disks, allMounts, selection)
 }
 
 // evaluateDisks MOUNT BAŞINA bir alert üretir (Alert.Subject mount yoludur); her biri, varsa o
@@ -95,22 +182,10 @@ func (e *Engine) EvaluateMetrics(ctx context.Context, hostID, orgID uuid.UUID, c
 // BOŞ bir rapor hiçbir şeyi değiştirmez: agent, toplama başarısız olduğunda da boş disk listesi
 // yollar ve bunu "her mount kayboldu" diye okumak, sonraki iyi raporda tüm alert'leri çözüp
 // yeniden açmaya (ve yeniden bildirmeye) yol açardı.
-func (e *Engine) evaluateDisks(ctx context.Context, hostID, orgID uuid.UUID, disks []model.DiskUsage) {
-	if len(disks) == 0 {
-		return
-	}
-	thresholds, err := e.thresholds.ResolveSubjects(ctx, hostID, orgID, model.MetricTypeDisk)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: resolve disk thresholds", "host_id", hostID.String(), "err", err)
-		return
-	}
+func (e *Engine) evaluateDisks(ctx context.Context, st *hostState, disks []model.DiskUsage, allMounts bool, selection []string) {
+	thresholds := st.thresholds.Metric(model.MetricTypeDisk)
 	if thresholds.Base == nil && len(thresholds.PerSubject) == 0 {
 		return
-	}
-	allMounts, selection, err := e.hosts.DiskAlertMounts(ctx, hostID)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: read disk alert mounts", "host_id", hostID.String(), "err", err)
-		return // seçim olmadan hangi mount'ların istendiğini bilemeyiz; tahmin etmek yerine hiçbir şey yapma
 	}
 	var selected map[string]struct{} // nil = raporlanan tüm mount'lar
 	if !allMounts {
@@ -134,17 +209,13 @@ func (e *Engine) evaluateDisks(ctx context.Context, hostID, orgID uuid.UUID, dis
 			continue
 		}
 		evaluated[d.Mount] = struct{}{}
-		e.apply(ctx, hostID, orgID, model.MetricTypeDisk, d.Mount, d.UsedPct, threshold)
+		e.apply(ctx, st, model.MetricTypeDisk, d.Mount, d.UsedPct, threshold)
 	}
 
-	open, err := e.alerts.ListActive(ctx, hostID, model.MetricTypeDisk)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: list open disk alerts", "host_id", hostID.String(), "err", err)
-		return
-	}
-	for _, a := range open {
+	for _, a := range st.activeOf(model.MetricTypeDisk) {
 		if _, still := evaluated[a.Subject]; !still {
-			e.resolveAndNotify(ctx, a, orgID, nil, nil)
+			st.take(a.AlertType, a.Subject)
+			e.resolveAndNotify(ctx, a, st.orgID, nil, nil)
 		}
 	}
 }
@@ -159,57 +230,39 @@ const missingMountReports = 3
 // — raporlanan her mount alert üretiyorsa (seçim yapılmamış) — kendi eşiği olanlar.
 // "Raporlanan her mount" ve hiç eşik yokken hiçbir şey beklenmez: kaybolan bir mount'u
 // hiç var olmamış olandan ayırmanın yolu yoktur.
-func (e *Engine) expectedMounts(ctx context.Context, hostID uuid.UUID) (map[string]struct{}, error) {
-	allMounts, selection, err := e.hosts.DiskAlertMounts(ctx, hostID)
-	if err != nil {
-		return nil, err
-	}
+func expectedMounts(st *hostState, allMounts bool, selection []string) map[string]struct{} {
 	expected := map[string]struct{}{}
 	if !allMounts {
 		for _, m := range selection {
 			expected[m] = struct{}{}
 		}
-		return expected, nil
+		return expected
 	}
-	own, err := e.thresholds.HostSubjectOverrides(ctx, hostID, model.MetricTypeDisk)
-	if err != nil {
-		return nil, err
-	}
-	for m := range own {
+	for m := range st.thresholds.Metric(model.MetricTypeDisk).PerSubject {
 		expected[m] = struct{}{}
 	}
-	return expected, nil
+	return expected
 }
 
 // evaluateMissingMounts, son missingMountReports raporun hiçbirinde listelenmeyen beklenen bir
 // mount için critical disk_missing alert'i (Alert.Subject = mount) üretir; mount yeniden
 // raporlanınca ya da beklenmez olunca çözer. evaluateDisks gibi boş bir raporu tamamen yok
 // sayar: o bir toplama hatasıdır, "her mount kayboldu" değil.
-func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.UUID, disks []model.DiskUsage) {
-	if len(disks) == 0 {
-		return
-	}
-	expected, err := e.expectedMounts(ctx, hostID)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: read expected mounts", "host_id", hostID.String(), "err", err)
-		return
-	}
-	open, err := e.alerts.ListActive(ctx, hostID, model.AlertTypeDiskMissing)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: list open disk_missing alerts", "host_id", hostID.String(), "err", err)
-		return
-	}
+func (e *Engine) evaluateMissingMounts(ctx context.Context, st *hostState, disks []model.DiskUsage, allMounts bool, selection []string) {
+	hostID := st.hostID
+	expected := expectedMounts(st, allMounts, selection)
 
 	present := make(map[string]struct{}, len(disks))
 	for _, d := range disks {
 		present[d.Mount] = struct{}{}
 	}
-	stillOpen := make(map[string]struct{}, len(open)) // açık kalan disk_missing alert'leri: yeniden açılmaz
-	for _, a := range open {
+	stillOpen := map[string]struct{}{} // açık kalan disk_missing alert'leri: yeniden açılmaz
+	for _, a := range st.activeOf(model.AlertTypeDiskMissing) {
 		_, wanted := expected[a.Subject]
 		_, back := present[a.Subject]
 		if !wanted || back {
-			e.resolveAndNotify(ctx, a, orgID, nil, nil)
+			st.take(a.AlertType, a.Subject)
+			e.resolveAndNotify(ctx, a, st.orgID, nil, nil)
 			continue
 		}
 		stillOpen[a.Subject] = struct{}{}
@@ -245,7 +298,7 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 		if seen {
 			continue
 		}
-		err := e.change(ctx, e.prepare(ctx, hostID, orgID, model.AlertLevelCritical), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
+		err := e.change(ctx, e.prepare(ctx, hostID, st.orgID, model.AlertLevelCritical), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
 			return tx.Alerts().CreateIfNoneActive(ctx, hostID, model.AlertTypeDiskMissing, m, model.AlertLevelCritical, nil, nil)
 		})
 		if err != nil {
@@ -254,16 +307,10 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, hostID, orgID uuid.U
 	}
 }
 
-func (e *Engine) evaluate(ctx context.Context, hostID, orgID uuid.UUID, metricType string, value float64) {
-	threshold, found, err := e.thresholds.Resolve(ctx, hostID, orgID, metricType)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: resolve threshold", "host_id", hostID.String(), "metric", metricType, "err", err)
-		return
+func (e *Engine) evaluate(ctx context.Context, st *hostState, metricType string, value float64) {
+	if threshold := st.thresholds.Metric(metricType).Base; threshold != nil {
+		e.apply(ctx, st, metricType, "", value, *threshold)
 	}
-	if !found {
-		return
-	}
-	e.apply(ctx, hostID, orgID, metricType, "", value, threshold)
 }
 
 // EvaluateDocker, docker_restart eşiğini (container'ın kendisininki, yoksa host'ınki) raporlanan
@@ -281,11 +328,16 @@ func (e *Engine) EvaluateDocker(ctx context.Context, hostID, orgID uuid.UUID, co
 	if len(containers) == 0 {
 		return
 	}
-	thresholds, err := e.thresholds.ResolveSubjects(ctx, hostID, orgID, model.MetricTypeDockerRestart)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: resolve docker_restart thresholds", "host_id", hostID.String(), "err", err)
+	if st, ok := e.loadState(ctx, hostID, orgID); ok {
+		e.evaluateDocker(ctx, st, containers)
+	}
+}
+
+func (e *Engine) evaluateDocker(ctx context.Context, st *hostState, containers []model.DockerContainerReport) {
+	if len(containers) == 0 {
 		return
 	}
+	thresholds := st.thresholds.Metric(model.MetricTypeDockerRestart)
 	if thresholds.Base == nil && len(thresholds.PerSubject) == 0 {
 		return
 	}
@@ -299,32 +351,25 @@ func (e *Engine) EvaluateDocker(ctx context.Context, hostID, orgID uuid.UUID, co
 			continue
 		}
 		present[c.Name] = struct{}{}
-		e.apply(ctx, hostID, orgID, model.MetricTypeDockerRestart, c.Name, float64(c.RestartCount), threshold)
+		e.apply(ctx, st, model.MetricTypeDockerRestart, c.Name, float64(c.RestartCount), threshold)
 	}
 
-	open, err := e.alerts.ListActive(ctx, hostID, model.MetricTypeDockerRestart)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: list open docker_restart alerts", "host_id", hostID.String(), "err", err)
-		return
-	}
-	for _, a := range open {
+	for _, a := range st.activeOf(model.MetricTypeDockerRestart) {
 		if _, stillThere := present[a.Subject]; !stillThere {
-			e.resolveAndNotify(ctx, a, orgID, nil, nil)
+			st.take(a.AlertType, a.Subject)
+			e.resolveAndNotify(ctx, a, st.orgID, nil, nil)
 		}
 	}
 }
 
 // apply, bir host+metrik+subject için alert yaşam döngüsünü çözümlenmiş bir eşiğe göre
 // çalıştırır.
-func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType, subject string, value float64, threshold model.ThresholdConfig) {
+func (e *Engine) apply(ctx context.Context, st *hostState, metricType, subject string, value float64, threshold model.ThresholdConfig) {
+	hostID, orgID := st.hostID, st.orgID
 	// Aktif alert: açık ya da onaylanmış. Onay "gördüm, sustur ama izle"dir: onaylanan alert yeni bir alert/bildirim
 	// açılmasını engeller ve eşik altına inince çözülür (bkz. store: aktif alert).
-	existing, err := e.alerts.GetActiveSubject(ctx, hostID, metricType, subject)
-	hasActive := err == nil
-	if err != nil && !errors.Is(err, store.ErrNotFound) {
-		slog.ErrorContext(ctx, "alert engine: get active alert", "host_id", hostID.String(), "metric", metricType, "subject", subject, "err", err)
-		return
-	}
+	key := alertKey{metricType, subject}
+	existing, hasActive := st.active[key]
 
 	var level string
 	switch {
@@ -336,6 +381,7 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 
 	if level == "" {
 		if hasActive {
+			delete(st.active, key)
 			// Çözülme okuması: eşiğin altına döndüğü andaki gerçek ölçüm ve uyarı eşiği — böylece
 			// e-postadaki "Değer" alert'in son yükseltildiği eski, hâlâ eşik üstü okumayı değil,
 			// artık gerçekten eşiğin altında olan güncel durumu gösterir.
@@ -371,9 +417,11 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 				if reopen {
 					changed.Status, changed.AcknowledgedAt, changed.AcknowledgedBy = model.AlertStatusOpen, nil, nil
 				}
+				st.active[key] = changed
 				return changed, true, nil
 			})
 			if err != nil {
+				st.active[key] = existing
 				slog.ErrorContext(ctx, "alert engine: update alert level", "alert_id", existing.ID.String(), "err", err)
 			}
 		}
@@ -381,12 +429,16 @@ func (e *Engine) apply(ctx context.Context, hostID, orgID uuid.UUID, metricType,
 	}
 
 	created := false
-	err = e.change(ctx, e.prepare(ctx, hostID, orgID, level), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
+	err := e.change(ctx, e.prepare(ctx, hostID, orgID, level), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
 		alert, ok, err := tx.Alerts().CreateIfNoneActive(ctx, hostID, metricType, subject, level, valuePtr, triggerPtr)
 		created = ok
+		if ok {
+			st.active[key] = alert
+		}
 		return alert, ok, err
 	})
 	if err != nil {
+		delete(st.active, key)
 		slog.ErrorContext(ctx, "alert engine: create alert", "host_id", hostID.String(), "metric", metricType, "subject", subject, "err", err)
 		return
 	}

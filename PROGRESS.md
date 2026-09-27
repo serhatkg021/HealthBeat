@@ -4,10 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — Kullanıcı okumaları şifre hash'ini seçmiyor (yalnızca giriş ve şifre değiştirme okuyor);
-organizasyon erişimi yanıt tipine taşındı. Önceki adımlar: store hata nedenleri (#23), alert bildirim geçmişi (#22), kalıcı
-bildirim kuyruğu (#21), alert motoru bölme (#20), ortak ingest (#19), erişim kapsamı (#18), handler hata akışı (#17),
-log/Faz A (#12–#16). Sırada: C4 (alert değerlendirme sorgularını ölçüp azaltma).
+**Son güncelleme:** 2026-09-27 — Alert değerlendirmesi rapor başına bir kez okuyor (aktif alert'ler, eşikler, disk
+seçimi): durum değişmeyen bir rapor mount/container sayısından bağımsız 3 sorgu. Önceki adımlar: yanıt tipleri ve
+`password_hash` (#24), store hata nedenleri (#23), alert bildirim geçmişi (#22), kalıcı bildirim kuyruğu (#21), alert
+motoru bölme (#20), ortak ingest (#19), erişim kapsamı (#18), handler hata akışı (#17), log/Faz A (#12–#16). Sırada: D
+(store tekrarları, rol literal'leri, ILIKE kaçışı).
 
 ## Durum
 

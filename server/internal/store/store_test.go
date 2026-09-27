@@ -74,6 +74,46 @@ func TestThresholdResolvePrecedence(t *testing.T) {
 	}
 }
 
+// ResolveHost bütün metrikleri tek çağrıda, Resolve ile aynı önceliklerle çözer; sunucunun yalnızca subject'li satırı
+// varsa sunucu geneli eşik varsayılandan gelir.
+func TestResolveHostResolvesEveryMetricAtOnce(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	org := testdb.Org(t, pool, "A")
+	h1 := testdb.PushHost(t, pool, org, "h1", "h")
+	h2 := testdb.PushHost(t, pool, org, "h2", "h")
+	testdb.Threshold(t, pool, nil, nil, "cpu", 80, 95)  // genel
+	testdb.Threshold(t, pool, nil, nil, "disk", 85, 95) // genel
+	testdb.Threshold(t, pool, &org, nil, "ram", 70, 90) // organizasyon
+	testdb.Threshold(t, pool, nil, &h1, "disk", 60, 80) // h1'in kendi disk eşiği
+	testdb.MountThreshold(t, pool, h1, "/data", 50, 70)
+	testdb.MountThreshold(t, pool, h2, "/logs", 40, 60)
+
+	h1All, err := store.NewThresholds(pool).ResolveHost(ctx, h1, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h2All, err := store.NewThresholds(pool).ResolveHost(ctx, h2, org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check := func(name string, all store.HostThresholds, metric, subject string, wantW float64, wantFound bool) {
+		t.Helper()
+		got, found := all.Metric(metric).For(subject)
+		if found != wantFound || got.WarningLevel != wantW {
+			t.Errorf("%s: %s %q = %v found=%v, want %v found=%v", name, metric, subject, got.WarningLevel, found, wantW, wantFound)
+		}
+	}
+	check("global cpu", h1All, "cpu", "", 80, true)
+	check("organization ram", h1All, "ram", "", 70, true)
+	check("host's own disk", h1All, "disk", "/", 60, true)
+	check("host's own mount", h1All, "disk", "/data", 50, true)
+	check("no docker_restart threshold", h1All, "docker_restart", "web", 0, false)
+	check("mount row only: base from the global default", h2All, "disk", "/", 85, true)
+	check("mount row only: its own mount", h2All, "disk", "/logs", 40, true)
+	check("another host's mount is invisible", h2All, "disk", "/data", 85, true)
+}
+
 func TestThresholdCreateConstraints(t *testing.T) {
 	pool := testdb.New(t)
 	ctx := context.Background()

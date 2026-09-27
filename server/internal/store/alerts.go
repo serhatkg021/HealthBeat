@@ -180,6 +180,18 @@ func (s *Alerts) ListActive(ctx context.Context, hostID uuid.UUID, alertType str
 	return scanAlerts(rows)
 }
 
+// ListActiveForHost, host'un bütün aktif (açık ya da onaylanmış) alert'leridir, türüne bakılmaksızın; alert motoru
+// rapor başına bir kez okur.
+func (s *Alerts) ListActiveForHost(ctx context.Context, hostID uuid.UUID) ([]model.Alert, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+alertColumns+` FROM alerts WHERE host_id = $1 AND status <> 'resolved' ORDER BY alert_type, subject`, hostID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanAlerts(rows)
+}
+
 // Acknowledge yalnızca şu an açık bir alert'te başarılı olur; onaylayan kullanıcı by ile kaydedilir — ErrNotFound hem "yok" hem
 // "açık değil" (zaten onaylanmış/çözülmüş) durumunu kapsar; çünkü çağıranın yanıtı iki durumda
 // da aynı görünmeli.
