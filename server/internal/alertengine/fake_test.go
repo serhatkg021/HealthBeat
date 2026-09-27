@@ -50,12 +50,12 @@ func (f *fakeAlerts) GetActiveSubject(_ context.Context, hostID uuid.UUID, alert
 	return model.Alert{}, store.ErrNotFound
 }
 
-func (f *fakeAlerts) ListActive(_ context.Context, hostID uuid.UUID, alertType string) ([]model.Alert, error) {
+func (f *fakeAlerts) ListActiveForHost(_ context.Context, hostID uuid.UUID) ([]model.Alert, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	var out []model.Alert
 	for _, a := range f.alerts {
-		if a.HostID == hostID && a.AlertType == alertType && a.Status != model.AlertStatusResolved {
+		if a.HostID == hostID && a.Status != model.AlertStatusResolved {
 			out = append(out, *a)
 		}
 	}
@@ -120,20 +120,13 @@ func (f *fakeAlerts) ResolveActiveByHostAndMetric(ctx context.Context, hostID uu
 // fakeThresholds yalnızca host geneli eşikleri bilir (mount/container başına eşik yok).
 type fakeThresholds map[string]model.ThresholdConfig
 
-func (f fakeThresholds) Resolve(_ context.Context, _, _ uuid.UUID, metricType string) (model.ThresholdConfig, bool, error) {
-	t, ok := f[metricType]
-	return t, ok, nil
-}
-
-func (f fakeThresholds) ResolveSubjects(_ context.Context, _, _ uuid.UUID, metricType string) (store.SubjectThresholds, error) {
-	if t, ok := f[metricType]; ok {
-		return store.SubjectThresholds{Base: &t}, nil
+func (f fakeThresholds) ResolveHost(context.Context, uuid.UUID, uuid.UUID) (store.HostThresholds, error) {
+	out := store.HostThresholds{}
+	for metricType, t := range f {
+		t := t
+		out[metricType] = store.SubjectThresholds{Base: &t}
 	}
-	return store.SubjectThresholds{}, nil
-}
-
-func (f fakeThresholds) HostSubjectOverrides(context.Context, uuid.UUID, string) (map[string]model.ThresholdLevels, error) {
-	return nil, nil
+	return out, nil
 }
 
 type fakeHosts struct {

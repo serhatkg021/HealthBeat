@@ -56,6 +56,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Alert değerlendirmesi rapor başına daha az sorgu çalıştırıyor:** sunucunun aktif alert'leri, eşikleri ve disk seçimi
+  her kalem (metrik, mount, container) için ayrı ayrı değil, rapor başına bir kez okunuyor. Durum değişmeyen bir rapor
+  artık mount ve container sayısından bağımsız olarak 3 sorgu (önceden 4 mount ve 5 container'la 26); alert davranışı aynı.
 - **İş kuralı hata mesajlarında "çakışma: " / "bulunamadı: " öneki kalktı:** ör. `çakışma: bu e-posta zaten kullanımda`
   → `bu e-posta zaten kullanımda`. Durum kodları aynı. Bazı 404 metinleri netleşti (`üst organizasyon bulunamadı`,
   bildirim kuralında `organizasyon, sunucu, kullanıcı ya da iletişim kişisi bulunamadı`); sunucu eşiklerindeki İngilizce

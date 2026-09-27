@@ -164,40 +164,14 @@ func (s *Thresholds) Delete(ctx context.Context, id uuid.UUID) error {
 // üst organizasyonların varsayılanı (en yakın önce) > genel varsayılan. Bu metrik için hiçbir şey
 // yapılandırılmamışsa found hata değil false olur.
 func (s *Thresholds) Resolve(ctx context.Context, hostID, orgID uuid.UUID, metricType string) (model.ThresholdConfig, bool, error) {
-	row := s.pool.QueryRow(ctx,
-		`SELECT `+hostColumnsThr+` FROM host_custom_thresholds
-		 WHERE host_id = $1 AND metric_type = $2 AND subject IS NULL`,
-		hostID, metricType,
-	)
-	t, err := scanThreshold(row)
-	if err == nil {
-		return t, true, nil
-	}
-	if !isNoRows(err) {
-		return model.ThresholdConfig{}, false, err
-	}
-	return s.resolveDefault(ctx, orgID, metricType)
-}
-
-// resolveDefault, organizasyon zincirinde (kendisi, üst şirketler) en yakın varsayılanı, yoksa genel olanı seçer.
-func (s *Thresholds) resolveDefault(ctx context.Context, orgID uuid.UUID, metricType string) (model.ThresholdConfig, bool, error) {
-	row := s.pool.QueryRow(ctx,
-		orgChainCTE(1)+`
-		 SELECT d.id, d.organization_id, NULL::uuid, d.metric_type, ''::text, d.warning_level, d.critical_level, d.created_at, d.updated_at
-		 FROM threshold_defaults d LEFT JOIN chain c ON c.id = d.organization_id
-		 WHERE d.metric_type = $2 AND (d.organization_id IS NULL OR c.id IS NOT NULL)
-		 ORDER BY (d.organization_id IS NULL), c.depth
-		 LIMIT 1`,
-		orgID, metricType,
-	)
-	t, err := scanThreshold(row)
+	all, err := s.ResolveHost(ctx, hostID, orgID)
 	if err != nil {
-		if isNoRows(err) {
-			return model.ThresholdConfig{}, false, nil
-		}
 		return model.ThresholdConfig{}, false, err
 	}
-	return t, true, nil
+	if base := all[metricType].Base; base != nil {
+		return *base, true, nil
+	}
+	return model.ThresholdConfig{}, false, nil
 }
 
 // HostOverrides, host'ın kendi (özel) eşiklerini metrik türüne göre döndürür.
@@ -372,37 +346,74 @@ func (d SubjectThresholds) For(subject string) (model.ThresholdConfig, bool) {
 	return model.ThresholdConfig{}, false
 }
 
-// ResolveSubjects, host'a uygulanabilecek tüm eşikleri yükler: sunucu geneli (kendi satırı, yoksa organizasyon
-// zincirindeki en yakın varsayılan, yoksa genel) ve sunucunun subject'li eşikleri.
+// ResolveSubjects, ResolveHost'un tek bir metriğidir.
 func (s *Thresholds) ResolveSubjects(ctx context.Context, hostID, orgID uuid.UUID, metricType string) (SubjectThresholds, error) {
-	out := SubjectThresholds{PerSubject: map[string]model.ThresholdConfig{}}
-
-	rows, err := s.pool.Query(ctx,
-		`SELECT `+hostColumnsThr+` FROM host_custom_thresholds WHERE host_id = $1 AND metric_type = $2`, hostID, metricType)
+	all, err := s.ResolveHost(ctx, hostID, orgID)
 	if err != nil {
 		return SubjectThresholds{}, err
 	}
-	own, err := scanThresholds(rows)
+	return all.Metric(metricType), nil
+}
+
+// HostThresholds, bir host'un bütün metriklerinin geçerli eşikleridir (metrik türü → eşikler).
+type HostThresholds map[string]SubjectThresholds
+
+// Metric, metricType'ın eşikleridir; hiç eşiği yoksa boştur (For hep false döner).
+func (h HostThresholds) Metric(metricType string) SubjectThresholds {
+	if t, ok := h[metricType]; ok {
+		return t
+	}
+	return SubjectThresholds{PerSubject: map[string]model.ThresholdConfig{}}
+}
+
+// ResolveHost, host'a uygulanabilecek bütün eşikleri tek sorguda yükler: her metrik için sunucu geneli (kendi satırı,
+// yoksa organizasyon zincirindeki en yakın varsayılan, yoksa genel) ve sunucunun subject'li eşikleri (disk için mount
+// yolu, docker_restart için container adı). Alert motoru rapor başına bir kez çağırır.
+func (s *Thresholds) ResolveHost(ctx context.Context, hostID, orgID uuid.UUID) (HostThresholds, error) {
+	// Sunucunun kendi satırları ve her metrik için zincirdeki en yakın varsayılan; varsayılan yalnızca sunucunun o metrik
+	// için genel satırı yoksa kullanılır.
+	rows, err := s.pool.Query(ctx,
+		orgChainCTE(1)+`
+		 SELECT `+hostColumnsThr+` FROM host_custom_thresholds WHERE host_id = $2
+		 UNION ALL
+		 (SELECT DISTINCT ON (d.metric_type)
+		         d.id, d.organization_id, NULL::uuid, d.metric_type, ''::text, d.warning_level, d.critical_level, d.created_at, d.updated_at
+		  FROM threshold_defaults d LEFT JOIN chain c ON c.id = d.organization_id
+		  WHERE d.organization_id IS NULL OR c.id IS NOT NULL
+		  ORDER BY d.metric_type, (d.organization_id IS NULL), c.depth)`,
+		orgID, hostID)
+	if err != nil {
+		return nil, err
+	}
+	all, err := scanThresholds(rows)
 	rows.Close()
 	if err != nil {
-		return SubjectThresholds{}, err
+		return nil, err
 	}
-	for _, t := range own {
-		if t.Subject != "" {
-			out.PerSubject[t.Subject] = t
+
+	out := HostThresholds{}
+	var defaults []model.ThresholdConfig
+	for _, t := range all {
+		if t.HostID == nil {
+			defaults = append(defaults, t)
 			continue
 		}
-		t := t
-		out.Base = &t
+		m := out.Metric(t.MetricType)
+		if t.Subject != "" {
+			m.PerSubject[t.Subject] = t
+		} else {
+			t := t
+			m.Base = &t
+		}
+		out[t.MetricType] = m
 	}
-	if out.Base == nil {
-		def, found, err := s.resolveDefault(ctx, orgID, metricType)
-		if err != nil {
-			return SubjectThresholds{}, err
+	for _, d := range defaults {
+		m := out.Metric(d.MetricType)
+		if m.Base == nil {
+			d := d
+			m.Base = &d
 		}
-		if found {
-			out.Base = &def
-		}
+		out[d.MetricType] = m
 	}
 	return out, nil
 }
