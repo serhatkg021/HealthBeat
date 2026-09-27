@@ -4,10 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — Container taban imajları güncellendi (`alpine` 3.24, `nginx` 1.31, panel derlemesi
-Node 24 LTS); izole compose ortamında ve tarayıcıda denendi. Server refactor planının E fazı tamamlandı (#27–#29, #41,
-#42). Sırada: panel bağımlılıkları (TypeScript 7 dahil), docker aksiyonları + Dependabot ayarı, ardından 2.4 (audit ve
-çözülmüş alert saklama süresi).
+**Son güncelleme:** 2026-09-27 — Panel bağımlılıkları güncellendi (TypeScript 7, `vite` 8.3.1, `lucide-react` 1.48,
+`oxlint` 1.85); container taban imajları güncellendi (#43: `alpine` 3.24, `nginx` 1.31, panel derlemesi Node 24 LTS).
+Server refactor planının E fazı tamamlandı (#27–#29, #41, #42). Sırada: docker aksiyonları + Dependabot ayarı, ardından
+2.4 (audit ve çözülmüş alert saklama süresi).
 
 ## Durum
 
