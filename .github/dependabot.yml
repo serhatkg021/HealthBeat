@@ -1,0 +1,41 @@
+# Haftalık bağımlılık güncellemeleri. Küçük ve yama sürümleri ekosistem başına tek PR'da toplanır; ana sürüm atlayanlar
+# ayrı PR olarak gelir. Birleştirmeden önce ilgili hattın CHANGELOG'una madde eklenir (CONTRIBUTING.md §3).
+# Agent'ın dış Go bağımlılığı yok, bu yüzden izlenmiyor.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /server
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Server"
+    groups:
+      server-go:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /server/panel
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Panel"
+    groups:
+      panel-npm:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker # server ve panel imajlarının taban imajları
+    directories: [/server, /server/panel]
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "Server"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "CI"
+    groups:
+      actions:
+        update-types: [minor, patch]

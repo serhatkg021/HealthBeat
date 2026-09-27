@@ -24,7 +24,10 @@ girer; sürüm etiketleri yalnızca `main`'dan atılır.** (GitFlow'daki gibi `d
 ## 3. Pull Request
 
 - PR açıklaması `.github/pull_request_template.md` kontrol listesini izler.
-- **CI yeşil olmadan birleştirme.** `ci.yml` her PR'da çalışır (agent, server, panel, sürüm betikleri).
+- **CI yeşil olmadan birleştirme.** `ci.yml` her PR'da çalışır (agent, server, server lint: `staticcheck` + `govulncheck`,
+  panel, sürüm betikleri).
+- **Dependabot PR'ları** (`.github/dependabot.yml`, haftalık) de bu kurallara tabidir: birleştirmeden önce ilgili hattın
+  CHANGELOG'una madde eklenir.
 - **Hangi hat?** `agent/` değiştiyse **agent** hattı, `server/` ve `server/panel/` değiştiyse **server + panel** hattı etkilenir
   (bkz. `docs/DISTRIBUTION.md` §11.2). Her PR, etkilediği hattın değişiklik günlüğüne (`agent/CHANGELOG.md` ya da
   `server/CHANGELOG.md`, "Yayınlanmamış" bölümü) bir madde ekler; panel maddeleri "Panel:" ile başlar.
@@ -76,6 +79,7 @@ kurallar disiplinle uygulanır.
 
 ```sh
 cd server && TEST_DATABASE_URL=postgres://… go test ./... -race     # veritabanı testleri geçici şemada çalışır
+cd server && go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 cd agent && go test ./... -race && ../agent/deploy/install_test.sh
 cd server/panel && npx tsc -b && npm test && npm run build
 scripts/release_test.sh                                            # sürüm betikleri

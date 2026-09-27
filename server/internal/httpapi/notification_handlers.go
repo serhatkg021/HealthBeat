@@ -23,12 +23,6 @@ type notificationRouteRequest struct {
 	MinLevel       string     `json:"min_level"`
 }
 
-// scopeOrg, kuralın kapsamının organizasyonunu döndürür (sunucu kapsamında sunucunun organizasyonu).
-type routeScope struct {
-	orgID  uuid.UUID
-	hostID *uuid.UUID
-}
-
 func (d *Deps) handleListOrganizationRoutes(w http.ResponseWriter, r *http.Request) error {
 	fail := failWith("bildirim kuralları alınamadı")
 	orgID, err := d.managedOrg(r, "list org routes", fail)

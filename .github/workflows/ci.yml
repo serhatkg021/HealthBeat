@@ -80,6 +80,25 @@ jobs:
           go vet ./...
           go test ./... -race
 
+  server-lint:
+    name: server lint (staticcheck, govulncheck)
+    if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'server' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      # Araç sürümleri sabit: @latest bir gün kendiliğinden güncellenip CI'ı kod değişmeden kırabilir.
+      - name: staticcheck
+        working-directory: server
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+      # Yalnızca kodun gerçekten çağırdığı açıklar başarısız sayılır; kullanılmayan paketlerdeki bildirimler yalnızca listelenir.
+      - name: govulncheck
+        working-directory: server
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
   panel:
     name: panel (tsc, test, build)
     if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'server' }}
