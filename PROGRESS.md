@@ -4,9 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — `AUDIT_RETENTION_DAYS` ve `RESOLVED_ALERT_RETENTION_DAYS` eklendi (varsayılan `0` =
-sonsuz; metriklerle aynı saatlik iş), migration `000004` (indeks). Bununla **server refactor planı tamamlandı** (2.1–2.5,
-A–E). Dependabot düzeni: server Go haftalık, diğerleri aylık, güvenlik güncellemeleri açık (#43–#47).
+**Son güncelleme:** 2026-09-27 — "Server ve panel tek ürün" ilkesi yazıldı (`CONTRIBUTING.md`, `docs/COMPATIBILITY.md`):
+aynı sürüm, birlikte dağıtım, aralarında geriye uyumluluk aranmaz; geriye uyumluluk yalnızca agent ↔ server. Server
+refactor planı tamamlandı (#7–#48). Sırada: server sürümü (öneri).
 
 ## Durum
 
