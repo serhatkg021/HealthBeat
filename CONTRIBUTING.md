@@ -26,9 +26,10 @@ girer; sürüm etiketleri yalnızca `main`'dan atılır.** (GitFlow'daki gibi `d
 - PR açıklaması `.github/pull_request_template.md` kontrol listesini izler.
 - **CI yeşil olmadan birleştirme.** `ci.yml` her PR'da çalışır (agent, server, server lint: `staticcheck` + `govulncheck`,
   panel, sürüm betikleri).
-- **Dependabot PR'ları** (`.github/dependabot.yml`, haftalık) doğrudan birleştirilmez: başlıkları İngilizcedir ve CHANGELOG
-  maddesi taşımaz. Aynı güncelleme kurallara uygun kendi PR'ımızla yapılır (ana sürümler önce sürüm notları okunarak
-  denenir), sonra Dependabot'un PR'ı gerekçesiyle kapatılır.
+- **Dependabot PR'ları** (`.github/dependabot.yml`; server Go haftalık, diğerleri aylık) birleştirilmeden önce
+  düzeltilir: başlık ve açıklama Türkçeleştirilir (squash commit'i onlardan oluşur), dalına ilgili hattın CHANGELOG satırını
+  ekleyen bir commit push'lanır (`PROGRESS.md` güncellenmez). Ana sürümlerde önce sürüm notları okunur ve denenir; uygun
+  olmayan güncelleme gerekçesiyle kapatılır. `main` değişip çakışırsa PR'a `@dependabot recreate` yazılır.
 - **Hangi hat?** `agent/` değiştiyse **agent** hattı, `server/` ve `server/panel/` değiştiyse **server + panel** hattı etkilenir
   (bkz. `docs/DISTRIBUTION.md` §11.2). Her PR, etkilediği hattın değişiklik günlüğüne (`agent/CHANGELOG.md` ya da
   `server/CHANGELOG.md`, "Yayınlanmamış" bölümü) bir madde ekler; panel maddeleri "Panel:" ile başlar.
