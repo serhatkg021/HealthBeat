@@ -6,7 +6,7 @@ import "regexp"
 
 // Version server (ve onunla birlikte yayınlanan panel) sürümüdür (SemVer). Elle artırılır; `server/vX.Y.Z`
 // etiketiyle yayınlanır. Agent'ın sürümünden BAĞIMSIZDIR (bkz. docs/DISTRIBUTION.md, iki sürüm hattı).
-var Version = "1.0.0"
+var Version = "1.1.0"
 
 // LatestAgent, bu server derlemesinin bildiği en güncel agent sürümüdür (SemVer): panelin "güncel / güncelleme var"
 // sınıflandırmasında LATEST_AGENT_VERSION verilmezse varsayılan olarak kullanılır. Server sürümüyle karıştırma:

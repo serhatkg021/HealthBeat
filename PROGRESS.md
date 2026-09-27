@@ -4,13 +4,13 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — Panel menü ve düğmeleri rol yerine `GET /me` izinlerine göre gösteriyor; rol/izin
-değişikliği sayfa yenilenince yansıyor (üç rolle tarayıcıda denendi). "Server ve panel tek ürün" ilkesi yazıldı (#49).
-Server refactor planı tamamlandı (#7–#48). Sırada: server sürümü.
+**Son güncelleme:** 2026-09-27 — Server + panel **1.1.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
+"Güncellemeden önce" notları). Server refactor planı tamamlandı (#7–#48), panel izin tabanlı arayüz (#50). İleride: genel
+ayarların (agent sürüm politikası vb.) veritabanında tutulup runtime'da değiştirilebilmesi.
 
 ## Durum
 
-Sürüm **1.0.0** (agent ve server+panel ayrı hatlarda). Monitoring, alert, bildirim kuralları, organizasyon ağacı, panel: tamam.
+Sürümler: **server + panel 1.1.0**, **agent 1.0.0** (ayrı hatlar; 1.1.0 ingest protokolünü değiştirmedi). Monitoring, alert, bildirim kuralları, organizasyon ağacı, panel: tamam.
 Geliştirme sürecinden gelen tarih temizlendi: tek baseline migration, `client` → `agent`/`host` adlandırması, panel `server/panel/` altında.
 
 ## Ortam ve nasıl çalıştırılır
