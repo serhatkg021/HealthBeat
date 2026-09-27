@@ -152,6 +152,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- Kullanıcı okumaları şifre hash'ini seçmiyor; hash yalnızca giriş ve şifre değiştirmede ayrı metotlarla
+  (`GetByEmailWithHash`, `GetByIDWithHash`) okunuyor. Organizasyonun erişim bilgisi modelden `organizationResponse`'a taşındı.
 - Store iş kuralı hataları adlandırılmış nedenler oldu (`store.ErrEmailTaken`, `ErrHostTitleTaken`…; `ErrNotFound` ya da
   `ErrConflict`'i sarar); Türkçe metinler ve durum kodları `httpapi/store_errors.go`'da tek tabloda.
 - Alert motoru bölündü (`engine.go` değerlendirme, `dispatch.go` kuyruk ve teslim, `message.go` bildirim metni) ve depolara

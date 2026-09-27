@@ -30,7 +30,6 @@ func (d *Deps) handleGetMe(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return fail("get me: permissions", err)
 	}
-	user.PasswordHash = ""
 	writeJSON(w, http.StatusOK, meResponse{User: user, Permissions: perms})
 	return nil
 }

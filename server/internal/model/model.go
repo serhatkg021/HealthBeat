@@ -15,11 +15,10 @@ import (
 )
 
 type User struct {
-	ID           uuid.UUID `json:"id"`
-	Email        string    `json:"email"`
-	FullName     *string   `json:"full_name,omitempty"` // görünen ad; giriş e-postayla yapılır
-	PasswordHash string    `json:"-"`
-	Role         string    `json:"role"`
+	ID       uuid.UUID `json:"id"`
+	Email    string    `json:"email"`
+	FullName *string   `json:"full_name,omitempty"` // görünen ad; giriş e-postayla yapılır
+	Role     string    `json:"role"`
 	// Phone, ileride SMS bildirimi için; TwoFactor*, ileride iki faktörlü doğrulama için hesap bazlı anahtar
 	// (henüz uygulanmadı: yalnızca saklanır).
 	Phone            *string    `json:"phone,omitempty"`
@@ -69,12 +68,10 @@ type Organization struct {
 	Name                 string     `json:"name"`
 	Address              *string    `json:"address,omitempty"`
 	CreatedAt            time.Time  `json:"created_at"`
-	// Access, listeyi isteyen kullanıcının bu organizasyondaki erişimidir: "full" (atandığı dal) ya da
-	// "context" (yalnızca üst zincir: adı bilgi olarak görünür, içeriği ve kardeş dalları görünmez).
-	// Yalnızca listelerde doludur.
-	Access string `json:"access,omitempty"`
 }
 
+// Çağıranın bir organizasyondaki erişimi: "full" (atandığı dal) ya da "context" (yalnızca üst zincir: adı bilgi olarak
+// görünür, içeriği ve kardeş dalları görünmez).
 const (
 	OrgAccessFull    = "full"
 	OrgAccessContext = "context"

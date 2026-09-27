@@ -110,8 +110,11 @@ func TestPasswordResetsCompleteRevokesEveryRefreshTokenAndClearsTheFlag(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u.ID != uid || u.MustChangePassword || u.PasswordHash != "$2a$10$new" {
+	if u.ID != uid || u.MustChangePassword {
 		t.Fatalf("returned user = %+v", u)
+	}
+	if _, hash, err := store.NewUsers(pool).GetByIDWithHash(ctx, uid); err != nil || hash != "$2a$10$new" {
+		t.Fatalf("stored hash = %q, %v; want the new hash", hash, err)
 	}
 	var live int
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM refresh_tokens WHERE user_id = $1 AND revoked_at IS NULL`, uid).Scan(&live); err != nil || live != 0 {

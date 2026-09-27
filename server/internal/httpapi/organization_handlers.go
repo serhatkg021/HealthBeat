@@ -13,6 +13,21 @@ import (
 	"healthbeat-server/internal/store"
 )
 
+// organizationResponse, organizasyonun istemciye dönen hâlidir: çağıranın ondaki erişimi eklenir (bkz.
+// model.OrgAccessFull). Oluşturma yanıtında erişim yazılmaz.
+type organizationResponse struct {
+	model.Organization
+	Access string `json:"access,omitempty"`
+}
+
+// organizationView, o'yu access erişimiyle yanıta çevirir; "context" erişiminde içerik (adres) gizlenir.
+func organizationView(o model.Organization, access string) organizationResponse {
+	if access == model.OrgAccessContext {
+		o.Address = nil
+	}
+	return organizationResponse{Organization: o, Access: access}
+}
+
 func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) error {
 	fail := failWith("organizasyonlar listelenemedi")
 	scope := d.scope(r)
@@ -22,10 +37,11 @@ func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) e
 		if err != nil {
 			return fail("list organizations", err)
 		}
-		for i := range orgs {
-			orgs[i].Access = model.OrgAccessFull
+		out := make([]organizationResponse, len(orgs))
+		for i, o := range orgs {
+			out[i] = organizationView(o, model.OrgAccessFull)
 		}
-		writeJSON(w, http.StatusOK, orgs)
+		writeJSON(w, http.StatusOK, out)
 		return nil
 	}
 
@@ -47,15 +63,15 @@ func (d *Deps) handleListOrganizations(w http.ResponseWriter, r *http.Request) e
 	for _, id := range fullIDs {
 		full[id] = struct{}{}
 	}
-	for i := range orgs {
-		if _, ok := full[orgs[i].ID]; ok {
-			orgs[i].Access = model.OrgAccessFull
-			continue
+	out := make([]organizationResponse, len(orgs))
+	for i, o := range orgs {
+		access := model.OrgAccessContext
+		if _, ok := full[o.ID]; ok {
+			access = model.OrgAccessFull
 		}
-		orgs[i].Access = model.OrgAccessContext
-		orgs[i].Address = nil
+		out[i] = organizationView(o, access)
 	}
-	writeJSON(w, http.StatusOK, orgs)
+	writeJSON(w, http.StatusOK, out)
 	return nil
 }
 
@@ -135,11 +151,7 @@ func (d *Deps) handleGetOrganization(w http.ResponseWriter, r *http.Request) err
 	if err != nil {
 		return fail("get organization", err)
 	}
-	org.Access = access
-	if access == model.OrgAccessContext {
-		org.Address = nil // yalnızca üst zincir bilgisi: içerik görünmez
-	}
-	writeJSON(w, http.StatusOK, org)
+	writeJSON(w, http.StatusOK, organizationView(org, access))
 	return nil
 }
 
@@ -201,8 +213,7 @@ func (d *Deps) handleUpdateOrganization(w http.ResponseWriter, r *http.Request) 
 
 	targetID := org.ID.String()
 	d.logAudit(r, "organization.update", "organization", &targetID, map[string]any{"name": org.Name, "parent_organization_id": org.ParentOrganizationID})
-	org.Access = model.OrgAccessFull
-	writeJSON(w, http.StatusOK, org)
+	writeJSON(w, http.StatusOK, organizationView(org, model.OrgAccessFull))
 	return nil
 }
 

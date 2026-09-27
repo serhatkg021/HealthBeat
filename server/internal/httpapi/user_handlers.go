@@ -27,9 +27,6 @@ func (d *Deps) handleListUsers(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return serverErr("kullanıcılar listelenemedi", "list users", err)
 	}
-	for i := range users {
-		users[i].PasswordHash = ""
-	}
 	w.Header().Set("X-Total-Count", strconv.Itoa(total))
 	writeJSON(w, http.StatusOK, users)
 	return nil
@@ -124,7 +121,6 @@ func (d *Deps) handleCreateUser(w http.ResponseWriter, r *http.Request) error {
 	targetID := user.ID.String()
 	d.logAudit(r, "user.create", "user", &targetID, map[string]any{"email": user.Email, "role": user.Role})
 
-	user.PasswordHash = ""
 	writeJSON(w, http.StatusCreated, user)
 	return nil
 }
@@ -141,7 +137,6 @@ func (d *Deps) handleGetUser(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return serverErr("kullanıcı alınamadı", "get user", err)
 	}
-	user.PasswordHash = ""
 	writeJSON(w, http.StatusOK, user)
 	return nil
 }
@@ -221,7 +216,6 @@ func (d *Deps) handleUpdateUser(w http.ResponseWriter, r *http.Request) error {
 	targetID := user.ID.String()
 	d.logAudit(r, "user.update", "user", &targetID, map[string]any{"email": user.Email, "role": user.Role, "password_changed": req.Password != nil})
 
-	user.PasswordHash = ""
 	writeJSON(w, http.StatusOK, user)
 	return nil
 }

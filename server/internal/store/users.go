@@ -20,12 +20,13 @@ func NewUsers(pool *pgxpool.Pool) *Users {
 	return &Users{pool: pool}
 }
 
-const userColumns = `id, email, full_name, password_hash, role, phone, two_factor_enabled, two_factor_channel, created_at, last_login_at, must_change_password`
+// userColumns şifre hash'ini içermez: hash yalnızca onu doğrulayan okumalarda (GetByEmailWithHash, GetByIDWithHash) seçilir.
+const userColumns = `id, email, full_name, role, phone, two_factor_enabled, two_factor_channel, created_at, last_login_at, must_change_password`
 
 // userDest, userColumns ile eşleşen tarama hedeflerini listeler; böylece bir kolon eklemek
 // tek yerde değişikliktir.
 func userDest(u *model.User) []any {
-	return []any{&u.ID, &u.Email, &u.FullName, &u.PasswordHash, &u.Role, &u.Phone, &u.TwoFactorEnabled, &u.TwoFactorChannel, &u.CreatedAt, &u.LastLoginAt, &u.MustChangePassword}
+	return []any{&u.ID, &u.Email, &u.FullName, &u.Role, &u.Phone, &u.TwoFactorEnabled, &u.TwoFactorChannel, &u.CreatedAt, &u.LastLoginAt, &u.MustChangePassword}
 }
 
 // Create, kullanıcı oluşturur. fullName ve phone isteğe bağlıdır (nil/boş = yok).
@@ -50,35 +51,43 @@ func (s *Users) Create(ctx context.Context, email, passwordHash, role string, fu
 }
 
 func (s *Users) GetByEmail(ctx context.Context, email string) (model.User, error) {
-	var u model.User
-	err := s.pool.QueryRow(ctx,
-		`SELECT `+userColumns+`
-		 FROM users WHERE email = lower($1)`,
-		email,
-	).Scan(userDest(&u)...)
-	if err != nil {
-		if isNoRows(err) {
-			return model.User{}, ErrNotFound
-		}
-		return model.User{}, err
-	}
-	return u, nil
+	u, _, err := s.get(ctx, `email = lower($1)`, email, false)
+	return u, err
 }
 
 func (s *Users) GetByID(ctx context.Context, id uuid.UUID) (model.User, error) {
-	var u model.User
-	err := s.pool.QueryRow(ctx,
-		`SELECT `+userColumns+`
-		 FROM users WHERE id = $1`,
-		id,
-	).Scan(userDest(&u)...)
+	u, _, err := s.get(ctx, `id = $1`, id, false)
+	return u, err
+}
+
+// GetByEmailWithHash, girişte şifreyi doğrulamak için kullanıcıyı şifre hash'iyle birlikte döndürür.
+func (s *Users) GetByEmailWithHash(ctx context.Context, email string) (model.User, string, error) {
+	return s.get(ctx, `email = lower($1)`, email, true)
+}
+
+// GetByIDWithHash, şifre değiştirmede mevcut şifreyi doğrulamak için kullanıcıyı şifre hash'iyle birlikte döndürür.
+func (s *Users) GetByIDWithHash(ctx context.Context, id uuid.UUID) (model.User, string, error) {
+	return s.get(ctx, `id = $1`, id, true)
+}
+
+// get, where koşuluna uyan tek kullanıcıyı okur; withHash ise password_hash'i de seçer.
+func (s *Users) get(ctx context.Context, where string, arg any, withHash bool) (model.User, string, error) {
+	var (
+		u    model.User
+		hash string
+	)
+	cols, dest := userColumns, userDest(&u)
+	if withHash {
+		cols, dest = cols+", password_hash", append(dest, &hash)
+	}
+	err := s.pool.QueryRow(ctx, `SELECT `+cols+` FROM users WHERE `+where, arg).Scan(dest...)
 	if err != nil {
 		if isNoRows(err) {
-			return model.User{}, ErrNotFound
+			return model.User{}, "", ErrNotFound
 		}
-		return model.User{}, err
+		return model.User{}, "", err
 	}
-	return u, nil
+	return u, hash, nil
 }
 
 // List, e-postaya göre bir alt dize araması (ListParams.Search) ve isteğe bağlı sayfalama ile

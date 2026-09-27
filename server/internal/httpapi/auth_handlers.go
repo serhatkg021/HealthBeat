@@ -52,7 +52,7 @@ func (d *Deps) handleLogin(w http.ResponseWriter, r *http.Request) error {
 		return newError(http.StatusUnauthorized, "e-posta veya şifre hatalı")
 	}
 
-	user, err := d.users.GetByEmail(r.Context(), strings.ToLower(strings.TrimSpace(req.Email)))
+	user, hash, err := d.users.GetByEmailWithHash(r.Context(), strings.ToLower(strings.TrimSpace(req.Email)))
 	if errors.Is(err, store.ErrNotFound) {
 		authsvc.BurnPasswordCheck(req.Password) // yanlış şifreyle aynı maliyet
 		return deny()
@@ -61,7 +61,7 @@ func (d *Deps) handleLogin(w http.ResponseWriter, r *http.Request) error {
 		return fail("login: lookup user", err)
 	}
 
-	if !authsvc.VerifyPassword(user.PasswordHash, req.Password) {
+	if !authsvc.VerifyPassword(hash, req.Password) {
 		return deny()
 	}
 
@@ -79,7 +79,6 @@ func (d *Deps) handleLogin(w http.ResponseWriter, r *http.Request) error {
 		slog.ErrorContext(r.Context(), "audit log write failed", "err", err)
 	}
 
-	user.PasswordHash = ""
 	pair.User = &user
 	writeJSON(w, http.StatusOK, pair)
 	return nil
@@ -263,14 +262,14 @@ func (d *Deps) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) e
 	}
 
 	userID, _ := userIDFromContext(r.Context())
-	user, err := d.users.GetByID(r.Context(), userID)
+	user, currentHash, err := d.users.GetByIDWithHash(r.Context(), userID)
 	if err != nil {
 		return newError(http.StatusUnauthorized, "geçersiz ya da süresi dolmuş token")
 	}
 
 	// 401 değil 403: panel 401'i "oturum süresi doldu" sayar ve mesajı göstermek yerine
 	// kullanıcının oturumunu kapatırdı.
-	if !authsvc.VerifyPassword(user.PasswordHash, req.CurrentPassword) {
+	if !authsvc.VerifyPassword(currentHash, req.CurrentPassword) {
 		d.loginFailures.Allow(ip)
 		return newError(http.StatusForbidden, "mevcut şifre hatalı")
 	}
@@ -302,7 +301,6 @@ func (d *Deps) handleChangeOwnPassword(w http.ResponseWriter, r *http.Request) e
 	if err != nil {
 		return serverErr("şifre değişti; lütfen yeniden giriş yapın", "change password: issue tokens", err)
 	}
-	user.PasswordHash = ""
 	pair.User = &user
 	writeJSON(w, http.StatusOK, pair)
 	return nil
