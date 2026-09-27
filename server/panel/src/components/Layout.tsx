@@ -37,7 +37,7 @@ function SideLink({ to, icon: Icon, end, children }: { to: string; icon: LucideI
 }
 
 export function Layout() {
-  const { user, logout } = useAuth()
+  const { user, logout, can } = useAuth()
   const [navOpen, setNavOpen] = useState(false)
   // Detay sayfaları (sunucu, organizasyon) başlığı kendileri verir; burada yalnızca sabit rotalar.
   useDocumentTitle(pageTitle(useLocation().pathname))
@@ -58,8 +58,8 @@ export function Layout() {
 
   if (!user) return null
 
-  const canSeeOrganizations = user.role === 'super_admin' || user.role === 'org_admin'
-  const canSeeUsers = user.role === 'super_admin'
+  // Organizasyonları göremeyen (operatör) kendisine atanmış sunucuları "Sunucularım"da görür.
+  const canSeeOrganizations = can('organization.view')
 
   return (
     <div className="app-shell">
@@ -114,9 +114,11 @@ export function Layout() {
             Sunucularım
           </SideLink>
         )}
-        <SideLink to="/alerts" icon={Bell}>
-          Alert'ler
-        </SideLink>
+        {can('alert.view') && (
+          <SideLink to="/alerts" icon={Bell}>
+            Alert'ler
+          </SideLink>
+        )}
 
         <div className="sidebar-group">Yönetim</div>
         {canSeeOrganizations && (
@@ -124,15 +126,17 @@ export function Layout() {
             Organizasyonlar
           </SideLink>
         )}
-        <SideLink to="/thresholds" icon={SlidersHorizontal}>
-          Eşikler
-        </SideLink>
-        {canSeeUsers && (
+        {can('threshold.view') && (
+          <SideLink to="/thresholds" icon={SlidersHorizontal}>
+            Eşikler
+          </SideLink>
+        )}
+        {can('user.view') && (
           <SideLink to="/users" icon={Users}>
             Kullanıcılar
           </SideLink>
         )}
-        {canSeeUsers && (
+        {can('audit.view') && (
           <SideLink to="/audit" icon={ScrollText}>
             Denetim Kaydı
           </SideLink>

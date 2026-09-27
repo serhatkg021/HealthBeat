@@ -65,6 +65,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Panel: menü ve düğmeler rol yerine izinlere göre gösteriliyor.** Panel `GET /me`'deki izin listesini kullanıyor
+  (önceden rol adlarıyla server'ın izin tablosunu elle kopyalıyordu); `role_permissions` değişirse panel de uyar. Rol ya
+  da izin değişikliği artık yeniden giriş beklemeden sayfa yenilenince yansıyor. Alert "Onayla" düğmesi yalnızca
+  `alert.acknowledge` iznine, sunucu ayarlarındaki bölümler kendi izinlerine (`host.update`, `host.delete`,
+  `threshold.edit`, `notification.edit`) göre görünüyor.
 - **Container taban imajları güncellendi:** server ve certs-init `alpine` 3.21 → 3.24; panel `nginx-unprivileged`
   1.27 → 1.31, panelin derleme aşaması `node` 22 → 24 (LTS). CI'daki panel işi de Node 24 kullanıyor.
 - **Kapanışta arka plan işleri bekleniyor:** `SIGTERM`'de HTTP kapandıktan sonra pull zamanlayıcısı, offline izleyici,

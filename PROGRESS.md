@@ -4,9 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — "Server ve panel tek ürün" ilkesi yazıldı (`CONTRIBUTING.md`, `docs/COMPATIBILITY.md`):
-aynı sürüm, birlikte dağıtım, aralarında geriye uyumluluk aranmaz; geriye uyumluluk yalnızca agent ↔ server. Server
-refactor planı tamamlandı (#7–#48). Sırada: server sürümü (öneri).
+**Son güncelleme:** 2026-09-27 — Panel menü ve düğmeleri rol yerine `GET /me` izinlerine göre gösteriyor; rol/izin
+değişikliği sayfa yenilenince yansıyor (üç rolle tarayıcıda denendi). "Server ve panel tek ürün" ilkesi yazıldı (#49).
+Server refactor planı tamamlandı (#7–#48). Sırada: server sürümü.
 
 ## Durum
 

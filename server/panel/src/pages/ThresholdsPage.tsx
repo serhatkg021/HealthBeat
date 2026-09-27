@@ -16,8 +16,10 @@ const toDraft = (t?: ThresholdConfig): RowDraft => ({ warning: t ? String(t.warn
 // Varsayılan eşikler: metrik başına tam bir satır; kendi değeri olmayan her sunucu tarafından
 // kullanılır. Bir sunucunun kendi değerleri onun sayfasında (ya da eklenirken) ayarlanır.
 export function ThresholdsPage() {
-  const { user } = useAuth()
-  const canEdit = user?.role === 'super_admin' // global eşikler server'da yalnızca super_admin içindir
+  const { user, can } = useAuth()
+  // İzin yetmez, kapsam da gerekir: org_admin'in threshold.edit'i yalnızca kendi organizasyonları içindir; genel
+  // (organizasyonsuz) eşikleri server yalnızca super_admin'e yazdırır.
+  const canEdit = can('threshold.edit') && user?.role === 'super_admin'
   const [defaults, setDefaults] = useState<Partial<Record<MetricType, ThresholdConfig>>>({})
   const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>({
     cpu: toDraft(),

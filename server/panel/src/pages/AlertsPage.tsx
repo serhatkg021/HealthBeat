@@ -2,6 +2,7 @@ import { alertReading } from './alertText'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { alertsApi, hostsApi } from '../api/endpoints'
+import { useAuth } from '../auth/AuthContext'
 import { usePagedQuery } from '../api/usePagedQuery'
 import type { Alert, AlertStatus } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
@@ -23,6 +24,7 @@ const STATUS_TABS: { value: AlertStatus | ''; label: string }[] = [
 const PAGE_SIZE = 20
 
 export function AlertsPage() {
+  const { can } = useAuth()
   const [status, setStatus] = useState<AlertStatus | ''>('open')
   const [hostTitles, setHostTitles] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<Alert | null>(null)
@@ -143,7 +145,7 @@ export function AlertsPage() {
                     <Info size={14} strokeWidth={2} />
                     Ayrıntı
                   </button>
-                  {a.status === 'open' && (
+                  {a.status === 'open' && can('alert.acknowledge') && (
                     <button className="btn btn-sm" onClick={() => handleAcknowledge(a.id)}>
                       <Check size={14} strokeWidth={2} />
                       Onayla

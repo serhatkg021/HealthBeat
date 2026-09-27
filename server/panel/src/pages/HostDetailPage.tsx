@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { hostsApi } from '../api/endpoints'
-import { useAuth } from '../auth/AuthContext'
 import { HostAlerts } from './HostAlerts'
 import { HostDocker } from './HostDocker'
 import { HostMetricHistory } from './HostMetricHistory'
@@ -31,8 +30,6 @@ const TAB_ITEMS: TabItem[] = [
 
 export function HostDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { user } = useAuth()
-  const canEdit = user?.role === 'super_admin' || user?.role === 'org_admin' // server ile aynı kural (host.update)
 
   const agentPolicy = useAgentPolicy()
   const [host, setHost] = useState<Host | null>(null)
@@ -114,7 +111,7 @@ export function HostDetailPage() {
 
       {host && (
         <TabPanel id="ayarlar" active={tab} keepMounted>
-          <HostSettings host={host} canEdit={canEdit} onChanged={reload} onError={setError} onThresholdsSaved={reloadThresholds} />
+          <HostSettings host={host} onChanged={reload} onError={setError} onThresholdsSaved={reloadThresholds} />
         </TabPanel>
       )}
 

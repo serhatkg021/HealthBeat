@@ -1,6 +1,8 @@
 // healthbeat-server/internal/model'ı yansıtır — alan adlarını/biçimlerini, kendi REST
 // geleneğimizle değil, o paketle senkron tut.
 
+import type { Permission } from '../auth/permissions'
+
 export type Role = 'super_admin' | 'org_admin' | 'operator'
 
 export interface User {
@@ -17,6 +19,8 @@ export interface User {
   last_login_at?: string
   // Panel kullanılmadan önce yeni bir şifre seçmesi gereken hesaplar için ayarlanır.
   must_change_password?: boolean
+  // Rolün izin anahtarları; yalnızca GET /api/v1/me döndürür (giriş yanıtında yoktur).
+  permissions?: Permission[]
 }
 
 export interface Organization {
