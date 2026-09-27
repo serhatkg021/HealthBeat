@@ -122,7 +122,7 @@ services:
     ports:
       # Push agent'lar buraya bağlanır; pull agent'lar ise server'dan onlara gider.
       - "${HB_API_BIND:-0.0.0.0}:${HB_API_PORT:-8443}:8443"
-    stop_grace_period: 20s # bekleyen alert e-postaları kapanırken (en çok 10 sn) boşaltılır
+    stop_grace_period: 20s # kapanış: HTTP (5 sn) + arka plan işleri (5 sn) + bekleyen e-postaların boşaltılması (10 sn)
 
   panel:
     image: ${HB_REGISTRY:-healthbeat}/healthbeat-panel:${HB_VERSION:-local}

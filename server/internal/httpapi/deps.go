@@ -3,10 +3,6 @@
 package httpapi
 
 import (
-	"context"
-	"log/slog"
-	"time"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"healthbeat-server/internal/access"
@@ -138,28 +134,4 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 	d.ingest = ingest.New(d.metrics, d.hosts, alertEngine)
 	d.outbox = store.NewOutbox(pool, secrets)
 	return d
-}
-
-// RunTokenPurge, ctx iptal edilene kadar süresi çoktan dolmuş refresh token kayıtlarını
-// periyodik olarak siler. Kendi goroutine'inde çalıştırın.
-func (d *Deps) RunTokenPurge(ctx context.Context) {
-	ticker := time.NewTicker(time.Hour)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if n, err := d.refreshTokens.PurgeExpired(ctx); err != nil {
-				slog.ErrorContext(ctx, "purge refresh tokens", "err", err)
-			} else if n > 0 {
-				slog.InfoContext(ctx, "purged expired refresh tokens", "count", n)
-			}
-			if n, err := d.resets.PurgeExpired(ctx); err != nil {
-				slog.ErrorContext(ctx, "purge password reset tokens", "err", err)
-			} else if n > 0 {
-				slog.InfoContext(ctx, "purged expired password reset records", "count", n)
-			}
-		}
-	}
 }

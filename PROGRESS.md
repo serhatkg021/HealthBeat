@@ -4,12 +4,12 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — `GET /readyz` (veritabanı ping, `503`) ve `DB_MAX_CONNS` eklendi; `docs/DEPLOYMENT.md`'ye
-tek kopya varsayımı ve sağlık uçları yazıldı. Önceki adımlar: CI lint + Dependabot (#29), bağımlılık güncellemesi (#28),
-Go 1.27 (#27), store temizliği (#26), alert değerlendirme bağlamı (#25), yanıt tipleri (#24), store hata nedenleri (#23),
-alert bildirim geçmişi (#22), kalıcı bildirim kuyruğu (#21), alert motoru bölme (#20), ortak ingest (#19), erişim kapsamı
-(#18), handler hata akışı (#17), log/Faz A (#12–#16). Sırada: E4 (arka plan işleri kapanışta beklenir); ardından
-Dependabot PR'ları (#30–#40).
+**Son güncelleme:** 2026-09-27 — Kapanışta arka plan işleri bekleniyor (`internal/jobs`), token temizliği `retention`'a
+taşındı; **server refactor planının E fazı tamamlandı.** Önceki adımlar: `/readyz` ve `DB_MAX_CONNS` (#41), CI lint +
+Dependabot (#29), bağımlılık güncellemesi (#28), Go 1.27 (#27), store temizliği (#26), alert değerlendirme bağlamı (#25),
+yanıt tipleri (#24), store hata nedenleri (#23), alert bildirim geçmişi (#22), kalıcı bildirim kuyruğu (#21), alert motoru
+bölme (#20), ortak ingest (#19), erişim kapsamı (#18), handler hata akışı (#17), log/Faz A (#12–#16). Sırada: Dependabot
+PR'ları (#30–#40), 2.4 (audit ve çözülmüş alert saklama süresi).
 
 ## Durum
 
