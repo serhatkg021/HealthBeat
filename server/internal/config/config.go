@@ -83,6 +83,10 @@ type Config struct {
 	// MetricsRetentionDays, metrik örneklerinin retention işi onları silmeden önce ne kadar
 	// saklandığıdır. 0 hepsini sonsuza dek tutar.
 	MetricsRetentionDays int
+	// AuditRetentionDays (AUDIT_RETENTION_DAYS) ve ResolvedAlertRetentionDays (RESOLVED_ALERT_RETENTION_DAYS), denetim
+	// kayıtlarının ve çözülmüş alert'lerin saklanma süresidir (gün). 0 (varsayılan) hepsini sonsuza dek tutar.
+	AuditRetentionDays         int
+	ResolvedAlertRetentionDays int
 
 	// DBMaxConns (DB_MAX_CONNS), veritabanı bağlantı havuzunun üst sınırıdır. 0 = DATABASE_URL'deki pool_max_conns,
 	// o da yoksa pgx varsayılanı (4 ile CPU sayısından büyüğü).
@@ -212,6 +216,12 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 	if cfg.MetricsRetentionDays, err = getIntDefault("METRICS_RETENTION_DAYS", 30); err != nil {
+		return nil, err
+	}
+	if cfg.AuditRetentionDays, err = getIntDefault("AUDIT_RETENTION_DAYS", 0); err != nil {
+		return nil, err
+	}
+	if cfg.ResolvedAlertRetentionDays, err = getIntDefault("RESOLVED_ALERT_RETENTION_DAYS", 0); err != nil {
 		return nil, err
 	}
 	if cfg.DBMaxConns, err = getIntDefault("DB_MAX_CONNS", 0); err != nil {

@@ -382,6 +382,7 @@ Alert kayıtları. Sunucu+tür+subject başına en fazla **bir açık** alert (k
 - **PK** (id)
 - **İndeks** `alerts_host_id_idx`: `btree (host_id)`
 - **Benzersiz indeks** `alerts_one_active_uidx`: `btree (host_id, alert_type, subject) NULLS NOT DISTINCT WHERE (status <> 'resolved'::text)` — bir sunucu + tür + konu için en fazla bir aktif (açık ya da onaylanmış) alert (`000002`)
+- **İndeks** `alerts_resolved_at_idx`: `btree (resolved_at) WHERE (status = 'resolved'::text)` — çözülmüş alert saklama temizliği için (`000004`)
 - **İndeks** `alerts_status_idx`: `btree (status)`
 
 ### `notification_routes`

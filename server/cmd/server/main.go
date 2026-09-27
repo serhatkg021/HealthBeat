@@ -115,7 +115,10 @@ func main() {
 
 	background.Go("password mails", deps.RunMailOutbox)
 	background.Go("token purge", retention.NewTokenPurger(store.NewRefreshTokens(pool), store.NewPasswordResets(pool)).Run)
-	background.Go("metrics retention", retention.New(store.NewMetrics(pool), cfg.MetricsRetentionDays).Run)
+	background.Go("retention", retention.New(
+		retention.Stores{Metrics: store.NewMetrics(pool), Audit: store.NewAudit(pool), Alerts: store.NewAlerts(pool)},
+		retention.Days{Metrics: cfg.MetricsRetentionDays, Audit: cfg.AuditRetentionDays, ResolvedAlerts: cfg.ResolvedAlertRetentionDays},
+	).Run)
 
 	scheduler := pullscheduler.New(pool, alertEngine, secrets, cfg.PullRootCAs)
 	background.Go("pull scheduler", scheduler.Run)

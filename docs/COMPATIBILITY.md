@@ -84,6 +84,7 @@ eski sürümü göstermeye devam etmez.
 | eski server süreci hâlâ çalışıyor | yeni server bir migration uyguladı | Çalışır (yeni sütunlar nullable; eski kod onları seçmez) |
 | eski server süreci hâlâ çalışıyor | `000002` uygulandı (tek aktif alert) | Çalışır: onaylanmış bir alert varken eski kod aynı olay için yeni alert açamaz ama onaylanmışları çözemez; yeni server devraldığında ilk raporda çözülür |
 | eski server süreci hâlâ çalışıyor | `000003` uygulandı (bildirim kuyruğu) | Çalışır: eski kod tabloyu bilmez, bildirimleri kendi bellek içi kuyruğuyla göndermeye devam eder |
+| eski server süreci hâlâ çalışıyor | `000004` uygulandı (çözülmüş alert indeksi) | Çalışır: yalnızca indeks eklendi |
 | server geri alındı (eski binary yeniden başlatıldı) | DB'de bilmediği migration var | **Açılmaz.** Önce o migration'ların `.down.sql`'i (en yeniden başlayarak) uygulanıp geçmiş satırı silinir ya da güncelleme öncesi yedek geri yüklenir (`docs/DISTRIBUTION.md` §8.3) |
 
 Ölçülmüş (bkz. §7): ilk yayımlanan agent, donanım özetinden önceki agent ve makinede kurulu gerçek

@@ -336,3 +336,22 @@ func TestLoadDBMaxConns(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadAuditAndAlertRetention(t *testing.T) {
+	setRequired(t)
+	if cfg, err := Load(); err != nil || cfg.AuditRetentionDays != 0 || cfg.ResolvedAlertRetentionDays != 0 {
+		t.Fatalf("defaults = %d/%d err=%v, want 0/0 (keep forever)", cfg.AuditRetentionDays, cfg.ResolvedAlertRetentionDays, err)
+	}
+	t.Setenv("AUDIT_RETENTION_DAYS", "365")
+	t.Setenv("RESOLVED_ALERT_RETENTION_DAYS", "180")
+	if cfg, err := Load(); err != nil || cfg.AuditRetentionDays != 365 || cfg.ResolvedAlertRetentionDays != 180 {
+		t.Fatalf("365/180 -> %d/%d err=%v", cfg.AuditRetentionDays, cfg.ResolvedAlertRetentionDays, err)
+	}
+	for _, key := range []string{"AUDIT_RETENTION_DAYS", "RESOLVED_ALERT_RETENTION_DAYS"} {
+		t.Setenv(key, "-1")
+		if _, err := Load(); err == nil {
+			t.Errorf("%s=-1 accepted", key)
+		}
+		t.Setenv(key, "")
+	}
+}

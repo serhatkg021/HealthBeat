@@ -111,3 +111,12 @@ func nullIfEmpty(s string) *string {
 	}
 	return &s
 }
+
+// PurgeOlderThan, cutoff'tan eski denetim kayıtlarını parti parti siler ve kaç tane sildiğini döndürür
+// (bkz. AUDIT_RETENTION_DAYS).
+func (s *Audit) PurgeOlderThan(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
+	return purgeInBatches(ctx, s.pool,
+		`DELETE FROM audit_logs WHERE id IN (
+		     SELECT id FROM audit_logs WHERE created_at < $1 ORDER BY created_at LIMIT $2)`,
+		cutoff, batchSize)
+}
