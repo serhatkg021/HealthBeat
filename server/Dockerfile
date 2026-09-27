@@ -13,7 +13,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/healthbeat-server ./cmd/server
 
-FROM alpine:3.21
+FROM alpine:3.24
 # ca-certificates: SMTP sunucusunun TLS sertifikasını doğrulamak için.
 # /var/log/healthbeat: LOG_FILE'ın dizini. Yeni bir named volume ilk bağlanışta bu dizinin sahipliğini alır; böylece
 # 10001 olarak çalışan server içine yazabilir.
