@@ -1,5 +1,6 @@
 # Haftalık bağımlılık güncellemeleri. Küçük ve yama sürümleri ekosistem başına tek PR'da toplanır; ana sürüm atlayanlar
-# ayrı PR olarak gelir. Birleştirmeden önce ilgili hattın CHANGELOG'una madde eklenir (CONTRIBUTING.md §3).
+# ayrı PR olarak gelir (GitHub Actions'ta onlar da gruplu). Dependabot PR'ları doğrudan birleştirilmez: aynı güncelleme
+# Türkçe başlıklı ve CHANGELOG maddeli kendi PR'ımızla yapılır, Dependabot'unki kapanır (CONTRIBUTING.md §3).
 # Agent'ın dış Go bağımlılığı yok, bu yüzden izlenmiyor.
 version: 2
 updates:
@@ -22,13 +23,24 @@ updates:
     groups:
       panel-npm:
         update-types: [minor, patch]
+    ignore:
+      # Tipler panelin derlendiği Node LTS sürümüyle eşleşik tutulur; ana sürümü Node geçişiyle birlikte elle değişir.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
-  - package-ecosystem: docker # server ve panel imajlarının taban imajları
-    directories: [/server, /server/panel]
+  - package-ecosystem: docker # server, panel ve certs-init imajlarının taban imajları
+    directories: [/server, /server/panel, /deploy/certs-init]
     schedule:
       interval: weekly
     commit-message:
       prefix: "Server"
+    ignore:
+      # Node ana sürümleri LTS takvimine göre elle geçilir (tek sayılı ve henüz LTS olmayan sürümler önerilmesin).
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+      # Go sürümü server/go.mod ile birlikte elle yükseltilir; imaj tek başına ileri gitmemeli.
+      - dependency-name: "golang"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -38,4 +50,4 @@ updates:
       prefix: "CI"
     groups:
       actions:
-        update-types: [minor, patch]
+        update-types: [major, minor, patch]
