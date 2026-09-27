@@ -17,6 +17,11 @@ flowchart LR
 - **Panel** (`server/panel/`) yalnızca statik dosyalardır; iş mantığı ve veri server'dadır.
 - **Panel ve API farklı origin'lerdedir** (`panel.example.com` ↔ `api.example.com`), bu
   yüzden server'da **CORS izin listesi** tanımlamak zorunludur (bölüm 4).
+- **Server tek kopya çalışır.** Arka plan işleri her kopyada ayrı çalışır: iki kopya aynı veritabanına bağlanırsa pull
+  agent'lar iki kez sorgulanır (her rapor çift metrik satırı yazar); hız sınırları ve rol izinleri önbelleği de kopya
+  başınadır. Bildirim kuyruğu ve alert açma çoklu kopyada da güvenlidir (aynı alert iki kez açılmaz, bildirim bir kez
+  gider). Yüksek erişilebilirlik gerekirse pull zamanlayıcısı için bir lider seçimi (ör. PostgreSQL advisory lock)
+  eklenmelidir.
 - **Server düz HTTP dinlemez**: `ListenAndServeTLS` ile TLS'i kendisi sonlandırır
   (PROMPT bölüm 5: HTTPS zorunlu). İleride Docker'a alındığında da sertifika dosyaları
   container'a mount edilir ya da önüne, arka tarafa yeniden TLS ile bağlanan bir proxy konur.
@@ -32,6 +37,7 @@ flowchart LR
 | `SECRETS_ENCRYPTION_KEY` | evet | `pull_secret`'ları şifreler. `openssl rand -base64 32`. **Yedekle** — kaybolursa saklı pull secret'lar çözülemez (etkilenen agent'ların credential'ı yenilenir). |
 | `CORS_ALLOWED_ORIGINS` | panel ayrı origin'deyse | Virgülle ayrılmış tam origin listesi, örn. `https://panel.example.com`. `*`, path ve sondaki `/` **reddedilir** (server başlamaz). Boşsa hiç CORS başlığı gönderilmez. |
 | `TRUSTED_PROXIES` | proxy arkasındaysa | Server'ın `X-Forwarded-For` başlığına güvendiği reverse proxy'ler: virgülle ayrılmış IP, CIDR ya da **host adı** (host adları 30 sn'de bir, çözülemedikleri sürece 2 sn'de bir ve tanınmayan bir eşten `X-Forwarded-For`'lu istek gelince hemen yeniden çözülür; docker'da container IP'si değişebilir). İstemci IP'si (hız sınırları, denetim kaydı) yalnızca istek bunlardan birinden geldiğinde başlıktan okunur; aksi halde TCP eşidir. Docker Compose varsayılanı `panel`; bare-metal'de boş (başlık hiç okunmaz). `0.0.0.0/0` ve geçersiz girdiler **reddedilir** (server başlamaz). Bkz. "Hız sınırları ve istemci IP'si". |
+| `DB_MAX_CONNS` | hayır | Veritabanı bağlantı havuzunun üst sınırı (en fazla `1000`). Boşsa `DATABASE_URL`'deki `pool_max_conns`, o da yoksa 4 ile CPU sayısından büyüğü. Açılışta `database pool max_conns=…` satırıyla loglanır. Bkz. "Veritabanı". |
 | `METRICS_RETENTION_DAYS` | hayır | Metrik örneklerinin saklanma süresi (gün); varsayılan `30`, `0` = sonsuza kadar sakla. Eski örnekler saatlik bir işle silinir. |
 | `LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION` | hayır | Panelin agent'ları "güncel / güncelleme var / desteklenmiyor" diye sınıflandırdığı sürüm politikası (SemVer, örn. `1.2.0`). Varsayılan: latest = bu server derlemesinin bildiği en güncel **agent** sürümü (server'ın kendi sürümü değil; bkz. `docs/DISTRIBUTION.md`, iki sürüm hattı), min = boş (hiçbiri "desteklenmiyor" olmaz). **Yalnızca bilgilendirir**, hiçbir agent reddedilmez. Bkz. `docs/COMPATIBILITY.md`. |
 | `AUTO_MIGRATE` | hayır | Açılışta bekleyen veritabanı migration'larını uygula (varsayılan `true`). `false` ise uygulamaz, şema geriyse açılmaz. Bkz. "Veritabanı migration'ları". |
@@ -40,7 +46,7 @@ flowchart LR
 | `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL` | hayır | Varsayılan `15m` / `168h`. |
 | `RATE_LIMIT_AUTH_FAILURES_PER_MINUTE` | hayır | IP başına başarısız login/agent-auth bütçesi, varsayılan `10`, `0` = kapalı. |
 | `RATE_LIMIT_INGEST_PER_MINUTE` | hayır | Doğrulanmış push agent başına, varsayılan `120`, `0` = kapalı. |
-| `LOG_LEVEL` | hayır | `debug`, `info` (varsayılan), `warn`, `error`. Başarılı agent raporları ve `/healthz` yalnızca `debug`'da loglanır. Bkz. "Loglama". |
+| `LOG_LEVEL` | hayır | `debug`, `info` (varsayılan), `warn`, `error`. Başarılı agent raporları, `/healthz` ve `/readyz` yalnızca `debug`'da loglanır. Bkz. "Loglama". |
 | `LOG_FORMAT` | hayır | `text` (varsayılan, `key=value`) ya da `json` (log toplayıcılar için). |
 | `LOG_FILE` | hayır | Logun stdout'a ek olarak yazıldığı **kalıcı dosya**; o dizinde günlük dosyalar tutulur (`server-YYYY-MM-DD.log`, eski günler `.log.gz`). Boş = kapalı (bare-metal varsayılanı). Docker Compose varsayılanı `/var/log/healthbeat/server.log` (`logs` volume'ü). Açılamazsa server yine başlar, log'a `log file disabled` yazar. Bkz. "Loglama". |
 | `LOG_FILE_MAX_AGE_DAYS` | hayır | Bugün dahil kaç günün log dosyasının tutulacağı, varsayılan `14`. |
@@ -163,6 +169,18 @@ ya da sonuna eklediğinden** emin ol (panelin nginx'i `$remote_addr` ile ezer). 
   durum için `GET /hosts/:id/metrics/latest` yalnızca en son ham örneği döner (hiç yoksa `204`). Docker container'ları için yalnızca **son durum**
   saklanır (geçmiş tutulmaz).
 - Kullanıcı e-postaları küçük harfe normalize edilir (veritabanı kısıtı da bunu zorlar).
+- **Bağlantı havuzu:** varsayılan üst sınır 4 ile CPU sayısından büyüğüdür. Her agent raporu birkaç sorgu çalıştırır ve
+  pull modunda raporu vadesi gelen her sunucu aynı anda sorgulanır; küçük bir makinede çok sayıda pull agent varsa
+  sorgular havuz için sıraya girer. `DB_MAX_CONNS` ile artır (PostgreSQL'in `max_connections`'ını, varsayılan `100`,
+  aşmamalı).
+
+### Sağlık uçları
+
+- `GET /healthz`: süreç ayakta mı. Veritabanına bakmaz; container sağlık kontrolü (`server/Dockerfile`) bunu kullanır,
+  çünkü veritabanı düştüğünde server'ı yeniden başlatmak bir şey düzeltmez.
+- `GET /readyz`: istek karşılamaya hazır mı. Veritabanına ping atar (2 sn): ulaşılabiliyorsa `200 {"status":"ok"}`,
+  değilse `503` ve `code: database_unavailable`. Yük dengeleyici ya da orkestratörün trafik yönlendirme denetimi içindir.
+  İkisi de kimlik doğrulama istemez.
 
 ### Veritabanı migration'ları
 

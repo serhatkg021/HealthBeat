@@ -84,6 +84,10 @@ type Config struct {
 	// saklandığıdır. 0 hepsini sonsuza dek tutar.
 	MetricsRetentionDays int
 
+	// DBMaxConns (DB_MAX_CONNS), veritabanı bağlantı havuzunun üst sınırıdır. 0 = DATABASE_URL'deki pool_max_conns,
+	// o da yoksa pgx varsayılanı (4 ile CPU sayısından büyüğü).
+	DBMaxConns int
+
 	// LatestAgentVersion/MinSupportedAgentVersion, panelin agent'ları "güncel / güncellenmeli /
 	// desteklenmiyor" diye sınıflandırdığı sürüm politikasıdır (bkz. docs/COMPATIBILITY.md).
 	// Latest varsayılanı server derlemesinin bildiği en güncel AGENT sürümüdür (version.LatestAgent; server'ın kendi
@@ -109,6 +113,9 @@ type Config struct {
 	LogFileMaxAgeDays int
 	LogFileMaxTotalMB int
 }
+
+// maxDBMaxConns, DB_MAX_CONNS'ın üst sınırıdır; PostgreSQL'in varsayılan max_connections'ı 100'dür.
+const maxDBMaxConns = 1000
 
 // maxLogErrorBodyBytes, LOG_ERROR_BODY_BYTES'ın üst sınırıdır: API zaten 1 MiB'tan büyük gövde kabul etmez.
 const maxLogErrorBodyBytes = 1 << 20
@@ -206,6 +213,12 @@ func Load() (*Config, error) {
 	}
 	if cfg.MetricsRetentionDays, err = getIntDefault("METRICS_RETENTION_DAYS", 30); err != nil {
 		return nil, err
+	}
+	if cfg.DBMaxConns, err = getIntDefault("DB_MAX_CONNS", 0); err != nil {
+		return nil, err
+	}
+	if cfg.DBMaxConns > maxDBMaxConns {
+		return nil, fmt.Errorf("invalid DB_MAX_CONNS: must be at most %d", maxDBMaxConns)
 	}
 	if cfg.AuthFailuresPerMinute, err = getIntDefault("RATE_LIMIT_AUTH_FAILURES_PER_MINUTE", 10); err != nil {
 		return nil, err

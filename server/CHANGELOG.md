@@ -11,6 +11,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 ## [Yayınlanmamış]
 
 ### Eklendi
+- **`GET /readyz`:** veritabanına ping atar; ulaşılabiliyorsa `200`, değilse `503` (`code: database_unavailable`). Yük
+  dengeleyici/orkestratör denetimi içindir; `/healthz` yalnızca sürecin ayakta olduğunu söylemeye devam ediyor.
+- **`DB_MAX_CONNS`:** veritabanı bağlantı havuzunun üst sınırı (varsayılan değişmedi: 4 ile CPU sayısından büyüğü).
+  Açılışta `database pool max_conns=…` loglanıyor. Docker Compose `.env`'den aktarıyor.
 - **Alert'in bildirim geçmişi (`GET /alerts/:id/notifications`):** her bildirim olayı (açılma, seviye değişimi, çözülme)
   için kanal, durum (`sent` / `pending` / `failed`), deneme sayısı, oluşturulma ve gönderilme/vazgeçilme zamanı, bir
   sonraki deneme ve gönderilen konu/gövde. Alıcı adresleri ve son hata yalnızca `notification.view` izniyle döner

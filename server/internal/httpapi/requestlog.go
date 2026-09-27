@@ -43,7 +43,7 @@ func withRequestID(next http.Handler) http.Handler {
 
 // requestLog, her isteği bir satırla loglar ve handler'daki panic'i kurtarır (istemciye JSON 500, loga yığın izi).
 //
-// Seviye durum koduna göredir: 5xx ERROR, 4xx WARN, diğerleri INFO; başarılı ingest ve /healthz DEBUG'dır (150+ host
+// Seviye durum koduna göredir: 5xx ERROR, 4xx WARN, diğerleri INFO; başarılı ingest, /healthz ve /readyz DEBUG'dır (150+ host
 // ~30 sn'de bir rapor verir, INFO'da logu doldururdu). Hata alan isteklerde veriyle ilgili sorunlar yeniden
 // üretilmeden incelenebilsin diye query, güvenli başlıklar, istek gövdesi ve yanıt gövdesi de yazılır (en fazla
 // errorBodyBytes). Şifre, token ve secret içeren alanlar ile Authorization/Cookie başlıkları asla yazılmaz.
@@ -110,7 +110,7 @@ func (d *Deps) requestLog(next http.Handler) http.Handler {
 // isRoutine, başarılı olduğunda yalnızca DEBUG'da loglanan sık ve sıradan isteklerdir.
 func isRoutine(r *http.Request) bool {
 	return (r.Method == http.MethodPost && r.URL.Path == "/api/v1/metrics") ||
-		(r.Method == http.MethodGet && r.URL.Path == "/healthz")
+		(r.Method == http.MethodGet && (r.URL.Path == "/healthz" || r.URL.Path == "/readyz"))
 }
 
 // serveRecovering, next'i çalıştırır; bir panic'i loglayıp (yığın iziyle) istemciye JSON 500 döner, süreç ayakta

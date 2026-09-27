@@ -8,6 +8,7 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
+	mux.HandleFunc("GET /readyz", handle(d.handleReadyz))
 
 	mux.HandleFunc("POST /api/v1/auth/login", handle(d.handleLogin))
 	mux.HandleFunc("POST /api/v1/auth/refresh", handle(d.handleRefresh))
