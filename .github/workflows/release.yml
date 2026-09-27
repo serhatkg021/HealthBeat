@@ -157,7 +157,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.names.outputs.list }}
           # Etiket `server/v1.1.0` biçiminde olduğu için sürüm açıkça verilir: 1.1.0, 1.1 ve (önsürüm değilse) latest.
