@@ -10,6 +10,34 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+## [1.1.0] - 2026-09-27
+
+Güvenilirlik, gözlemlenebilirlik ve güvenlik sürümü. Agent sürümü değişmedi: 1.0.0 agent'lar bu server'la olduğu gibi
+çalışır (ingest protokolü aynı).
+
+### Öne çıkanlar
+- Alert bildirimleri kalıcı kuyruktan, yeniden denemeyle gidiyor; server yeniden başlasa da kaybolmuyor. Panelde alert
+  ayrıntısında her bildirimin kime, ne zaman gittiği görünüyor.
+- Onaylanan alert "sustur ama izle": aynı olay için tekrar alert ve e-posta açılmıyor, eşik altına inince çözülüyor.
+- İstek kimliği, yapılandırılmış log, kalıcı log dosyası; hata yanıtlarında makine-okur `code` ve `request_id`.
+- `GET /readyz`, `DB_MAX_CONNS`, audit ve çözülmüş alert saklama süreleri (varsayılan sonsuz).
+- Go 1.27 ve güncel bağımlılıklar; `pgx` ve `x/text`'teki iki güvenlik açığı kapandı.
+- Panel menü ve düğmeleri izinlere göre gösteriyor; rol değişikliği sayfa yenilenince yansıyor.
+
+### Güncellemeden önce
+- **Yedek al.** Bu sürüm üç migration içerir (`000002` tek aktif alert, `000003` bildirim kuyruğu, `000004` indeks);
+  varsayılan olarak açılışta uygulanır (`AUTO_MIGRATE`). Eski sürüme yalnızca `HB_VERSION`'ı değiştirerek dönülemez:
+  `.down.sql` dosyalarıyla ya da yedekten (`docs/DISTRIBUTION.md` §8.3).
+- **Server ile paneli birlikte güncelle.** Yeni panel yalnızca bu server'da olan uçları kullanır (`/metrics/latest`,
+  `/alerts/:id/notifications`, `/me` izinleri).
+- **Paneli kendi kurulumunla çalıştırıyorsan:** panel container'ı artık düz HTTP `8080` yerine TLS ile `8443` dinler ve
+  sertifikayı server'la ortak `certs` volume'ünden okur. Önündeki yük dengeleyici ya da proxy buna göre ayarlanmalı.
+  Depodaki `docker-compose.yml` zaten günceldir (`HB_PANEL_PORT` varsayılanı `443`).
+- **Log metinlerine göre alarm kurduysan** log biçimi değişti (seviyeli, yapılandırılmış; bazı satırların adı değişti,
+  aşağıda "Değişti").
+- **API'yi panel dışında kullanıyorsan:** hata mesajlarındaki "çakışma: " / "bulunamadı: " öneki kalktı; `fields`
+  anahtarları iç içe map'lerde anahtarı da içeriyor.
+
 ### Eklendi
 - **`AUDIT_RETENTION_DAYS` ve `RESOLVED_ALERT_RETENTION_DAYS`:** denetim kayıtlarının ve çözülmüş alert'lerin saklanma
   süresi (gün). **Varsayılan `0` = sonsuza kadar sakla**; güncelleme hiçbir kaydı silmez. Ayarlanırsa metrik saklamayla
