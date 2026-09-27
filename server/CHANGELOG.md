@@ -56,6 +56,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Server Go 1.27 ile derleniyor** (önceden 1.22; desteği bitmişti). Yan etki: istek gövdesi hatalarında `fields`
+  anahtarı iç içe map'lerde anahtarı da içeriyor (`thresholds.warning_level` → `thresholds.cpu.warning_level`).
 - **Alert değerlendirmesi rapor başına daha az sorgu çalıştırıyor:** sunucunun aktif alert'leri, eşikleri ve disk seçimi
   her kalem (metrik, mount, container) için ayrı ayrı değil, rapor başına bir kez okunuyor. Durum değişmeyen bir rapor
   artık mount ve container sayısından bağımsız olarak 3 sorgu (önceden 4 mount ve 5 container'la 26); alert davranışı aynı.

@@ -4,11 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — Store temizliği: satır okuma döngüleri ortak yardımcıda, SQL'deki rol adları parametre;
-aramada `%`/`_` düz karakter, eşleşmesiz kullanıcı araması `[]`; bozuk envanter loglanıyor. Önceki adımlar: alert
-değerlendirme bağlamı (#25), yanıt tipleri ve `password_hash` (#24), store hata nedenleri (#23), alert bildirim geçmişi
-(#22), kalıcı bildirim kuyruğu (#21), alert motoru bölme (#20), ortak ingest (#19), erişim kapsamı (#18), handler hata
-akışı (#17), log/Faz A (#12–#16). Sırada: E (iş çalıştırıcı, `DB_MAX_CONNS`, `/readyz`, CI denetimleri, Go yükseltme).
+**Son güncelleme:** 2026-09-27 — Server Go 1.27'ye yükseltildi (`go.mod`, `Dockerfile`; CI sürümü `go.mod`'dan
+okuyor); agent 1.22'de kaldı. Önceki adımlar: store temizliği (#26), alert değerlendirme bağlamı (#25), yanıt tipleri
+(#24), store hata nedenleri (#23), alert bildirim geçmişi (#22), kalıcı bildirim kuyruğu (#21), alert motoru bölme (#20),
+ortak ingest (#19), erişim kapsamı (#18), handler hata akışı (#17), log/Faz A (#12–#16). Sırada: E2 (CI'a `staticcheck`,
+`govulncheck`, Dependabot), E3 (`DB_MAX_CONNS`, `/readyz`), E4 (arka plan işleri kapanışta beklenir).
 
 ## Durum
 
@@ -17,7 +17,7 @@ Geliştirme sürecinden gelen tarih temizlendi: tek baseline migration, `client`
 
 ## Ortam ve nasıl çalıştırılır
 
-**Gereken araçlar:** Go ≥ 1.22, PostgreSQL ≥ 15, Node ≥ 22, `openssl`; dağıtım testleri için Docker.
+**Gereken araçlar:** Go ≥ 1.27 (agent için ≥ 1.22), PostgreSQL ≥ 15, Node ≥ 22, `openssl`; dağıtım testleri için Docker.
 
 ```sh
 # Server (veritabanı testleri TEST_DATABASE_URL'de geçici şema açar, sonra siler; ASLA üretim veritabanına yöneltme)
