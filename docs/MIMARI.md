@@ -101,7 +101,9 @@ Uygulama: her istek iki denetimden geçer. **İzin** (ne yapabilir) `role_permis
 60 sn bellekte tutulur, tabloyu elle değiştirmek en geç bu süre sonra etkili olur). **Kapsam** (nerede yapabilir) yukarıdaki
 kurallardır ve tek yerde uygulanır: `internal/access`, istek başına bir `Scope` (`CanManageOrg`, `OrgAccess`, `CanViewHost`,
 `VisibleHostIDs`); atama kümeleri istek içinde bir kez okunur. `GET /api/v1/me` kullanıcının izin anahtarlarını
-(`permissions`) da döndürür.
+(`permissions`) da döndürür. Panel menüyü ve düğmeleri rol adına değil bu izinlere göre gösterir (`auth/permissions.ts`,
+`useAuth().can`); `/me`'yi açılışta ve girişten sonra okur, böylece rol ya da izin tablosu değişikliği sayfa yenilenince
+yansır. Kapsam kuralları panelde ayrıca uygulanır (ör. genel eşikleri yalnızca super_admin düzenler).
 
 ---
 

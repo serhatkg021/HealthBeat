@@ -1,6 +1,7 @@
 import { alertReading } from './alertText'
 import { useState } from 'react'
 import { alertsApi } from '../api/endpoints'
+import { useAuth } from '../auth/AuthContext'
 import { usePagedQuery } from '../api/usePagedQuery'
 import type { Alert, AlertStatus } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
@@ -23,6 +24,7 @@ const PAGE_SIZE = 10
 // Sunucu detay sayfasındaki "Alert'ler" sekmesi: genel AlertsPage ile aynı liste, ama tek bir
 // host'a (host.view ile aynı yetki kuralıyla) sınırlı — bkz. GET /api/v1/alerts?host_id=.
 export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: string }) {
+  const { can } = useAuth()
   const [status, setStatus] = useState<AlertStatus | ''>('open')
   const [selected, setSelected] = useState<Alert | null>(null)
 
@@ -116,7 +118,7 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
                     <Info size={14} strokeWidth={2} />
                     Ayrıntı
                   </button>
-                  {a.status === 'open' && (
+                  {a.status === 'open' && can('alert.acknowledge') && (
                     <button className="btn btn-sm" onClick={() => handleAcknowledge(a.id)}>
                       <Check size={14} strokeWidth={2} />
                       Onayla

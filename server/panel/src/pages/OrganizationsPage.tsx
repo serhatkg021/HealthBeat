@@ -27,7 +27,7 @@ function loadView(): ViewMode {
 }
 
 export function OrganizationsPage() {
-  const { user } = useAuth()
+  const { can } = useAuth()
   const [orgs, setOrgs] = useState<Organization[]>([])
   const [error, setError] = useState<string | null>(null)
   const [newName, setNewName] = useState('')
@@ -46,7 +46,7 @@ export function OrganizationsPage() {
     }
   }
 
-  const canCreate = user?.role === 'super_admin'
+  const canCreate = can('organization.create')
   const [tab, setTab] = useTab(canCreate ? ['liste', 'yeni'] : ['liste'], 'liste')
   const tabItems: TabItem[] = [
     { id: 'liste', label: 'Organizasyonlar', badge: orgs.length, icon: Building2 },

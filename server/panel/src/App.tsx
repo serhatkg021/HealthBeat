@@ -1,6 +1,7 @@
 import type { ReactElement } from 'react'
 import { Navigate, Route, BrowserRouter, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth/AuthContext'
+import type { Permission } from './auth/permissions'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
@@ -28,9 +29,9 @@ function RequireAuth({ children }: { children: ReactElement }) {
   return children
 }
 
-function RequireRole({ roles, children }: { roles: string[]; children: ReactElement }) {
-  const { user } = useAuth()
-  if (!user || !roles.includes(user.role)) return <Navigate to="/" replace />
+function RequirePermission({ permission, children }: { permission: Permission; children: ReactElement }) {
+  const { user, can } = useAuth()
+  if (!user || !can(permission)) return <Navigate to="/" replace />
   return children
 }
 
@@ -61,17 +62,17 @@ export default function App() {
             <Route
               path="/organizations"
               element={
-                <RequireRole roles={['super_admin', 'org_admin']}>
+                <RequirePermission permission="organization.view">
                   <OrganizationsPage />
-                </RequireRole>
+                </RequirePermission>
               }
             />
             <Route
               path="/organizations/:id"
               element={
-                <RequireRole roles={['super_admin', 'org_admin']}>
+                <RequirePermission permission="organization.view">
                   <OrganizationHostsPage />
-                </RequireRole>
+                </RequirePermission>
               }
             />
             <Route path="/my-hosts" element={<MyHostsPage />} />
@@ -81,17 +82,17 @@ export default function App() {
             <Route
               path="/users"
               element={
-                <RequireRole roles={['super_admin']}>
+                <RequirePermission permission="user.view">
                   <UsersPage />
-                </RequireRole>
+                </RequirePermission>
               }
             />
             <Route
               path="/audit"
               element={
-                <RequireRole roles={['super_admin']}>
+                <RequirePermission permission="audit.view">
                   <AuditPage />
-                </RequireRole>
+                </RequirePermission>
               }
             />
           </Route>

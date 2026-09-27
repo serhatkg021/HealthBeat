@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { organizationsApi, usersApi } from '../api/endpoints'
+import { useAuth } from '../auth/AuthContext'
 import { usePagedQuery } from '../api/usePagedQuery'
 import type { Organization, Role, User } from '../types/api'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
@@ -51,12 +52,15 @@ export function UsersPage() {
   const [selectedOrgIds, setSelectedOrgIds] = useState<string[]>([])
   const [assigningHostsTo, setAssigningHostsTo] = useState<User | null>(null)
 
+  const { can } = useAuth()
+  const canCreate = can('user.create')
+  const canUpdate = can('user.update')
   const assigning = assigningUserId !== null || assigningHostsTo !== null
   const assigningUser = assigningHostsTo ?? users.find((u) => u.id === assigningUserId) ?? null
-  const [tab, setTab] = useTab(['liste', 'yeni', ...(assigning ? ['atama'] : []), ...(editingUser ? ['profil'] : [])], 'liste')
+  const [tab, setTab] = useTab(['liste', ...(canCreate ? ['yeni'] : []), ...(assigning ? ['atama'] : []), ...(editingUser ? ['profil'] : [])], 'liste')
   const tabItems: TabItem[] = [
     { id: 'liste', label: 'Kullanıcılar', badge: total, icon: Users },
-    { id: 'yeni', label: 'Yeni kullanıcı', icon: UserPlus },
+    ...(canCreate ? [{ id: 'yeni', label: 'Yeni kullanıcı', icon: UserPlus }] : []),
     ...(assigning ? [{ id: 'atama', label: `Atama — ${assigningUser?.email ?? ''}`, icon: UserCog }] : []),
     ...(editingUser ? [{ id: 'profil', label: `Profil — ${editingUser.email}`, icon: Pencil }] : []),
   ]
@@ -184,17 +188,19 @@ export function UsersPage() {
                   <td className="muted" data-label="Rol">{ROLE_LABELS[u.role]}</td>
                   <td className="muted" data-label="Son giriş">{u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—'}</td>
                   <td className="actions">
-                    <button className="btn btn-sm" onClick={() => openProfile(u)}>
-                      <Pencil size={14} strokeWidth={1.9} />
-                      Profil
-                    </button>
-                    {u.role === 'org_admin' && (
+                    {canUpdate && (
+                      <button className="btn btn-sm" onClick={() => openProfile(u)}>
+                        <Pencil size={14} strokeWidth={1.9} />
+                        Profil
+                      </button>
+                    )}
+                    {canUpdate && u.role === 'org_admin' && (
                       <button className="btn btn-sm" onClick={() => openAssign(u.id)}>
                         <Building2 size={14} strokeWidth={1.9} />
                         Organizasyon ata
                       </button>
                     )}
-                    {u.role === 'operator' && (
+                    {canUpdate && u.role === 'operator' && (
                       <button
                         className="btn btn-sm"
                         onClick={() => {
@@ -207,10 +213,12 @@ export function UsersPage() {
                         Sunucu ata
                       </button>
                     )}
-                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(u.id)}>
-                      <Trash2 size={14} strokeWidth={1.9} />
-                      Sil
-                    </button>
+                    {can('user.delete') && (
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(u.id)}>
+                        <Trash2 size={14} strokeWidth={1.9} />
+                        Sil
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

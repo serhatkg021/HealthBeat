@@ -29,9 +29,9 @@ const PAGE_SIZE = 20
 export function OrganizationHostsPage() {
   const { id } = useParams<{ id: string }>()
   const agentPolicy = useAgentPolicy()
-  const { user } = useAuth()
-  const canEdit = user?.role === 'super_admin' || user?.role === 'org_admin' // server ile aynı kural (contact.edit, notification.edit)
-  const isSuper = user?.role === 'super_admin'
+  const { can } = useAuth()
+  const canAddHost = can('host.create')
+  const canSeeSettings = can('organization.update') || can('organization.delete')
   const [org, setOrg] = useState<Organization | null>(null)
   const [allOrgs, setAllOrgs] = useState<Organization[]>([]) // üst zincir ve üst şirket seçimi için
   useDocumentTitle(org?.name)
@@ -65,15 +65,15 @@ export function OrganizationHostsPage() {
   }
   useEffect(loadOrg, [id])
 
-  const tabIds = ['sunucular', 'ekle', 'kisiler', 'bildirimler', 'esikler', ...(isSuper ? ['ayarlar'] : [])]
+  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler', 'bildirimler', 'esikler', ...(canSeeSettings ? ['ayarlar'] : [])]
   const [tab, setTab] = useTab(tabIds, 'sunucular')
   const tabItems: TabItem[] = [
     { id: 'sunucular', label: 'Sunucular', badge: total, icon: Server },
-    { id: 'ekle', label: 'Sunucu ekle', icon: Plus },
+    ...(canAddHost ? [{ id: 'ekle', label: 'Sunucu ekle', icon: Plus }] : []),
     { id: 'kisiler', label: 'İletişim kişileri', icon: Contact },
     { id: 'bildirimler', label: 'Bildirim kuralları', icon: BellRing },
     { id: 'esikler', label: 'Eşikler', icon: SlidersHorizontal },
-    ...(isSuper ? [{ id: 'ayarlar', label: 'Ayarlar', icon: Settings }] : []),
+    ...(canSeeSettings ? [{ id: 'ayarlar', label: 'Ayarlar', icon: Settings }] : []),
   ]
   // Üst zincir: bu organizasyonun üst şirketleri (adları bilgi olarak görünür).
   const ancestors: Organization[] = []
@@ -164,31 +164,31 @@ export function OrganizationHostsPage() {
 
       {id && (
         <TabPanel id="kisiler" active={tab}>
-          <OrganizationContacts organizationId={id} canEdit={canEdit} />
+          <OrganizationContacts organizationId={id} canEdit={can('contact.edit')} />
         </TabPanel>
       )}
 
       {id && (
         <TabPanel id="bildirimler" active={tab}>
           <div className="page-readable">
-            <NotificationRules scope={{ organizationId: id }} canEdit={canEdit} />
+            <NotificationRules scope={{ organizationId: id }} canEdit={can('notification.edit')} />
           </div>
         </TabPanel>
       )}
 
       {org && (
         <TabPanel id="esikler" active={tab}>
-          <OrganizationThresholds organization={org} orgs={allOrgs} canEdit={canEdit} />
+          <OrganizationThresholds organization={org} orgs={allOrgs} canEdit={can('threshold.edit')} />
         </TabPanel>
       )}
 
-      {org && isSuper && (
+      {org && canSeeSettings && (
         <TabPanel id="ayarlar" active={tab}>
           <OrganizationSettings key={org.id + org.name + (org.parent_organization_id ?? '')} organization={org} orgs={allOrgs} onChanged={loadOrg} />
         </TabPanel>
       )}
 
-      {id && (
+      {id && canAddHost && (
         <TabPanel id="ekle" active={tab} keepMounted>
           <AddHostWizard
             key={wizardKey}
