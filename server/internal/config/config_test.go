@@ -319,3 +319,20 @@ func TestParsePanelBaseURL(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadDBMaxConns(t *testing.T) {
+	setRequired(t)
+	if cfg, err := Load(); err != nil || cfg.DBMaxConns != 0 {
+		t.Fatalf("default = %v err=%v, want 0 (pgx default)", cfg.DBMaxConns, err)
+	}
+	t.Setenv("DB_MAX_CONNS", "25")
+	if cfg, err := Load(); err != nil || cfg.DBMaxConns != 25 {
+		t.Fatalf("DB_MAX_CONNS=25 -> %v err=%v", cfg.DBMaxConns, err)
+	}
+	for _, bad := range []string{"-1", "abc", "1001"} {
+		t.Setenv("DB_MAX_CONNS", bad)
+		if _, err := Load(); err == nil {
+			t.Errorf("DB_MAX_CONNS=%q accepted", bad)
+		}
+	}
+}

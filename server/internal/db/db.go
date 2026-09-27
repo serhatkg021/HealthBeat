@@ -8,10 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+// NewPool, havuzu kurar ve veritabanına ulaşılabildiğini doğrular. maxConns > 0 ise havuzun üst sınırıdır; 0 ise
+// DATABASE_URL'deki pool_max_conns, o da yoksa pgx varsayılanı geçerlidir.
+func NewPool(ctx context.Context, databaseURL string, maxConns int) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("parse database url: %w", err)
+	}
+	if maxConns > 0 {
+		cfg.MaxConns = int32(maxConns)
 	}
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)

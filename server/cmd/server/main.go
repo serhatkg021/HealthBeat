@@ -47,11 +47,12 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL, cfg.DBMaxConns)
 	if err != nil {
 		fatal("database", err)
 	}
 	defer pool.Close()
+	slog.Info("database pool", "max_conns", pool.Config().MaxConns)
 
 	if err := prepareSchema(ctx, pool, cfg.AutoMigrate); err != nil {
 		fatal("database schema", err)

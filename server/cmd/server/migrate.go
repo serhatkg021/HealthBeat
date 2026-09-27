@@ -74,7 +74,7 @@ func runMigrateCommand(args []string, stdout, stderr io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	pool, err := db.NewPool(ctx, url)
+	pool, err := db.NewPool(ctx, url, 0)
 	if err != nil {
 		return fail("%v", err)
 	}
