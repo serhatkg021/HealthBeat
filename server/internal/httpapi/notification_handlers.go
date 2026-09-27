@@ -178,7 +178,7 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) error {
 		Channel: req.Channel, MinLevel: req.MinLevel,
 	})
 	if err != nil {
-		return routeSaveError(err, "create route", fail)
+		return storeError(err, "kayıt bulunamadı", fail, "create route")
 	}
 	targetID := route.ID.String()
 	d.logAudit(r, "notification.create", "notification_route", &targetID, map[string]any{
@@ -216,7 +216,7 @@ func (d *Deps) handleUpdateRoute(w http.ResponseWriter, r *http.Request) error {
 	}
 	route, err := d.notifs.Update(r.Context(), existing.ID, req.Channel, req.MinLevel)
 	if err != nil {
-		return routeSaveError(err, "update route", fail)
+		return storeError(err, "kayıt bulunamadı", fail, "update route")
 	}
 	targetID := route.ID.String()
 	d.logAudit(r, "notification.update", "notification_route", &targetID, map[string]any{"channel": route.Channel, "min_level": route.MinLevel})
@@ -231,23 +231,12 @@ func (d *Deps) handleDeleteRoute(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if err := d.notifs.Delete(r.Context(), existing.ID); err != nil {
-		return routeSaveError(err, "delete route", fail)
+		return storeError(err, "kayıt bulunamadı", fail, "delete route")
 	}
 	targetID := existing.ID.String()
 	d.logAudit(r, "notification.delete", "notification_route", &targetID, map[string]any{"organization_id": existing.OrganizationID, "host_id": existing.HostID})
 	w.WriteHeader(http.StatusNoContent)
 	return nil
-}
-
-func routeSaveError(err error, op string, fail failFunc) error {
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("kayıt bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	default:
-		return fail(op, err)
-	}
 }
 
 // managedRoute, yoldaki kuralı yükler ve kapsamına (organizasyon ya da sunucunun organizasyonu) erişimi denetler.

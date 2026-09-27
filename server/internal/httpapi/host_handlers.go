@@ -159,13 +159,8 @@ func (d *Deps) handleCreateHost(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	host, err := d.hosts.Create(r.Context(), params)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("organizasyon bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return fail("create host", err)
+	if err != nil {
+		return storeError(err, "organizasyon bulunamadı", fail, "create host")
 	}
 
 	targetID := host.ID.String()
@@ -331,13 +326,8 @@ func (d *Deps) handleUpdateHost(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	host, err := d.hosts.Update(r.Context(), existing.ID, req.Title, req.IP, req.IntervalSeconds)
-	switch {
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("sunucu bulunamadı")
-	case errors.Is(err, store.ErrConflict):
-		return conflict(err.Error())
-	case err != nil:
-		return fail("update host", err)
+	if err != nil {
+		return storeError(err, "sunucu bulunamadı", fail, "update host")
 	}
 
 	targetID := host.ID.String()

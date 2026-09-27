@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,9 +38,9 @@ type ContactInput struct {
 func mapContactError(err error) error {
 	switch pgErrorCode(err) {
 	case pgForeignKeyViolation:
-		return fmt.Errorf("%w: yönetici aynı organizasyondan bir iletişim kişisi olmalı", ErrConflict)
+		return ErrContactManagerInvalid
 	case pgCheckViolation:
-		return fmt.Errorf("%w: en az bir iletişim yolu (telefon ya da e-posta) gerekli ve kişi kendi yöneticisi olamaz", ErrConflict)
+		return ErrContactInvalid
 	}
 	return err
 }
@@ -82,7 +81,7 @@ func (s *Contacts) Create(ctx context.Context, orgID uuid.UUID, in ContactInput)
 		orgID, in.Department, in.Title, in.Name, in.ManagerContactID, in.Phone, in.Email))
 	if err != nil {
 		if pgErrorCode(err) == pgForeignKeyViolation && in.ManagerContactID == nil {
-			return model.OrganizationContact{}, fmt.Errorf("%w: organizasyon yok", ErrNotFound)
+			return model.OrganizationContact{}, ErrOrganizationMissing
 		}
 		return model.OrganizationContact{}, mapContactError(err)
 	}

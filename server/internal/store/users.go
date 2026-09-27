@@ -42,7 +42,7 @@ func (s *Users) Create(ctx context.Context, email, passwordHash, role string, fu
 	).Scan(userDest(&u)...)
 	if err != nil {
 		if pgErrorCode(err) == pgUniqueViolation {
-			return model.User{}, fmt.Errorf("%w: bu e-posta zaten kullanımda", ErrConflict)
+			return model.User{}, ErrEmailTaken
 		}
 		return model.User{}, err
 	}
@@ -117,11 +117,6 @@ func (s *Users) List(ctx context.Context, p ListParams) (users []model.User, tot
 	return users, total, rows.Err()
 }
 
-// ErrLastSuperAdmin, bir değişiklik sistemi hiç super_admin'siz bırakacağında döndürülür —
-// o zaman kimse kullanıcıları ya da rolleri yeniden yönetemezdi (bootstrap admin yalnızca bir
-// migration olarak vardır). ErrConflict'i sarar; bu yüzden 409'a eşlenir.
-var ErrLastSuperAdmin = fmt.Errorf("%w: son super_admin'in rolü düşürülemez ya da hesabı silinemez", ErrConflict)
-
 // guardLastSuperAdmin, id kalan tek super_admin ise ErrLastSuperAdmin ile başarısız olur.
 // Her super_admin satırını (id sırasıyla, böylece eşzamanlı çağıranlar kilitlenmeye
 // girmez) transaction'ın geri kalanı için kilitler; iki yöneticinin aynı anda birbirini
@@ -177,7 +172,7 @@ func (s *Users) UpdateProfile(ctx context.Context, id uuid.UUID, p UserProfile) 
 			return model.User{}, ErrNotFound
 		}
 		if pgErrorCode(err) == pgCheckViolation {
-			return model.User{}, fmt.Errorf("%w: iki faktörlü doğrulama açıkken bir kanal seçilmeli (email, sms veya app)", ErrConflict)
+			return model.User{}, ErrTwoFactorNoChannel
 		}
 		return model.User{}, err
 	}
@@ -215,7 +210,7 @@ func (s *Users) Update(ctx context.Context, id uuid.UUID, email, role *string) (
 			return model.User{}, ErrNotFound
 		}
 		if pgErrorCode(err) == pgUniqueViolation {
-			return model.User{}, fmt.Errorf("%w: bu e-posta zaten kullanımda", ErrConflict)
+			return model.User{}, ErrEmailTaken
 		}
 		return model.User{}, err
 	}
