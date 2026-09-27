@@ -60,6 +60,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   panic'lerse yalnızca o iş düşüyor.
 
 ### Değişti
+- **Kapanışta arka plan işleri bekleniyor:** `SIGTERM`'de HTTP kapandıktan sonra pull zamanlayıcısı, offline izleyici,
+  temizlik işleri ve bildirim işçilerinin durması beklenir (en çok 5 sn), veritabanı havuzu ancak sonra kapanır; yarıda
+  kalan bir sorgu kapanmış havuza çarpıp hata loglamaz. Yeni log satırı: `background jobs stopped` (süre aşılırsa
+  `background jobs did not stop in time` ve bitmeyen işlerin adı).
 - **Server Go 1.27 ile derleniyor** (önceden 1.22; desteği bitmişti). Yan etki: istek gövdesi hatalarında `fields`
   anahtarı iç içe map'lerde anahtarı da içeriyor (`thresholds.warning_level` → `thresholds.cpu.warning_level`).
 - **Alert değerlendirmesi rapor başına daha az sorgu çalıştırıyor:** sunucunun aktif alert'leri, eşikleri ve disk seçimi
@@ -167,6 +171,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   doğrudan bağlanan birinin gönderdiği sahte `X-Forwarded-For` yok sayılıyor.
 
 ### İç değişiklikler (davranış değişmedi)
+- Arka plan döngüleri `internal/jobs` çalıştırıcısında toplandı; süresi dolmuş token temizliği `httpapi`'den
+  `retention.TokenPurger`'a taşındı.
 - `staticcheck`'in bulduğu kullanılmayan kod (`routeScope` tipi, bir test yardımcısı) silindi.
 - Store'daki satır okuma döngüleri `pgx.CollectRows` üstündeki ortak `collect` / `collectIDs` yardımcılarına taşındı; SQL'e
   gömülü rol adları parametre oldu. Çözülemeyen sunucu envanteri artık sessizce yutulmuyor, `hosts: decode inventory`
