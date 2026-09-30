@@ -342,6 +342,14 @@ func TestEmailOmitsPanelLinkWhenNotConfigured(t *testing.T) {
 	if strings.Contains(msgs[0].Text(), "Panel:") {
 		t.Errorf("email must not contain a Panel: line when panelBaseURL is empty:\n%s", msgs[0].Text())
 	}
+
+	// Panel adresi panelden sonradan girilince bir sonraki bildirim bağlantıyı taşır (yeniden başlatma gerekmez).
+	e.engine.SetPanelBaseURL("https://panel.test/")
+	e.feedCPU(20) // çözülme bildirimi
+	msgs = e.messages()
+	if len(msgs) != 2 || !strings.Contains(msgs[1].Text(), "Panel: https://panel.test/hosts/"+e.host.String()) {
+		t.Fatalf("after SetPanelBaseURL: %d emails, last:\n%s", len(msgs), msgs[len(msgs)-1].Text())
+	}
 }
 
 // Bildirim kuralı olan kapsamda yalnızca kuralın alıcıları (panel kullanıcısı ya da iletişim kişisi) bilgilendirilir;

@@ -246,3 +246,33 @@ func TestConcurrentReadsAndWrites(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestParsePanelBaseURL(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"", ""},
+		{"   ", ""},
+		{"https://panel.example.com", "https://panel.example.com"},
+		{"  https://Panel.Example.com/  ", "https://panel.example.com"},
+		{"http://localhost:8080", "http://localhost:8080"},
+		{"https://panel.example.com:8443///", "https://panel.example.com:8443"},
+	} {
+		got, err := ParsePanelBaseURL(tc.in)
+		if err != nil || got != tc.want {
+			t.Errorf("ParsePanelBaseURL(%q) = %q, %v; want %q", tc.in, got, err, tc.want)
+		}
+	}
+	for _, bad := range []string{
+		"panel.example.com",           // şema yok
+		"ftp://panel.example.com",     // http/https dışı
+		"https://panel.example.com/x", // yol
+		"https://panel.example.com?a=1",
+		"https://panel.example.com/#f",
+		"https://user:pw@panel.example.com", // kimlik bilgisi
+		"https://",                          // ana makine yok
+		"javascript:alert(1)",
+	} {
+		if got, err := ParsePanelBaseURL(bad); err == nil {
+			t.Errorf("ParsePanelBaseURL(%q) = %q, want an error", bad, got)
+		}
+	}
+}

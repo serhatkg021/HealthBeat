@@ -8,6 +8,7 @@ package settings
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"maps"
 	"slices"
 	"sync"
@@ -154,6 +155,7 @@ func (s *Service) apply(ctx context.Context, actor *uuid.UUID, set map[Field]any
 	for _, f := range Fields {
 		if before[f] != after[f] {
 			changes[f] = Change{Old: before[f], New: after[f]}
+			slog.InfoContext(ctx, "settings: changed", "setting", string(f), "old", before[f], "new", after[f])
 		}
 	}
 	return changes, nil

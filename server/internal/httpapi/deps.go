@@ -4,6 +4,7 @@ package httpapi
 
 import (
 	"github.com/jackc/pgx/v5/pgxpool"
+	"sync/atomic"
 
 	"healthbeat-server/internal/access"
 	"healthbeat-server/internal/alertengine"
@@ -21,7 +22,8 @@ type Deps struct {
 	pool     *pgxpool.Pool
 	tokenSvc *authsvc.TokenService
 
-	agentPolicy AgentPolicy
+	// agentPolicy, panelBaseURL ve errorBodyBytes panelden çalışırken değişebilir (Set… yöntemleri); istek başına okunur.
+	agentPolicy atomic.Pointer[AgentPolicy]
 
 	// perms, rol izinlerinin önbelleğidir (bkz. rbac.Cache); access, istek başına kapsamı (access.Scope) üretir.
 	perms  *rbac.Cache
@@ -59,8 +61,8 @@ type Deps struct {
 
 	// E-posta ile şifre sıfırlama (bkz. password_reset_handlers.go). mailer nil ya da panelBaseURL boşsa özellik kapalıdır.
 	// E-postalar bildirim kuyruğuna (outbox) yazılır, mailWorker teslim eder; sıfırlama bağlantısı şifreli saklanır.
-	mailer       Mailer
-	panelBaseURL string
+	mailer       Mailer // açılışta bir kez ayarlanır (SetPasswordReset)
+	panelBaseURL atomic.Pointer[string]
 	outbox       *store.Outbox
 	mailWorker   *outbox.Worker
 	// resetIPs sıfırlama isteklerini kaynak IP başına, resetEmails hedef e-posta başına sınırlar (posta bombası önlemi).
@@ -69,7 +71,7 @@ type Deps struct {
 
 	// errorBodyBytes, hata alan (4xx/5xx) bir isteğin loga yazılan istek/yanıt gövdesinin azami boyutudur; 0 gövde
 	// yazmaz. Bkz. requestlog.go.
-	errorBodyBytes int
+	errorBodyBytes atomic.Int64
 }
 
 // RateLimits, API'nin sınırlayıcılarını yapılandırır (dakikada; 0 kapatır).
@@ -85,21 +87,31 @@ const (
 	ingestBurst      = 20
 )
 
-// AgentPolicy, panelin agent'ları sınıflandırdığı sürüm politikasıdır (bkz. config.Config).
+// AgentPolicy, panelin agent'ları sınıflandırdığı sürüm politikasıdır (app_settings; bkz. internal/settings).
 type AgentPolicy struct {
 	Latest string // en güncel agent sürümü; "" = tanımsız
 	Min    string // desteklenen en düşük agent sürümü; "" = tanımsız
 }
 
-// SetAgentPolicy, GET /api/v1/meta'nın döndürdüğü sürüm politikasını ayarlar.
-func (d *Deps) SetAgentPolicy(p AgentPolicy) { d.agentPolicy = p }
+// SetAgentPolicy, GET /api/v1/meta'nın döndürdüğü ve ingest yanıtında önerilen sürüm politikasını ayarlar.
+func (d *Deps) SetAgentPolicy(p AgentPolicy) { d.agentPolicy.Store(&p) }
 
 // SetClientIPResolver, istemci IP'sinin güvenilir proxy'lerin X-Forwarded-For'undan okunmasını açar (bkz. clientip).
 func (d *Deps) SetClientIPResolver(r *clientip.Resolver) { d.clientIPs = r }
 
-// SetErrorBodyLogging, hata alan isteklerin loga yazılan gövdelerinin azami boyutunu ayarlar (LOG_ERROR_BODY_BYTES);
+// SetErrorBodyLogging, hata alan isteklerin loga yazılan gövdelerinin azami boyutunu ayarlar (log_error_body_bytes);
 // 0 gövde yazmaz. Gövdeler her zaman maskelenir (bkz. requestlog.go).
-func (d *Deps) SetErrorBodyLogging(maxBytes int) { d.errorBodyBytes = maxBytes }
+func (d *Deps) SetErrorBodyLogging(maxBytes int) { d.errorBodyBytes.Store(int64(maxBytes)) }
+
+// SetRateLimits, hız sınırlarını çalışırken değiştirir (panelden). Şifre sıfırlama sınırlayıcıları başarısız giriş
+// sınırından türer: o kapalıysa onlar da kapalıdır.
+func (d *Deps) SetRateLimits(limits RateLimits) {
+	d.loginFailures.SetRate(float64(limits.AuthFailuresPerMinute))
+	d.ingestFailures.SetRate(float64(limits.AuthFailuresPerMinute))
+	d.ingestRate.SetRate(float64(limits.IngestPerMinute))
+	d.resetIPs.SetRate(resetIPPerMinute(limits))
+	d.resetEmails.SetRate(resetEmailPerMinute(limits))
+}
 
 func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *alertengine.Engine, limits RateLimits, secrets *secretbox.Box) *Deps {
 	d := &Deps{
@@ -126,9 +138,10 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 		alerts:        store.NewAlerts(pool),
 		refreshTokens: store.NewRefreshTokens(pool),
 		resets:        store.NewPasswordResets(pool),
-
-		errorBodyBytes: DefaultErrorBodyBytes,
 	}
+	d.SetAgentPolicy(AgentPolicy{})
+	d.SetPanelBaseURL("")
+	d.SetErrorBodyLogging(DefaultErrorBodyBytes)
 	d.perms = rbac.NewCache(pool, rbac.DefaultCacheTTL)
 	d.access = access.NewResolver(d.userOrgs, d.userHosts, d.hosts)
 	d.ingest = ingest.New(d.metrics, d.hosts, alertEngine)

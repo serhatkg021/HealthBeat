@@ -173,3 +173,27 @@ func TestMustChangePasswordClaim(t *testing.T) {
 		t.Fatal("a refresh token carries the must-change flag")
 	}
 }
+
+// Süre panelden değişince yeni token'lar yeni süreyle üretilir; önceki token kendi süresiyle geçerli kalır.
+func TestSetTTLsAppliesToNewTokens(t *testing.T) {
+	svc := newSvc(time.Minute, time.Hour)
+	before := time.Now()
+	old, oldExp, _ := svc.IssueAccessToken(uuid.New(), "a@example.com", "operator", false)
+
+	svc.SetTTLs(30*time.Minute, 48*time.Hour)
+	_, accessExp, _ := svc.IssueAccessToken(uuid.New(), "a@example.com", "operator", false)
+	_, refreshExp, _ := svc.IssueRefreshToken(uuid.New(), "a@example.com", "operator", uuid.New())
+
+	if d := accessExp.Sub(before); d < 30*time.Minute || d > 31*time.Minute {
+		t.Errorf("access token after SetTTLs lives %v, want ~30m", d)
+	}
+	if d := refreshExp.Sub(before); d < 48*time.Hour || d > 48*time.Hour+time.Minute {
+		t.Errorf("refresh token after SetTTLs lives %v, want ~48h", d)
+	}
+	if d := oldExp.Sub(before); d > 2*time.Minute {
+		t.Errorf("token issued before SetTTLs lives %v, want ~1m", d)
+	}
+	if _, err := svc.ParseAccessToken(old); err != nil {
+		t.Errorf("token issued before SetTTLs: %v", err)
+	}
+}

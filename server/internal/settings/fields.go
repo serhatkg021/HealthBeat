@@ -3,11 +3,11 @@ package settings
 import (
 	"fmt"
 	"math"
+	"net/url"
 	"slices"
 	"strings"
 	"time"
 
-	"healthbeat-server/internal/config"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/version"
 )
@@ -157,7 +157,7 @@ func normalize(in map[Field]any) (map[Field]any, error) {
 			}
 			out[f] = s
 		case FieldPanelBaseURL:
-			s, err := config.ParsePanelBaseURL(v.(string))
+			s, err := ParsePanelBaseURL(v.(string))
 			if err != nil {
 				return nil, &FieldError{f, "geçerli bir adres değil (scheme://alan-adı[:port], ör. https://panel.example.com)"}
 			}
@@ -202,4 +202,20 @@ func dbValue(f Field, v any) any {
 		}
 	}
 	return v
+}
+
+// ParsePanelBaseURL, panelin dış adresini doğrular ve olağan biçime getirir: scheme://host[:port] (yol, sorgu ve
+// sondaki eğik çizgi yok). Boş girdi geçerlidir ve "" döner (özellik kapalı). Şifre sıfırlama bağlantısının kökü
+// isteğin Host başlığından türetilmez: aksi halde saldırgan bağlantıyı kendi alan adına yönlendirebilirdi.
+func ParsePanelBaseURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(strings.TrimRight(raw, "/"))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+		u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
+		return "", fmt.Errorf("%q is not a valid panel address (want scheme://host[:port], e.g. https://panel.example.com)", raw)
+	}
+	return u.Scheme + "://" + strings.ToLower(u.Host), nil
 }

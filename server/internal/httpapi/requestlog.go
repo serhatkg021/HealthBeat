@@ -50,7 +50,7 @@ func withRequestID(next http.Handler) http.Handler {
 func (d *Deps) requestLog(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		limit := d.errorBodyBytes
+		limit := int(d.errorBodyBytes.Load())
 
 		var reqBody *bodyCapture
 		if limit > 0 && r.Body != nil && r.Body != http.NoBody {

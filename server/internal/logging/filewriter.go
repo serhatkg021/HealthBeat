@@ -19,7 +19,9 @@ import (
 type FileOptions struct {
 	// Path, örn. /var/log/healthbeat/server.log: dosyalar o dizinde <ad>-YYYY-MM-DD.log olarak tutulur.
 	Path string
-	// MaxAgeDays, bugün dahil kaç günlük dosyanın tutulacağıdır; daha eskiler silinir.
+	// MaxAgeDays, bugün dahil kaç günlük dosyanın tutulacağıdır; daha eskiler silinir. MaxAgeDays ve MaxTotalBytes
+	// ikisi de 0 ise sınırlar henüz bilinmiyordur (veritabanından okunacak): SetLimits çağrılana kadar hiçbir dosya
+	// silinmez.
 	MaxAgeDays int
 	// MaxTotalBytes, bütün log dosyalarının (sıkıştırılmışlar dahil) toplam üst sınırıdır; aşılırsa en eskiler silinir.
 	// Bir hata fırtınasında diski korur: o durumda MaxAgeDays'ten daha kısa bir geçmiş kalır.
@@ -45,12 +47,16 @@ type FileWriter struct {
 	prefix  string
 	pattern *regexp.Regexp
 
-	mu      sync.Mutex
-	f       *os.File
-	day     string
-	index   int
-	size    int64
-	failing bool
+	mu sync.Mutex
+	// limitsKnown false iken saklama sınırları uygulanmaz (bkz. FileOptions.MaxAgeDays, SetLimits).
+	limitsKnown bool
+	// derivedFileBytes, maxFileBytes MaxTotalBytes'tan türetildiyse true'dur (sınır değişince yeniden türetilir).
+	derivedFileBytes bool
+	f                *os.File
+	day              string
+	index            int
+	size             int64
+	failing          bool
 	// pending, sıkıştırılması süren dosyalardır; silme onlara dokunmaz.
 	pending map[string]bool
 
@@ -60,7 +66,8 @@ type FileWriter struct {
 // OpenFile, dizini gerekirse oluşturur, bugünün dosyasını (varsa sonuna ekleyerek) açar, geride kalmış sıkıştırılmamış
 // dosyaları sıkıştırır ve saklama sınırlarını uygular.
 func OpenFile(opts FileOptions) (*FileWriter, error) {
-	if opts.MaxAgeDays < 1 || opts.MaxTotalBytes < 1 {
+	limitsKnown := opts.MaxAgeDays != 0 || opts.MaxTotalBytes != 0
+	if limitsKnown && (opts.MaxAgeDays < 1 || opts.MaxTotalBytes < 1) {
 		return nil, errors.New("log file: MaxAgeDays and MaxTotalBytes must be positive")
 	}
 	if opts.now == nil {
@@ -69,13 +76,9 @@ func OpenFile(opts FileOptions) (*FileWriter, error) {
 	if opts.errOut == nil {
 		opts.errOut = os.Stderr
 	}
-	if opts.maxFileBytes == 0 {
-		// Toplam sınırın dörtte biri, en fazla 100 MB: tek bir gün bütün bütçeyi tek dosyada tüketmez ve silme
-		// işlemi dosya dosya ilerleyebilir.
-		opts.maxFileBytes = min(opts.MaxTotalBytes/4, 100<<20)
-		if opts.maxFileBytes < 1 {
-			opts.maxFileBytes = 1
-		}
+	derivedFileBytes := opts.maxFileBytes == 0
+	if derivedFileBytes {
+		opts.maxFileBytes = fileBytesFor(opts.MaxTotalBytes)
 	}
 	if strings.HasSuffix(opts.Path, "/") || strings.HasSuffix(opts.Path, string(filepath.Separator)) {
 		return nil, fmt.Errorf("log file: %q is a directory; give a file name such as server.log", opts.Path)
@@ -92,11 +95,13 @@ func OpenFile(opts FileOptions) (*FileWriter, error) {
 		return nil, fmt.Errorf("log file: %w", err)
 	}
 	w := &FileWriter{
-		opts:    opts,
-		dir:     dir,
-		prefix:  prefix,
-		pattern: regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `-(\d{4}-\d{2}-\d{2})(?:\.(\d+))?\.log(\.gz)?$`),
-		pending: map[string]bool{},
+		limitsKnown:      limitsKnown,
+		derivedFileBytes: derivedFileBytes,
+		opts:             opts,
+		dir:              dir,
+		prefix:           prefix,
+		pattern:          regexp.MustCompile(`^` + regexp.QuoteMeta(prefix) + `-(\d{4}-\d{2}-\d{2})(?:\.(\d+))?\.log(\.gz)?$`),
+		pending:          map[string]bool{},
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -311,9 +316,38 @@ func (w *FileWriter) compressLeftoversLocked() {
 	}
 }
 
+// SetLimits, saklama sınırlarını (ilk kez ya da panelden değişince) ayarlar ve hemen uygular.
+func (w *FileWriter) SetLimits(maxAgeDays int, maxTotalBytes int64) error {
+	if maxAgeDays < 1 || maxTotalBytes < 1 {
+		return errors.New("log file: MaxAgeDays and MaxTotalBytes must be positive")
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.opts.MaxAgeDays, w.opts.MaxTotalBytes = maxAgeDays, maxTotalBytes
+	if w.derivedFileBytes {
+		w.opts.maxFileBytes = fileBytesFor(maxTotalBytes)
+	}
+	w.limitsKnown = true
+	w.pruneLocked()
+	return nil
+}
+
+// fileBytesFor, bir günün dosyasının bölüneceği boyuttur: toplam sınırın dörtte biri, en fazla 100 MB. Tek bir gün
+// bütün bütçeyi tek dosyada tüketmez ve silme dosya dosya ilerleyebilir. Toplam sınır henüz bilinmiyorsa (0) 100 MB.
+func fileBytesFor(maxTotalBytes int64) int64 {
+	if maxTotalBytes == 0 {
+		return 100 << 20
+	}
+	return max(min(maxTotalBytes/4, 100<<20), 1)
+}
+
 // pruneLocked, saklama süresini aşan dosyaları, sonra toplam sınır aşılıyorsa en eskilerden başlayarak diğerlerini
 // siler. Açık dosyaya ve sıkıştırılması süren dosyalara dokunmaz (onlar sıkıştırma bitince yeniden değerlendirilir).
+// Sınırlar henüz bilinmiyorsa hiçbir şey silmez.
 func (w *FileWriter) pruneLocked() {
+	if !w.limitsKnown {
+		return
+	}
 	oldest := w.opts.now().AddDate(0, 0, -(w.opts.MaxAgeDays - 1)).Format(time.DateOnly)
 	current := ""
 	if w.f != nil {

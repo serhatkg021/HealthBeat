@@ -216,6 +216,38 @@ func TestFileWriterSwallowsWriteErrorsAndRecovers(t *testing.T) {
 	}
 }
 
+// Sınırlar veritabanından okunmadan açılan dosya (MaxAgeDays = MaxTotalBytes = 0) hiçbir şey silmez: yeniden başlatmada
+// varsayılan sınırlarla, panelde uzatılmış bir geçmiş silinmesin. SetLimits sınırları uygular ve sonra değiştirebilir.
+func TestFileWriterPrunesOnlyOnceLimitsAreKnown(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"server-2026-09-01.log.gz", "server-2026-09-20.log.gz", "server-2026-09-25.log.gz"} {
+		touch(t, filepath.Join(dir, name), 10)
+	}
+	w := openTestWriter(t, dir, newClock("2026-09-26"), 0, 0, 1<<20)
+	defer w.Close()
+	write(t, w, "açılış satırı\n")
+	if got := files(t, dir); len(got) != 4 {
+		t.Fatalf("files before SetLimits = %v, want all kept", got)
+	}
+
+	if err := w.SetLimits(10, 1<<20); err != nil {
+		t.Fatal(err)
+	}
+	want := "server-2026-09-20.log.gz,server-2026-09-25.log.gz,server-2026-09-26.log"
+	if got := strings.Join(files(t, dir), ","); got != want {
+		t.Fatalf("files after SetLimits(10 days) = %s, want %s", got, want)
+	}
+	if err := w.SetLimits(3, 1<<20); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(files(t, dir), ","); got != "server-2026-09-25.log.gz,server-2026-09-26.log" {
+		t.Fatalf("files after SetLimits(3 days) = %s", got)
+	}
+	if err := w.SetLimits(0, 1); err == nil {
+		t.Fatal("SetLimits accepted 0 days")
+	}
+}
+
 func TestOpenFileRejectsBadOptions(t *testing.T) {
 	dir := t.TempDir()
 	for _, opts := range []FileOptions{

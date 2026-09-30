@@ -46,8 +46,9 @@ func ParseFormat(s string) (string, error) {
 	return "", fmt.Errorf("must be text or json")
 }
 
-// New, w'ye yazan ve bağlamdaki istek kimliklerini ekleyen bir logger döndürür.
-func New(w io.Writer, level slog.Level, format string) *slog.Logger {
+// New, w'ye yazan ve bağlamdaki istek kimliklerini ekleyen bir logger döndürür. level sabit bir seviye ya da çalışırken
+// değiştirilebilen bir *slog.LevelVar olabilir (panelden değişen log seviyesi).
+func New(w io.Writer, level slog.Leveler, format string) *slog.Logger {
 	opts := &slog.HandlerOptions{Level: level}
 	var h slog.Handler
 	if format == FormatJSON {
@@ -61,7 +62,7 @@ func New(w io.Writer, level slog.Level, format string) *slog.Logger {
 // Setup, New'in logger'ını varsayılan yapar. slog.SetDefault standart log paketini de ona
 // yönlendirir: standart kütüphanenin kendi logları (ör. net/http'nin TLS el sıkışma hataları) aynı biçimde, INFO
 // seviyesinde çıkar.
-func Setup(w io.Writer, level slog.Level, format string) {
+func Setup(w io.Writer, level slog.Leveler, format string) {
 	slog.SetDefault(New(w, level, format))
 }
 

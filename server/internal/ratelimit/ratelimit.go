@@ -40,7 +40,19 @@ func newWithClock(perMinute float64, burst int, now func() time.Time) *Limiter {
 	}
 }
 
+// disabled, l.mu altında çağrılır.
 func (l *Limiter) disabled() bool { return l.rate <= 0 || l.burst <= 0 }
+
+// SetRate, dolma hızını çalışırken değiştirir (panelden değişen hız sınırı); perMinute <= 0 sınırlamayı kapatır.
+// Mevcut kovalar korunur: bir anahtarın o ana kadar harcadığı hak sıfırlanmaz, yalnızca yeni hızla dolmaya devam eder.
+func (l *Limiter) SetRate(perMinute float64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.rate = perMinute / 60
+	if l.disabled() {
+		clear(l.buckets)
+	}
+}
 
 // Allow, key için bir jeton tüketir. Hiç yoksa birinin ne zaman olacağını bildirir.
 func (l *Limiter) Allow(key string) (ok bool, retryAfter time.Duration) {
@@ -54,12 +66,11 @@ func (l *Limiter) Check(key string) (ok bool, retryAfter time.Duration) {
 }
 
 func (l *Limiter) take(key string, consume bool) (bool, time.Duration) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	if l.disabled() {
 		return true, 0
 	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
 
 	now := l.now()
 	l.sweep(now)

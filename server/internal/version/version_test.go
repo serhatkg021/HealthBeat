@@ -17,9 +17,6 @@ func TestOwnVersionIsValidAndProtocolIsAtLeastTwo(t *testing.T) {
 	if !ValidSemver(Version) {
 		t.Errorf("Version = %q is not SemVer", Version)
 	}
-	if !ValidSemver(LatestAgent) {
-		t.Errorf("LatestAgent = %q is not SemVer", LatestAgent)
-	}
 	if Protocol < 2 {
 		t.Errorf("Protocol = %d", Protocol)
 	}

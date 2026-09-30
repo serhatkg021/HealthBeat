@@ -12,12 +12,6 @@ import (
 // etiketiyle yayınlanır. Agent'ın sürümünden BAĞIMSIZDIR (bkz. docs/DISTRIBUTION.md, iki sürüm hattı).
 var Version = "1.1.0"
 
-// LatestAgent, bu server derlemesinin bildiği en güncel agent sürümüdür (SemVer): panelin "güncel / güncelleme var"
-// sınıflandırmasında LATEST_AGENT_VERSION verilmezse varsayılan olarak kullanılır. Server sürümüyle karıştırma:
-// server yeni sürümle çıkınca agent'lar boşuna "güncelleme var" görünmesin diye ayrı tutulur. Yeni bir agent
-// yayınlanırken (`agent/vX.Y.Z`) elle güncellenir; scripts/release.sh agent bunu doğrular.
-var LatestAgent = "1.0.0"
-
 // Protocol, server'ın anladığı en yüksek ingest protokolüdür (agent'ın version.Protocol'ü ile
 // aynı anlam): 1 = sürüm bildirmeyen eski agent'lar, 2 = donanım özeti + sürüm başlıkları, 3 = makine envanteri (host_info) + inode.
 const Protocol = 3

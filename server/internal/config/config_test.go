@@ -7,15 +7,12 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"log/slog"
 	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"healthbeat-server/internal/version"
 )
 
 func setRequired(t *testing.T) {
@@ -44,34 +41,6 @@ func TestLoadRequiresValidSecretsKey(t *testing.T) {
 	t.Setenv("SECRETS_ENCRYPTION_KEY", "too-short")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "SECRETS_ENCRYPTION_KEY") {
 		t.Fatalf("bad key: err=%v", err)
-	}
-}
-
-func TestLoadRateLimitDefaultsAndValidation(t *testing.T) {
-	setRequired(t)
-	cfg, err := Load()
-	if err != nil || cfg.AuthFailuresPerMinute != 10 || cfg.IngestPerMinute != 120 || cfg.MetricsRetentionDays != 30 {
-		t.Fatalf("defaults = %+v err=%v", cfg, err)
-	}
-	t.Setenv("METRICS_RETENTION_DAYS", "0")
-	if cfg, err = Load(); err != nil || cfg.MetricsRetentionDays != 0 {
-		t.Fatalf("0 (keep forever) rejected: %+v err=%v", cfg, err)
-	}
-	t.Setenv("METRICS_RETENTION_DAYS", "-5")
-	if _, err = Load(); err == nil {
-		t.Fatal("negative METRICS_RETENTION_DAYS accepted")
-	}
-	t.Setenv("METRICS_RETENTION_DAYS", "")
-
-	t.Setenv("RATE_LIMIT_INGEST_PER_MINUTE", "0")
-	if cfg, err = Load(); err != nil || cfg.IngestPerMinute != 0 {
-		t.Fatalf("0 (disabled) rejected: %+v err=%v", cfg, err)
-	}
-	for _, bad := range []string{"-1", "abc", "1.5"} {
-		t.Setenv("RATE_LIMIT_INGEST_PER_MINUTE", bad)
-		if _, err := Load(); err == nil {
-			t.Errorf("RATE_LIMIT_INGEST_PER_MINUTE=%q accepted", bad)
-		}
 	}
 }
 
@@ -119,36 +88,6 @@ func TestLoadTrustedProxies(t *testing.T) {
 	t.Setenv("TRUSTED_PROXIES", "0.0.0.0/0")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "TRUSTED_PROXIES") {
 		t.Fatalf("trust everyone: err=%v, want it to name TRUSTED_PROXIES", err)
-	}
-}
-
-func TestLoadLogSettings(t *testing.T) {
-	setRequired(t)
-	cfg, err := Load()
-	if err != nil || cfg.LogLevel != slog.LevelInfo || cfg.LogFormat != "text" || cfg.LogErrorBodyBytes != 4096 {
-		t.Fatalf("defaults: level=%v format=%q body=%d err=%v", cfg.LogLevel, cfg.LogFormat, cfg.LogErrorBodyBytes, err)
-	}
-	t.Setenv("LOG_LEVEL", "debug")
-	t.Setenv("LOG_FORMAT", "json")
-	t.Setenv("LOG_ERROR_BODY_BYTES", "0")
-	if cfg, err = Load(); err != nil || cfg.LogLevel != slog.LevelDebug || cfg.LogFormat != "json" || cfg.LogErrorBodyBytes != 0 {
-		t.Fatalf("set: level=%v format=%q body=%d err=%v", cfg.LogLevel, cfg.LogFormat, cfg.LogErrorBodyBytes, err)
-	}
-	if cfg.LogFile != "" || cfg.LogFileMaxAgeDays != 14 || cfg.LogFileMaxTotalMB != 1024 {
-		t.Fatalf("file defaults: %q %d %d", cfg.LogFile, cfg.LogFileMaxAgeDays, cfg.LogFileMaxTotalMB)
-	}
-	t.Setenv("LOG_FILE", " /var/log/healthbeat/server.log ")
-	t.Setenv("LOG_FILE_MAX_AGE_DAYS", "5")
-	if cfg, err = Load(); err != nil || cfg.LogFile != "/var/log/healthbeat/server.log" || cfg.LogFileMaxAgeDays != 5 {
-		t.Fatalf("file set: %q %d %v", cfg.LogFile, cfg.LogFileMaxAgeDays, err)
-	}
-	for key, bad := range map[string]string{"LOG_LEVEL": "verbose", "LOG_FORMAT": "xml", "LOG_ERROR_BODY_BYTES": "2000000",
-		"LOG_FILE_MAX_AGE_DAYS": "0", "LOG_FILE_MAX_TOTAL_MB": "-1"} {
-		t.Setenv(key, bad)
-		if _, err := Load(); err == nil || !strings.Contains(err.Error(), key) {
-			t.Fatalf("%s=%s: err=%v, want it to name %s", key, bad, err, key)
-		}
-		t.Setenv(key, "")
 	}
 }
 
@@ -249,77 +188,6 @@ func TestLoadPullCACertFile(t *testing.T) {
 	}
 }
 
-// Sürüm politikası: Latest varsayılanı server'ın bildiği en güncel AGENT sürümü (server'ın kendi sürümü değil), Min boş (= "desteklenmiyor" yok);
-// geçersiz bir değer açılışta yüksek sesle reddedilir.
-func TestLoadAgentVersionPolicy(t *testing.T) {
-	setRequired(t)
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.LatestAgentVersion != version.LatestAgent || cfg.MinSupportedAgentVersion != "" {
-		t.Errorf("defaults = latest %q min %q, want %q and empty", cfg.LatestAgentVersion, cfg.MinSupportedAgentVersion, version.LatestAgent)
-	}
-
-	// Varsayılan, server'ın KENDİ sürümü değil bildiği en güncel agent sürümüdür: ikisi farklıyken ayırt edilir
-	// (yeni bir server çıkınca değişmemiş agent'lar "güncelleme var" görünmemeli).
-	oldVersion, oldAgent := version.Version, version.LatestAgent
-	t.Cleanup(func() { version.Version, version.LatestAgent = oldVersion, oldAgent })
-	version.Version, version.LatestAgent = "5.0.0", "1.4.2"
-	if cfg, err = Load(); err != nil || cfg.LatestAgentVersion != "1.4.2" {
-		t.Errorf("with server 5.0.0 and latest agent 1.4.2, default latest = %q (err %v); want 1.4.2", cfg.LatestAgentVersion, err)
-	}
-	version.Version, version.LatestAgent = oldVersion, oldAgent
-
-	t.Setenv("LATEST_AGENT_VERSION", "2.0.1")
-	t.Setenv("MIN_SUPPORTED_AGENT_VERSION", " 1.0.0 ")
-	cfg, err = Load()
-	if err != nil || cfg.LatestAgentVersion != "2.0.1" || cfg.MinSupportedAgentVersion != "1.0.0" {
-		t.Fatalf("explicit = %+v err %v", cfg, err)
-	}
-
-	for _, bad := range []string{"v1.0.0", "1.0", "latest", "1.0.0; x"} {
-		for _, key := range []string{"LATEST_AGENT_VERSION", "MIN_SUPPORTED_AGENT_VERSION"} {
-			t.Setenv("LATEST_AGENT_VERSION", "1.0.0")
-			t.Setenv("MIN_SUPPORTED_AGENT_VERSION", "1.0.0")
-			t.Setenv(key, bad)
-			if _, err := Load(); err == nil || !strings.Contains(err.Error(), key) {
-				t.Errorf("%s=%q: err = %v, want it to name %s", key, bad, err, key)
-			}
-		}
-	}
-}
-
-func TestParsePanelBaseURL(t *testing.T) {
-	for _, tc := range []struct{ in, want string }{
-		{"", ""},
-		{"   ", ""},
-		{"https://panel.example.com", "https://panel.example.com"},
-		{"  https://Panel.Example.com/  ", "https://panel.example.com"},
-		{"http://localhost:8080", "http://localhost:8080"},
-		{"https://panel.example.com:8443///", "https://panel.example.com:8443"},
-	} {
-		got, err := ParsePanelBaseURL(tc.in)
-		if err != nil || got != tc.want {
-			t.Errorf("ParsePanelBaseURL(%q) = %q, %v; want %q", tc.in, got, err, tc.want)
-		}
-	}
-	for _, bad := range []string{
-		"panel.example.com",           // şema yok
-		"ftp://panel.example.com",     // http/https dışı
-		"https://panel.example.com/x", // yol
-		"https://panel.example.com?a=1",
-		"https://panel.example.com/#f",
-		"https://user:pw@panel.example.com", // kimlik bilgisi
-		"https://",                          // ana makine yok
-		"javascript:alert(1)",
-	} {
-		if got, err := ParsePanelBaseURL(bad); err == nil {
-			t.Errorf("ParsePanelBaseURL(%q) = %q, want an error", bad, got)
-		}
-	}
-}
-
 func TestLoadDBMaxConns(t *testing.T) {
 	setRequired(t)
 	if cfg, err := Load(); err != nil || cfg.DBMaxConns != 0 {
@@ -337,21 +205,41 @@ func TestLoadDBMaxConns(t *testing.T) {
 	}
 }
 
-func TestLoadAuditAndAlertRetention(t *testing.T) {
+func TestLoadLogSettings(t *testing.T) {
 	setRequired(t)
-	if cfg, err := Load(); err != nil || cfg.AuditRetentionDays != 0 || cfg.ResolvedAlertRetentionDays != 0 {
-		t.Fatalf("defaults = %d/%d err=%v, want 0/0 (keep forever)", cfg.AuditRetentionDays, cfg.ResolvedAlertRetentionDays, err)
+	cfg, err := Load()
+	if err != nil || cfg.LogFormat != "text" || cfg.LogFile != "" {
+		t.Fatalf("defaults: format=%q file=%q err=%v", cfg.LogFormat, cfg.LogFile, err)
 	}
-	t.Setenv("AUDIT_RETENTION_DAYS", "365")
-	t.Setenv("RESOLVED_ALERT_RETENTION_DAYS", "180")
-	if cfg, err := Load(); err != nil || cfg.AuditRetentionDays != 365 || cfg.ResolvedAlertRetentionDays != 180 {
-		t.Fatalf("365/180 -> %d/%d err=%v", cfg.AuditRetentionDays, cfg.ResolvedAlertRetentionDays, err)
+	t.Setenv("LOG_FORMAT", "json")
+	t.Setenv("LOG_FILE", " /var/log/healthbeat/server.log ")
+	if cfg, err = Load(); err != nil || cfg.LogFormat != "json" || cfg.LogFile != "/var/log/healthbeat/server.log" {
+		t.Fatalf("set: format=%q file=%q err=%v", cfg.LogFormat, cfg.LogFile, err)
 	}
-	for _, key := range []string{"AUDIT_RETENTION_DAYS", "RESOLVED_ALERT_RETENTION_DAYS"} {
-		t.Setenv(key, "-1")
-		if _, err := Load(); err == nil {
-			t.Errorf("%s=-1 accepted", key)
-		}
+	t.Setenv("LOG_FORMAT", "xml")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "LOG_FORMAT") {
+		t.Fatalf("LOG_FORMAT=xml: err=%v, want it to name LOG_FORMAT", err)
+	}
+}
+
+// Panele taşınan değişkenler artık okunmaz (geçersiz değerleri de açılışı durdurmaz); dolu olanlar uyarı için bildirilir,
+// boş olanlar (compose onları boş geçirir) sessizdir.
+func TestLoadReportsObsoleteVars(t *testing.T) {
+	setRequired(t)
+	for _, key := range ObsoleteVars {
 		t.Setenv(key, "")
+	}
+	if cfg, err := Load(); err != nil || len(cfg.Obsolete) != 0 {
+		t.Fatalf("empty obsolete vars: %v err=%v, want none reported", cfg.Obsolete, err)
+	}
+	t.Setenv("LOG_LEVEL", "verbose") // eskiden açılışı durdururdu; artık yalnızca uyarı
+	t.Setenv("METRICS_RETENTION_DAYS", "-5")
+	t.Setenv("PANEL_BASE_URL", "  ")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("an obsolete var stopped the start: %v", err)
+	}
+	if strings.Join(cfg.Obsolete, ",") != "METRICS_RETENTION_DAYS,LOG_LEVEL" {
+		t.Fatalf("obsolete = %v, want METRICS_RETENTION_DAYS,LOG_LEVEL", cfg.Obsolete)
 	}
 }

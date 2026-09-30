@@ -153,3 +153,28 @@ func TestOversizedBodyRejected(t *testing.T) {
 		t.Fatalf("status = %d, want 400 for a body over %d bytes", rec.Code, maxBodyBytes)
 	}
 }
+
+// Hız sınırı panelden kapatılınca (0) kısılmış IP hemen serbest kalır; yeniden açılınca sınır yeniden uygulanır.
+func TestSetRateLimitsAppliesAtRuntime(t *testing.T) {
+	d := newLimitedDeps()
+	h := d.Router()
+	for range authFailureBurst {
+		do(h, "POST", "/api/v1/metrics", "203.0.113.7:4000", nil, "{}")
+	}
+	if rec := do(h, "POST", "/api/v1/metrics", "203.0.113.7:4000", nil, "{}"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status after burst = %d, want 429", rec.Code)
+	}
+
+	d.SetRateLimits(RateLimits{AuthFailuresPerMinute: 0, IngestPerMinute: 60})
+	if rec := do(h, "POST", "/api/v1/metrics", "203.0.113.7:4000", nil, "{}"); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status with the limit disabled = %d, want 401", rec.Code)
+	}
+
+	d.SetRateLimits(RateLimits{AuthFailuresPerMinute: 60, IngestPerMinute: 60})
+	for range authFailureBurst {
+		do(h, "POST", "/api/v1/metrics", "203.0.113.7:4000", nil, "{}")
+	}
+	if rec := do(h, "POST", "/api/v1/metrics", "203.0.113.7:4000", nil, "{}"); rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status after re-enabling and another burst = %d, want 429", rec.Code)
+	}
+}

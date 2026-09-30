@@ -22,11 +22,12 @@ type metaResponse struct {
 // handleMeta, panelin sürüm bilgisini (server sürümü ve agent sürüm politikası) verir. Herhangi
 // bir oturum açmış kullanıcı okuyabilir: hassas bir şey içermez.
 func (d *Deps) handleMeta(w http.ResponseWriter, r *http.Request) {
+	policy := d.agentPolicy.Load()
 	writeJSON(w, http.StatusOK, metaResponse{
 		ServerVersion:      version.Version,
 		Protocol:           version.Protocol,
-		LatestAgentVersion: d.agentPolicy.Latest,
-		MinAgentVersion:    d.agentPolicy.Min,
+		LatestAgentVersion: policy.Latest,
+		MinAgentVersion:    policy.Min,
 	})
 }
 

@@ -51,16 +51,11 @@ cd "$ROOT"
 # --- 1) Sürüm tutarlılığı: kaynaktaki sürümler, değişiklik günlüğü ve (isteniyorsa) etiket aynı olmalı.
 src_var() { sed -n "s/^var $2 = \"\(.*\)\"\$/\1/p" "$1"; }                       # Go: var Version = "1.0.0"
 json_version() { awk -F'"' '/"version"[[:space:]]*:/ { print $4; exit }' "$1"; }  # ilk "version" alanı
-semver_ok() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; }
-tag_exists() { git rev-parse -q --verify "refs/tags/$1" >/dev/null 2>&1; }
 
 if [[ "$COMPONENT" == agent ]]; then
   v="$(src_var agent/internal/version/version.go Version)"
   [[ "$v" == "$VERSION" ]] || die "agent/internal/version/version.go says '$v', not $VERSION (bump it first)"
-  # Yeni agent yayınlanırken server'ın "en güncel agent" bilgisi de aynı commit'te güncellenmiş olmalı; aksi halde
-  # sonraki server derlemesi bu agent'ı bilmez ve panel onu "güncel" saymaz.
-  la="$(src_var server/internal/version/version.go LatestAgent)"
-  [[ "$la" == "$VERSION" ]] || die "server/internal/version/version.go LatestAgent is '$la', not $VERSION (bump it in the same commit)"
+  # Panelin "güncel agent" saydığı sürüm server'a gömülü değildir: agent yayınlandıktan sonra panelden (Ayarlar) girilir.
 else
   v="$(src_var server/internal/version/version.go Version)"
   [[ "$v" == "$VERSION" ]] || die "server/internal/version/version.go says '$v', not $VERSION (bump it first)"
@@ -69,12 +64,6 @@ else
   [[ "$pv" == "$VERSION" ]] || die "server/panel/package.json version is '$pv', not $VERSION (bump it first; also server/panel/package-lock.json)"
   lv="$(json_version server/panel/package-lock.json)"
   [[ "$lv" == "$VERSION" ]] || die "server/panel/package-lock.json version is '$lv', not $VERSION (bump it together with package.json)"
-  # Server'ın panelde "güncel agent" saydığı sürüm gerçekten yayınlanmış bir agent olmalı.
-  la="$(src_var server/internal/version/version.go LatestAgent)"
-  semver_ok "$la" || die "server/internal/version/version.go LatestAgent '$la' is not SemVer"
-  if ! tag_exists "agent/v$la"; then
-    die "LatestAgent is $la but no agent release tag (agent/v$la) exists: release that agent first, or fix LatestAgent"
-  fi
 fi
 scripts/release-notes.sh "$COMPONENT" "$VERSION" >/dev/null || die "the $COMPONENT changelog has no '## [$VERSION]' section"
 

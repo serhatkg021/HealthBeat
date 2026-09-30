@@ -69,7 +69,7 @@ func (e *Engine) enqueue(ctx context.Context, tx Tx, p pending, event string, al
 	if len(p.groups) == 0 {
 		return nil
 	}
-	msg := buildMessage(alert, p.mc, e.panelBaseURL)
+	msg := buildMessage(alert, p.mc, *e.panelBaseURL.Load())
 	alertID := alert.ID
 	for _, g := range p.groups {
 		if _, err := tx.Outbox().Enqueue(ctx, store.OutboxMessage{

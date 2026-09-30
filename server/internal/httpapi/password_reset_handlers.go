@@ -77,7 +77,7 @@ type Mailer interface {
 // boşsa ya da mailer gerçek bir SMTP sunucusuna bağlı değilse özellik kapalı kalır (istekler 204 döner ama posta gitmez).
 func (d *Deps) SetPasswordReset(m Mailer, baseURL string) {
 	d.mailer = m
-	d.panelBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	d.SetPanelBaseURL(baseURL)
 	d.mailWorker = nil
 	if m != nil {
 		d.mailWorker = outbox.NewWorker(d.outbox, accountMailKinds, mailerChannel{m})
@@ -97,8 +97,14 @@ func (c mailerChannel) Send(ctx context.Context, to []string, msg notify.Message
 	return c.m.Send(ctx, to, msg.Subject, msg.Body)
 }
 
+// SetPanelBaseURL, sıfırlama bağlantılarının kökünü değiştirir (panelden); "" e-posta ile şifre sıfırlamayı kapatır.
+func (d *Deps) SetPanelBaseURL(baseURL string) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	d.panelBaseURL.Store(&baseURL)
+}
+
 func (d *Deps) passwordResetEnabled() bool {
-	return d.mailer != nil && d.mailer.Enabled() && d.panelBaseURL != ""
+	return d.mailer != nil && d.mailer.Enabled() && *d.panelBaseURL.Load() != ""
 }
 
 // RunMailOutbox, ctx bitene kadar şifre e-postalarını kuyruktan teslim eder. Kendi goroutine'inde çalıştırın.
@@ -212,7 +218,7 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) erro
 	}
 	d.queueMail(r.Context(), store.OutboxMessage{
 		Kind: store.OutboxKindPasswordReset, Recipients: []string{user.Email}, Subject: resetMailSubject,
-		Body: resetMailBody(user.Email, fmt.Sprintf(resetLinkPathFmt, d.panelBaseURL, token), passwordResetTTL),
+		Body: resetMailBody(user.Email, fmt.Sprintf(resetLinkPathFmt, *d.panelBaseURL.Load(), token), passwordResetTTL),
 		Seal: true, ExpiresAt: &expiresAt,
 	})
 	return respond()

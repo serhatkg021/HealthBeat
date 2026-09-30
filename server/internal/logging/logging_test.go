@@ -184,3 +184,20 @@ func TestContextAttrsDoNotDuplicateKeysTheRecordAlreadyHas(t *testing.T) {
 		t.Fatalf("other context attrs must still be added: %s", line)
 	}
 }
+
+// Seviye bir *slog.LevelVar ise çalışırken değişir (panelden değişen log seviyesi); logger yeniden kurulmaz.
+func TestLevelVarChangesTheLevelAtRuntime(t *testing.T) {
+	var buf bytes.Buffer
+	level := new(slog.LevelVar)
+	log := New(&buf, level, FormatText)
+
+	log.Debug("gizli")
+	level.Set(slog.LevelDebug)
+	log.Debug("görünür")
+	level.Set(slog.LevelWarn)
+	log.Info("yine gizli")
+
+	if got := buf.String(); strings.Contains(got, "gizli") || !strings.Contains(got, "görünür") {
+		t.Fatalf("log output = %q", got)
+	}
+}

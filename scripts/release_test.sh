@@ -12,7 +12,7 @@ fixture() {
   mkdir -p "$d"/{scripts,agent/internal/version,server/internal/version,server/panel}
   cp "$SRC/scripts/release.sh" "$SRC/scripts/release-notes.sh" "$d/scripts/"
   printf 'package version\n\nvar Version = "1.3.1"\n' >"$d/agent/internal/version/version.go"
-  printf 'package version\n\nvar Version = "1.4.0"\n\nvar LatestAgent = "1.3.1"\n' >"$d/server/internal/version/version.go"
+  printf 'package version\n\nvar Version = "1.4.0"\n' >"$d/server/internal/version/version.go"
   printf '{\n  "name": "panel",\n  "version": "1.4.0",\n  "dependencies": { "x": { "version": "9.9.9" } }\n}\n' >"$d/server/panel/package.json"
   printf '{\n  "name": "panel",\n  "version": "1.4.0",\n  "packages": { "": { "version": "1.4.0" } }\n}\n' >"$d/server/panel/package-lock.json"
   printf '# Agent\n\n## [Yayınlanmamış]\n\n## [1.3.1] - 2026-01-02\n\n### Eklendi\n- agent notu\n\n## [1.0.0] - 2026-01-01\n\n- eski agent notu\n' >"$d/agent/CHANGELOG.md"
@@ -35,31 +35,25 @@ mutate() { # mutate <dir> <dosya> <sed ifadesi...>
 }
 
 D="$TMP/repo"; fixture "$D"
-(cd "$D" && git tag agent/v1.3.1)   # agent 1.3.1 yayınlanmış: server'ın LatestAgent'ı için kanıt
+(cd "$D" && git tag agent/v1.3.1)   # agent 1.3.1 yayınlanmış
 
 # --- agent hattı
 run "$D" agent 1.3.1 --check;                                    ok "agent: tutarlı sürüm geçer"
 run "$D" agent 1.3.2 --check;                                    bad "agent: kaynak sürümü ≠ istenen" "agent/internal/version/version.go says '1.3.1', not 1.3.2"
-mutate "$D" server/internal/version/version.go 's/LatestAgent = "1.3.1"/LatestAgent = "1.3.0"/'
-run "$D" agent 1.3.1 --check --allow-dirty;                      bad "agent: LatestAgent güncellenmemiş" "LatestAgent is '1.3.0', not 1.3.1"; reset "$D"
 mutate "$D" agent/CHANGELOG.md 's/^## \[1.3.1\]/## [1.3.9]/'
 run "$D" agent 1.3.1 --check --allow-dirty;                      bad "agent: changelog bölümü yok" "changelog has no '## [1.3.1]' section"; reset "$D"
 mutate "$D" agent/CHANGELOG.md -e 's/^- agent notu$//' -e 's/^### Eklendi$//'
 run "$D" agent 1.3.1 --check --allow-dirty;                      bad "agent: boş changelog bölümü" "changelog has no '## [1.3.1]' section"; reset "$D"
 
 # --- server + panel hattı
-run "$D" server 1.4.0 --check;                                   ok "server: tutarlı sürüm geçer (LatestAgent/vX.Y.Z etiketiyle bulunur)"
+run "$D" server 1.4.0 --check;                                   ok "server: tutarlı sürüm geçer"
 run "$D" server 1.5.0 --check;                                   bad "server: kaynak sürümü ≠ istenen" "server/internal/version/version.go says '1.4.0', not 1.5.0"
 mutate "$D" server/panel/package.json 's/"version": "1.4.0"/"version": "0.0.0"/'
 run "$D" server 1.4.0 --check --allow-dirty;                     bad "server: server/panel/package.json sürümü farklı" "server/panel/package.json version is '0.0.0'"; reset "$D"
 mutate "$D" server/panel/package-lock.json '0,/"version": "1.4.0"/s//"version": "1.3.0"/'
 run "$D" server 1.4.0 --check --allow-dirty;                     bad "server: package-lock.json sürümü farklı" "server/panel/package-lock.json version is '1.3.0'"; reset "$D"
-mutate "$D" server/internal/version/version.go 's/LatestAgent = "1.3.1"/LatestAgent = "9.9.9"/'
-run "$D" server 1.4.0 --check --allow-dirty;                     bad "server: yayınlanmamış agent sürümü LatestAgent olamaz" "no agent release tag (agent/v9.9.9) exists"; reset "$D"
-mutate "$D" server/internal/version/version.go 's/LatestAgent = "1.3.1"/LatestAgent = "latest"/'
-run "$D" server 1.4.0 --check --allow-dirty;                     bad "server: LatestAgent SemVer olmalı" "is not SemVer"; reset "$D"
 (cd "$D" && git tag -d agent/v1.3.1 >/dev/null)
-run "$D" server 1.4.0 --check;                                   bad "server: hiçbir agent etiketi yoksa reddedilir" "no agent release tag"
+run "$D" server 1.4.0 --check;                                   ok "server: agent etiketi gerekmez (en güncel agent panelden girilir)"
 (cd "$D" && git tag agent/v1.3.1)
 
 # --- çalışma ağacı ve etiket

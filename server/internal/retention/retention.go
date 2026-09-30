@@ -6,6 +6,7 @@ package retention
 import (
 	"context"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"healthbeat-server/internal/store"
@@ -20,11 +21,11 @@ const (
 	batchSize     = 10000
 )
 
-// Days, her tablonun saklama süresidir (gün); 0 o tabloyu sonsuza dek tutar.
+// Days, her tablonun saklama süresidir (gün); 0 o tabloyu sonsuza dek tutar. Panelden değişir (bkz. SetDays).
 type Days struct {
-	Metrics        int // METRICS_RETENTION_DAYS
-	Audit          int // AUDIT_RETENTION_DAYS
-	ResolvedAlerts int // RESOLVED_ALERT_RETENTION_DAYS
+	Metrics        int // metrics_retention_days
+	Audit          int // audit_retention_days
+	ResolvedAlerts int // resolved_alert_retention_days
 }
 
 // Stores, temizliğin sildiği tablolardır.
@@ -36,44 +37,51 @@ type Stores struct {
 
 // target, saklama süresi olan bir tablodur.
 type target struct {
-	what  string // log için: "metric samples", "audit log entries", "resolved alerts"
-	env   string // süreyi veren ortam değişkeni
-	days  int
-	purge func(ctx context.Context, cutoff time.Time, batchSize int) (int64, error)
+	what    string // log için: "metric samples", "audit log entries", "resolved alerts"
+	setting string // süreyi veren ayar
+	days    func(Days) int
+	purge   func(ctx context.Context, cutoff time.Time, batchSize int) (int64, error)
 }
 
 type Purger struct {
 	targets []target
+	days    atomic.Pointer[Days]
 	now     func() time.Time
 }
 
 func New(st Stores, days Days) *Purger {
 	p := &Purger{now: time.Now}
-	add := func(what, env string, d int, purge func(context.Context, time.Time, int) (int64, error)) {
-		p.targets = append(p.targets, target{what: what, env: env, days: d, purge: purge})
+	p.days.Store(&days)
+	add := func(what, setting string, d func(Days) int, purge func(context.Context, time.Time, int) (int64, error)) {
+		p.targets = append(p.targets, target{what: what, setting: setting, days: d, purge: purge})
 	}
 	if st.Metrics != nil {
-		add("metric samples", "METRICS_RETENTION_DAYS", days.Metrics, st.Metrics.PurgeOlderThan)
+		add("metric samples", "metrics_retention_days", func(d Days) int { return d.Metrics }, st.Metrics.PurgeOlderThan)
 	}
 	if st.Audit != nil {
-		add("audit log entries", "AUDIT_RETENTION_DAYS", days.Audit, st.Audit.PurgeOlderThan)
+		add("audit log entries", "audit_retention_days", func(d Days) int { return d.Audit }, st.Audit.PurgeOlderThan)
 	}
 	if st.Alerts != nil {
-		add("resolved alerts", "RESOLVED_ALERT_RETENTION_DAYS", days.ResolvedAlerts, st.Alerts.PurgeResolvedBefore)
+		add("resolved alerts", "resolved_alert_retention_days", func(d Days) int { return d.ResolvedAlerts }, st.Alerts.PurgeResolvedBefore)
 	}
 	return p
 }
+
+// SetDays, saklama sürelerini çalışırken değiştirir; bir sonraki temizlik turu yeni değerleri kullanır.
+func (p *Purger) SetDays(days Days) { p.days.Store(&days) }
 
 // RunOnce, saklama süresi dolan satırları siler ve tablo başına kaç tane kaldırdığını döndürür (anahtar: target.what).
 // Saklaması kapalı (0 gün) tablolara dokunmaz. Bir tablo başarısız olursa diğerleri yine denenir; ilk hata döner.
 func (p *Purger) RunOnce(ctx context.Context) (map[string]int64, error) {
 	deleted := map[string]int64{}
 	var firstErr error
+	days := *p.days.Load()
 	for _, t := range p.targets {
-		if t.days <= 0 {
+		d := t.days(days)
+		if d <= 0 {
 			continue
 		}
-		cutoff := p.now().Add(-time.Duration(t.days) * 24 * time.Hour)
+		cutoff := p.now().Add(-time.Duration(d) * 24 * time.Hour)
 		n, err := t.purge(ctx, cutoff, batchSize)
 		deleted[t.what] = n
 		if err != nil {
@@ -90,19 +98,16 @@ func (p *Purger) RunOnce(ctx context.Context) (map[string]int64, error) {
 	return deleted, firstErr
 }
 
-// Run, ctx iptal edilene kadar periyodik olarak temizler. Kendi goroutine'inde çalıştırın.
+// Run, ctx iptal edilene kadar periyodik olarak temizler. Kendi goroutine'inde çalıştırın. Bütün süreler 0 olsa da
+// çalışmaya devam eder: bir süre panelden sonradan açılabilir.
 func (p *Purger) Run(ctx context.Context) {
-	enabled := false
+	days := *p.days.Load()
 	for _, t := range p.targets {
-		if t.days > 0 {
-			enabled = true
-			slog.InfoContext(ctx, "retention: keeping "+t.what, "days", t.days)
+		if d := t.days(days); d > 0 {
+			slog.InfoContext(ctx, "retention: keeping "+t.what, "days", d)
 		} else {
-			slog.InfoContext(ctx, "retention: "+t.env+"=0, "+t.what+" are kept forever")
+			slog.InfoContext(ctx, "retention: "+t.setting+"=0, "+t.what+" are kept forever")
 		}
-	}
-	if !enabled {
-		return
 	}
 
 	timer := time.NewTimer(firstRunDelay)

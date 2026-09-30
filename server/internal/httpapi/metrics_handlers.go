@@ -30,8 +30,8 @@ func (d *Deps) handleIngestMetrics(w http.ResponseWriter, r *http.Request) error
 	h := w.Header()
 	h.Set(version.HeaderServerVersion, version.Version)
 	h.Set(version.HeaderProtocol, strconv.Itoa(version.Protocol))
-	if d.agentPolicy.Latest != "" {
-		h.Set(version.HeaderLatestAgent, d.agentPolicy.Latest)
+	if latest := d.agentPolicy.Load().Latest; latest != "" {
+		h.Set(version.HeaderLatestAgent, latest)
 	}
 
 	// bind kullanılmaz: ingest bilinmeyen alanları reddetmez, bildirir (bkz. ingest.Decode).
