@@ -38,32 +38,46 @@ flowchart LR
 | `CORS_ALLOWED_ORIGINS` | panel ayrı origin'deyse | Virgülle ayrılmış tam origin listesi, örn. `https://panel.example.com`. `*`, path ve sondaki `/` **reddedilir** (server başlamaz). Boşsa hiç CORS başlığı gönderilmez. |
 | `TRUSTED_PROXIES` | proxy arkasındaysa | Server'ın `X-Forwarded-For` başlığına güvendiği reverse proxy'ler: virgülle ayrılmış IP, CIDR ya da **host adı** (host adları 30 sn'de bir, çözülemedikleri sürece 2 sn'de bir ve tanınmayan bir eşten `X-Forwarded-For`'lu istek gelince hemen yeniden çözülür; docker'da container IP'si değişebilir). İstemci IP'si (hız sınırları, denetim kaydı) yalnızca istek bunlardan birinden geldiğinde başlıktan okunur; aksi halde TCP eşidir. Docker Compose varsayılanı `panel`; bare-metal'de boş (başlık hiç okunmaz). `0.0.0.0/0` ve geçersiz girdiler **reddedilir** (server başlamaz). Bkz. "Hız sınırları ve istemci IP'si". |
 | `DB_MAX_CONNS` | hayır | Veritabanı bağlantı havuzunun üst sınırı (en fazla `1000`). Boşsa `DATABASE_URL`'deki `pool_max_conns`, o da yoksa 4 ile CPU sayısından büyüğü. Açılışta `database pool max_conns=…` satırıyla loglanır. Bkz. "Veritabanı". |
-| `METRICS_RETENTION_DAYS` | hayır | Metrik örneklerinin saklanma süresi (gün); varsayılan `30`, `0` = sonsuza kadar sakla. Eski örnekler saatlik bir işle silinir. |
-| `AUDIT_RETENTION_DAYS` | hayır | Denetim kayıtlarının (Denetim Kaydı sayfası) saklanma süresi (gün); varsayılan `0` = sonsuza kadar sakla. Kurumun denetim için saklama yükümlülüğüne göre ayarla (örn. `365`). Aynı saatlik işle silinir. |
-| `RESOLVED_ALERT_RETENTION_DAYS` | hayır | **Çözülmüş** alert'lerin, çözüldükleri andan itibaren saklanma süresi (gün); varsayılan `0` = sonsuza kadar sakla (örn. `180`). Açık ve onaylanmış alert'ler hiç silinmez. Silinen alert'lerin bildirim geçmişi 30 gün sonra bildirim kuyruğu temizliğiyle silinir. |
-| `LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION` | hayır | Panelin agent'ları "güncel / güncelleme var / desteklenmiyor" diye sınıflandırdığı sürüm politikası (SemVer, örn. `1.2.0`). Varsayılan: latest = bu server derlemesinin bildiği en güncel **agent** sürümü (server'ın kendi sürümü değil; bkz. `docs/DISTRIBUTION.md`, iki sürüm hattı), min = boş (hiçbiri "desteklenmiyor" olmaz). **Yalnızca bilgilendirir**, hiçbir agent reddedilmez. Bkz. `docs/COMPATIBILITY.md`. |
 | `AUTO_MIGRATE` | hayır | Açılışta bekleyen veritabanı migration'larını uygula (varsayılan `true`). `false` ise uygulamaz, şema geriyse açılmaz. Bkz. "Veritabanı migration'ları". |
 | `PULL_CA_CERT_FILE` | hayır | Pull agent sertifikalarını doğrulayacak CA (PEM). Verilmezse doğrulama kapalıdır. Bkz. "Özel (kurum içi) CA". |
 | `HTTP_ADDR` | hayır | Varsayılan `:8443`. |
-| `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL` | hayır | Varsayılan `15m` / `168h`. |
-| `RATE_LIMIT_AUTH_FAILURES_PER_MINUTE` | hayır | IP başına başarısız login/agent-auth bütçesi, varsayılan `10`, `0` = kapalı. |
-| `RATE_LIMIT_INGEST_PER_MINUTE` | hayır | Doğrulanmış push agent başına, varsayılan `120`, `0` = kapalı. |
-| `LOG_LEVEL` | hayır | `debug`, `info` (varsayılan), `warn`, `error`. Başarılı agent raporları, `/healthz` ve `/readyz` yalnızca `debug`'da loglanır. Bkz. "Loglama". |
 | `LOG_FORMAT` | hayır | `text` (varsayılan, `key=value`) ya da `json` (log toplayıcılar için). |
-| `LOG_FILE` | hayır | Logun stdout'a ek olarak yazıldığı **kalıcı dosya**; o dizinde günlük dosyalar tutulur (`server-YYYY-MM-DD.log`, eski günler `.log.gz`). Boş = kapalı (bare-metal varsayılanı). Docker Compose varsayılanı `/var/log/healthbeat/server.log` (`logs` volume'ü). Açılamazsa server yine başlar, log'a `log file disabled` yazar. Bkz. "Loglama". |
-| `LOG_FILE_MAX_AGE_DAYS` | hayır | Bugün dahil kaç günün log dosyasının tutulacağı, varsayılan `14`. |
-| `LOG_FILE_MAX_TOTAL_MB` | hayır | Bütün log dosyalarının toplam üst sınırı, varsayılan `1024`; aşılırsa en eski günler silinir (hata fırtınasında diski korur). |
-| `LOG_ERROR_BODY_BYTES` | hayır | Hata alan (4xx/5xx) isteklerde loga yazılan istek/yanıt gövdesinin azami boyutu, varsayılan `4096`, `0` = gövde yazılmaz, en fazla `1048576`. Hassas alanlar her zaman maskelenir. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM` | hayır | Alert e-postaları. `SMTP_HOST` boşsa yalnızca log'a yazılır (e-posta **gitmez**). **Port 465 = implicit TLS**; diğer portlarda (587 vb.) sunucu STARTTLS sunuyorsa kullanılır. Kullanıcı adı/şifre yalnızca TLS üzerinden (ya da localhost'a) gönderilir. |
-| `PANEL_BASE_URL` | şifre sıfırlama için | Panelin kullanıcıya görünen adresi (`scheme://host[:port]`, yol ve sondaki `/` yok), örn. `https://panel.example.com`. **"Şifremi unuttum" e-postalarındaki bağlantının kökü** olur; isteğin `Host` başlığından türetilmez (başlık enjeksiyonuyla bağlantının saldırgan bir alan adına yöneltilmesini önler). Geçersizse server başlamaz; boşsa e-posta ile şifre sıfırlama kapalıdır. |
+| `LOG_FILE` | hayır | Logun stdout'a ek olarak yazıldığı **kalıcı dosya** (saklama sınırları panelden, bkz. 2.1); o dizinde günlük dosyalar tutulur (`server-YYYY-MM-DD.log`, eski günler `.log.gz`). Boş = kapalı (bare-metal varsayılanı). Docker Compose varsayılanı `/var/log/healthbeat/server.log` (`logs` volume'ü). Açılamazsa server yine başlar, log'a `log file disabled` yazar. Bkz. "Loglama". |
+
+2.0.0'dan önce ortamda olan `SMTP_*`, `PANEL_BASE_URL`, `LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION`,
+`*_RETENTION_DAYS`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL`, `RATE_LIMIT_*`, `LOG_LEVEL`, `LOG_ERROR_BODY_BYTES` ve
+`LOG_FILE_MAX_*` artık **okunmaz** (bkz. 2.1). Ortamda dolu kalırlarsa server açılışta her biri için
+`level=WARN msg="<AD> is no longer read; manage it from the panel (Settings)"` yazar ve onları yok sayar.
+
+### 2.1 Panelden yönetilen ayarlar
+
+Aşağıdakiler veritabanında (`app_settings`, `notification_channels`, `notification_owners`; bkz. `docs/VERITABANI.md`)
+tutulur ve panelde **Ayarlar** sayfasından (izin: `settings.view` okur, `settings.manage` değiştirir; varsayılan olarak
+yalnızca süper admin) ya da `/api/v1/settings`, `/api/v1/notification-channels`, `/api/v1/notification-owners`
+uçlarından değişir. Değişiklik **yeniden başlatmadan** uygulanır, server loguna (`settings: changed`) ve denetim kaydına
+eski/yeni değerleriyle yazılır. Varsayılanlar ve sınırlar veritabanındadır; "Varsayılana dön" ayarı ona döndürür.
+
+| Ayar | Varsayılan | Açıklama |
+| --- | --- | --- |
+| Sistem sahipleri | yok | **Her alert'in bildirimini alanlar** (panel kullanıcısı olmaları gerekmez). E-postası e-posta kanalında, telefonu SMS kanalında kullanılır. Hiç sahip yoksa alert bildirimi yalnızca kurallardaki ek alıcılara gider; panel bunu bir uyarı bandıyla söyler. |
+| E-posta kanalı (SMTP) | kapalı | Sunucu, port (varsayılan 587), kullanıcı adı, şifre, gönderen adres ve sistem sahiplerine hangi seviyeden itibaren gönderileceği (varsayılan uyarı). Sunucu ve gönderen girilmeden açılamaz ("Ayar gerekli"). **Port 465 = implicit TLS**; diğer portlarda sunucu STARTTLS sunuyorsa kullanılır; kullanıcı adı/şifre yalnızca TLS üzerinden (ya da localhost'a) gönderilir. Şifre `SECRETS_ENCRYPTION_KEY` ile şifreli saklanır ve API'den asla geri okunmaz. **Deneme gönder** kayıtlı ayarla (kanal kapalıyken de) hemen bir e-posta yollar. Kanal kapalıyken alert ve şifre e-postaları yalnızca loglanır. |
+| Panel adresi | boş | Panelin kullanıcıya görünen adresi (`scheme://host[:port]`), ör. `https://panel.example.com`. Alert e-postalarındaki bağlantının ve **"Şifremi unuttum" bağlantısının kökü**; isteğin `Host` başlığından türetilmez (başlık enjeksiyonuyla bağlantının saldırgan bir alan adına yöneltilmesini önler). Boşsa e-posta ile şifre sıfırlama kapalıdır. |
+| Agent sürüm politikası | en güncel `1.0.0`, en düşük boş | Panelin agent'ları "güncel / güncelleme var / desteklenmiyor" diye sınıflandırdığı sürümler (SemVer). **Elle yönetilir:** yeni bir agent yayınlanınca en güncel sürüm buradan girilir. Yalnızca bilgilendirir, hiçbir agent reddedilmez. Bkz. `docs/COMPATIBILITY.md`. |
+| Saklama süreleri | metrik 30, denetim 0, çözülmüş alert 0 gün | `0` = sonsuza kadar sakla. Eski kayıtlar saatlik bir işle silinir; açık ve onaylanmış alert'ler silinmez, silinen alert'lerin bildirim geçmişi 30 gün sonra bildirim kuyruğu temizliğiyle gider. |
+| Oturum süreleri | erişim 15 dk, oturum 168 saat | Erişim 1 dk – 24 saat, oturum 1 saat – 90 gün ve erişimden uzun. Değişiklik yeni girişlere uygulanır. |
+| Hız sınırları | başarısız giriş 10, rapor 120 (dakikada) | Başarısız giriş/agent kimlik doğrulaması IP başına, rapor doğrulanmış push agent başına; `0` = kapalı. Şifre sıfırlama sınırları başarısız giriş sınırına bağlıdır. |
+| Log seviyesi | `info` | `debug`, `info`, `warn`, `error`. Başarılı agent raporları, `/healthz` ve `/readyz` yalnızca `debug`'da loglanır. Açılış ve migration logları (veritabanı okunmadan önce) her zaman `info`'dadır. |
+| Hata isteklerinde gövde | 4096 bayt | 4xx/5xx isteklerde loga yazılan istek/yanıt gövdesinin azami boyutu (en fazla 1048576); `0` = yazılmaz. |
+| Log dosyası geçmişi / toplamı | 14 gün / 1024 MB | `LOG_FILE` açıksa. Sınırlar veritabanından okunana kadar açılışta hiçbir log dosyası silinmez. |
 
 ### E-posta ile şifre sıfırlama
 
-Giriş sayfasındaki **Şifremi unuttum** bağlantısı çalışsın diye `SMTP_HOST` **ve** `PANEL_BASE_URL` ayarlı olmalı;
-biri eksikse özellik kapalıdır (giriş sayfası bunu kullanıcıya açıkça söyler, server başlangıçta nedenini log'lar).
+Giriş sayfasındaki **Şifremi unuttum** bağlantısı çalışsın diye **e-posta kanalı açık** ve **panel adresi** girilmiş
+olmalı (Ayarlar); biri eksikse özellik kapalıdır (giriş sayfası bunu kullanıcıya açıkça söyler, server nedenini log'lar).
+Değişiklik yeniden başlatmadan yansır.
 
 Akış: kullanıcı e-postasını girer → server **tek kullanımlık, 30 dakika geçerli** bir bağlantı e-postalar
-(`<PANEL_BASE_URL>/reset-password#token=…`) → bağlantıda yeni şifre seçilir → tüm açık oturumlar kapanır ve
+(`<panel adresi>/reset-password#token=…`) → bağlantıda yeni şifre seçilir → tüm açık oturumlar kapanır ve
 kullanıcıya "şifreniz değiştirildi" e-postası gider. Denetim kaydına `auth.password_reset_requested` ve `auth.password_reset` yazılır.
 
 Güvenlik: yanıt hesabın var olup olmadığını sızdırmaz (her geçerli biçimli e-postaya aynı `204`); ham token veritabanında
@@ -73,14 +87,16 @@ kullanılmış/süresi dolmuş kayıtlar saatlik işle temizlenir. Kullanıcı y
 **e-posta hesabı ele geçirilirse şifre de ele geçirilir**, bu yüzden yönetici hesaplarında güvenilir bir kutu kullan.
 
 Denemek için gerçek SMTP gerekmez: `docker compose --profile mail up -d` bir **Mailpit** yakalayıcısı başlatır
-(e-postalar iletilmez, `http://localhost:8025` gelen kutusunda görünür). `.env`'ye `SMTP_HOST=mailpit`, `SMTP_PORT=1025`,
-`SMTP_FROM=healthbeat@localhost`, `PANEL_BASE_URL=https://localhost` ekleyip `docker compose up -d server` ile server'ı yeniden başlat.
+(e-postalar iletilmez, `http://localhost:8025` gelen kutusunda görünür). Panelde Ayarlar → Bildirim kanalları'nda sunucu
+`mailpit`, port `1025`, gönderen `healthbeat@localhost` girip kanalı aç ve "Deneme gönder" ile dene; Ayarlar → Panel
+adresi'ne `https://localhost` yaz. Yeniden başlatma gerekmez.
 
-**Alert e-postaları arka planda gönderilir:** metrik alma (push/pull) yolunu bloklamazlar. SMTP
-oturumu en fazla 30 sn sürer; kuyruk (256) dolarsa yeni bildirimler düşürülür ve log'a yazılır
-(alert yine de veritabanında ve panelde görünür). Sunucu kapanırken kuyruk 10 sn'ye kadar
-boşaltılır. **Zaman aşımları:** API sunucusu okuma tarafında sıkıdır (header 10 sn, gövde 30 sn),
-boşta kalan bağlantıları 120 sn sonra kapatır.
+**Alert e-postaları kalıcı bir kuyruktan gönderilir:** metrik alma (push/pull) yolunu bloklamazlar; alert değişikliğiyle
+aynı transaction'da `notification_outbox`'a **alıcı başına bir satır** yazılır (her alıcı ayrı ileti alır, alıcılar
+birbirini görmez) ve arka plandaki işçi gönderir. Gönderilemeyen satır geri çekilerek yeniden denenir; server yeniden
+başlasa da kaybolmaz. Bir alıcının adresi reddedilirse yalnızca onun satırı yeniden denenir. SMTP oturumu en fazla 30 sn
+sürer. **Zaman aşımları:** API sunucusu okuma tarafında sıkıdır (header 10 sn, gövde 30 sn), boşta kalan bağlantıları
+120 sn sonra kapatır.
 
 ### Loglama
 
@@ -93,13 +109,13 @@ Server logu stderr'e yazar (Docker'da `docker compose logs server`); her satır�
   `ip` bulunur.
 - **İstek satırları:** metot, yol, durum ve süre (`duration_ms`, milisaniye; ör. `duration_ms > 500` ile yavaş istekler
   süzülür). `5xx` → `ERROR`, `4xx` → `WARN`, diğerleri `INFO`; başarılı agent raporları (`POST /api/v1/metrics`)
-  ve `/healthz` yalnızca `LOG_LEVEL=debug`'da görünür (150+ agent ~30 sn'de bir rapor verir).
+  ve `/healthz` yalnızca log seviyesi `debug`'dayken görünür (Ayarlar → Loglama) (150+ agent ~30 sn'de bir rapor verir).
 - **Hata ayrıntısı:** hata alan isteklerde veriyle ilgili sorunlar yeniden üretmeden incelenebilsin diye `query`, izin
   listesindeki başlıklar (`req_headers`: Content-Type, User-Agent, agent sürümü vb.), istek gövdesi (`req_body`) ve
-  hata yanıtı (`resp_body`) de yazılır; en fazla `LOG_ERROR_BODY_BYTES` bayt (kesilirse `req_body_truncated=true`).
+  hata yanıtı (`resp_body`) de yazılır; en fazla "hata isteklerinde gövde" ayarı kadar bayt (kesilirse `req_body_truncated=true`).
   Adında `password`, `token`, `secret` geçen alanlar `[REDACTED]` olur; `Authorization` ve `Cookie` başlıkları hiç
   yazılmaz. Gövdeler e-posta adresi gibi kişisel veri içerebilir: log erişimini buna göre sınırla ya da
-  `LOG_ERROR_BODY_BYTES=0` ile kapat.
+  Ayarlar → Loglama'da o ayarı `0` yaparak kapat.
 - **Arka plan işleri:** alert motoru, pull scheduler, offline izleyici ve retention da seviyeli ve alanlı yazar
   (`host_id`, `alert_id`, `metric` …): veritabanı hataları ve gönderilemeyen e-postalar `ERROR`, beklenen operasyonel
   durumlar (ulaşılamayan pull agent, dolan e-posta kuyruğu) `WARN`. Bir agent raporu sırasında yazılan alert motoru
@@ -121,8 +137,8 @@ satırları birlikte — o dizindeki günlük dosyalara da yazılır:
   server-2026-09-24.1.log.gz   ← bir gün çok büyürse aynı gün parçalara bölünür
 ```
 
-- **Saklama:** bugün dahil son `LOG_FILE_MAX_AGE_DAYS` gün (varsayılan 14) tutulur; toplam boyut `LOG_FILE_MAX_TOTAL_MB`'ı
-  (varsayılan 1024) aşarsa en eski günler daha erken silinir. Server yeniden başlarsa aynı günün dosyasına devam eder.
+- **Saklama:** bugün dahil son "log dosyası geçmişi" kadar gün (varsayılan 14) tutulur; toplam boyut "log dosyaları toplamı"nı
+  (varsayılan 1024 MB) aşarsa en eski günler daha erken silinir (ikisi de Ayarlar → Loglama). Server yeniden başlarsa aynı günün dosyasına devam eder.
   Gün sınırı container saatine göredir (varsayılan UTC; log zaman damgaları da UTC).
 - **Kalıcılık (Docker Compose):** dosyalar `logs` volume'ündedir: `docker compose down` / `restart` ve sürüm
   güncellemeleri (`up -d --build`, yeni imaj) onları silmez; yalnızca `docker compose down -v` siler. `docker compose logs`
@@ -364,8 +380,11 @@ olmadığından CORS'tan etkilenmez.
 - [ ] Server bir proxy arkasındaysa `TRUSTED_PROXIES` yalnızca o proxy'yi içeriyor; iki farklı istemciden giriş yapılıp
       denetim kaydında (`/audit`) iki farklı IP görüldü
 - [ ] Panel gerçek bir sertifika sunuyor (kendinden imzalı değil) — bkz. "Gerçek sertifika kullanmak"
-- [ ] `SMTP_*` ayarlandı ve bir test alert'iyle e-postanın gittiği görüldü
-- [ ] "Şifremi unuttum" isteniyorsa `PANEL_BASE_URL` da ayarlandı ve bir hesapla sıfırlama e-postası uçtan uca denendi
+- [ ] Ayarlar → Bildirim kanalları'nda e-posta kanalı kuruldu, "Deneme gönder" ile doğrulandı ve kanal açıldı
+- [ ] Ayarlar → Sistem sahipleri'ne alert'leri alacak kişiler/ortak adresler eklendi (panelde uyarı bandı kalmadı) ve bir test
+      alert'iyle e-postanın gittiği görüldü
+- [ ] Ayarlar → Panel adresi girildi; "Şifremi unuttum" bir hesapla uçtan uca denendi
+- [ ] `.env`'de 2.0.0'da taşınan eski değişken kalmadı (açılış logunda `is no longer read` uyarısı yok)
 - [ ] Agent'lar `insecure_skip_verify: false` ile bağlanıyor (özel CA kullanıyorsan `ca_cert_file` ile)
 - [ ] Pull agent kullanılıyorsa `PULL_CA_CERT_FILE` kararı verildi (agent sertifikalarında IP SAN'ı unutma)
 
@@ -389,6 +408,10 @@ docker compose up -d --build
   sil ve yeniden çalıştır (bu, saklı pull secret'ları ve mevcut oturumları geçersiz kılar).
 - Çıktıdaki geçici admin şifresi yalnızca o an gösterilir (`.env`'de `BOOTSTRAP_ADMIN_PASSWORD`
   olarak da durur); ilk girişte yeni şifre belirlemen istenir.
+- **İlk girişten sonra** panelde **Ayarlar**'a git: Bildirim kanalları'nda e-posta (SMTP) ayarını gir, "Deneme gönder" ile
+  doğrula ve kanalı aç; Sistem sahipleri'ne alert'leri alacak kişileri ekle; Panel adresi'ni yaz ("Şifremi unuttum" ve
+  e-postalardaki bağlantılar için). Bunlar yapılana kadar panelin üstünde "alert bildirimleri kimseye gitmiyor" uyarısı
+  görünür (bölüm 2.1).
 
 **Servisler:**
 

@@ -1,4 +1,4 @@
-// Package logging, server'ın log/slog kurulumudur: seviye ve biçim (LOG_LEVEL, LOG_FORMAT),
+// Package logging, server'ın log/slog kurulumudur: seviye (panelden değişir) ve biçim (LOG_FORMAT),
 // istek bağlamındaki kimliklerin (request_id, user_id, host_id, ip) her log satırına otomatik
 // eklenmesi ve goroutine'lerde panic kurtarma.
 //
@@ -20,7 +20,7 @@ const (
 	FormatJSON = "json"
 )
 
-// ParseLevel, LOG_LEVEL değerini çözer; boş değer info'dur.
+// ParseLevel, bir log seviyesi adını (app_settings.log_level) çözer; boş değer info'dur.
 func ParseLevel(s string) (slog.Level, error) {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "", "info":

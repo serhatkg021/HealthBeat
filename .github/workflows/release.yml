@@ -5,7 +5,7 @@
 #       2) agent: binary'ler, tarball'lar, .deb/.rpm, SHA256SUMS + GPG imzası -> GitHub Release
 #   git tag server/v1.1.0 && git push origin server/v1.1.0    server + panel hattı
 #       1) ci.yml (server + panel) geçmeli
-#       2) server-verify: sürüm tutarlılığı (server/panel sürümü = etiket, LatestAgent gerçek bir agent sürümü, değişiklik günlüğü)
+#       2) server-verify: sürüm tutarlılığı (server/panel sürümü = etiket, değişiklik günlüğü)
 #       3) images: server/panel/certs-init imajları (amd64+arm64) -> GHCR (ve Docker Hub, isteğe bağlı)
 #       4) server-release: imajlar yayınlandıktan SONRA GitHub Release (sürüm notları + imaj adları)
 #
@@ -105,8 +105,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # LatestAgent'ın gerçek bir agent etiketi olduğunu doğrulamak için etiketler gerekir
-      - name: server/panel sürümü = etiket, LatestAgent yayınlanmış, değişiklik günlüğü var
+          fetch-depth: 0 # --require-tag, HEAD'in server/vX.Y.Z etiketinde olduğunu doğrulamak için etiketlere bakar
+      - name: server/panel sürümü = etiket, değişiklik günlüğü var
         run: scripts/release.sh server "$VERSION" --check --require-tag
 
   images:

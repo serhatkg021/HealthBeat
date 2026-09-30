@@ -22,7 +22,7 @@ import (
 // üretilir; her yanıtta döner ve o isteğin bütün log satırlarında request_id olarak yer alır.
 const HeaderRequestID = "X-Request-ID"
 
-// DefaultErrorBodyBytes, LOG_ERROR_BODY_BYTES'ın varsayılanıdır.
+// DefaultErrorBodyBytes, hata isteklerinde loga yazılan gövde sınırının ayarlar okunmadan önceki değeridir (app_settings.log_error_body_bytes).
 const DefaultErrorBodyBytes = 4096
 
 // validRequestID, dışarıdan gelen bir kimliği kabul etmek için yeterince sıkıdır: log satırını bozamaz ya da şişiremez.

@@ -4,13 +4,14 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-09-27 — Server + panel **1.1.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
-"Güncellemeden önce" notları). Server refactor planı tamamlandı (#7–#48), panel izin tabanlı arayüz (#50). İleride: genel
-ayarların (agent sürüm politikası vb.) veritabanında tutulup runtime'da değiştirilebilmesi.
+**Son güncelleme:** 2026-10-01 — Çalışma zamanı ayarları ve bildirim modeli (server + panel **2.0.0** için, henüz
+yayınlanmadı): 19 ortam değişkeni panele (Ayarlar) taşındı ve yeniden başlatmadan uygulanıyor; SMTP mail kanalında;
+bildirimler sistem sahiplerine ve toplanan ek alıcılara, her alıcıya ayrı ileti olarak gidiyor (`server/CHANGELOG.md`,
+"Yayınlanmamış"). Sırada 2.0.0 sürüm PR'ı.
 
 ## Durum
 
-Sürümler: **server + panel 1.1.0**, **agent 1.0.0** (ayrı hatlar; 1.1.0 ingest protokolünü değiştirmedi). Monitoring, alert, bildirim kuralları, organizasyon ağacı, panel: tamam.
+Sürümler: **server + panel 1.1.0** (2.0.0 hazırlanıyor), **agent 1.0.0** (ayrı hatlar; 1.1.0 ingest protokolünü değiştirmedi). Monitoring, alert, bildirim kuralları, organizasyon ağacı, panel: tamam.
 Geliştirme sürecinden gelen tarih temizlendi: tek baseline migration, `client` → `agent`/`host` adlandırması, panel `server/panel/` altında.
 
 ## Ortam ve nasıl çalıştırılır
@@ -35,7 +36,8 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 ## Altyapı özeti
 
 - **Server (`server/`)**: `config`, `db`, `migrate`, `authsvc`, `rbac`, `store`, `alertengine` (cpu/ram/disk[mount başına]/docker_restart
-  [container başına]/offline/disk_missing; bildirim kuralları; e-posta arka plan kuyruğunda), `notify` (SMTP), `offlinemonitor`,
+  [container başına]/offline/disk_missing; sistem sahipleri + toplanan kurallar; alıcı başına kalıcı kuyruk), `notify` (SMTP),
+  `settings` (panelden değişen ayarlar ve bildirim kanalları; bellekte, yeniden başlatmadan uygulanır), `offlinemonitor`,
   `pullscheduler`, `retention`, `secretbox`, `tlsreload`, `ratelimit`, `httpapi`, `testdb`/`testsmtp`; migration'lar binary'ye gömülü.
 - **Agent (`agent/`)**: yalnızca stdlib; `config`, `collector` (cpu, memory, disk, docker, envanter), `pusher`, `pullserver`;
   `deploy/` (`install.sh`, systemd unit), `packaging/` (`.deb`/`.rpm`).
@@ -48,7 +50,9 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 - Access token'lar tek tek iptal edilemez (≤ 15 dk).
 - Pull agent sertifikası varsayılan olarak doğrulanmaz (`PULL_CA_CERT_FILE` ile açılır).
 - Docker container geçmişi tutulmaz (yalnızca son durum).
-- Bildirim kanalı yalnızca e-posta; SMS/Slack/Discord/Telegram şemada hazır, uygulama yok. İki faktörlü doğrulama alanları yalnızca saklanır.
+- Bildirim kanalı yalnızca e-posta; SMS/Slack/Discord/Telegram için model hazır (kanal satırı + gönderici eklenir), uygulama yok.
+  İki faktörlü doğrulama alanları yalnızca saklanır.
+- Server tek kopya çalışır: panelden yapılan ayar değişikliği başka server kopyalarına duyurulmaz.
 - Operatör organizasyon düzeyinde bir şey (iletişim kişileri, kurallar listesi) göremez; yalnızca atandığı sunucuların kurallarını okur.
 
 ## Doğrulanmadı
@@ -58,4 +62,5 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Sıradaki işler
 
-1. Ek bildirim kanalları (SMS, Slack, Discord, Telegram) ve iki faktörlü doğrulama.
+1. Server + panel 2.0.0 sürüm PR'ı.
+2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.

@@ -30,7 +30,7 @@ import (
 //     bildirim kuyruğunda şifreli (secretbox) durur ve gönderilince (ya da süresi dolunca) şifreli hâli de silinir.
 //   - Bağlantı adresin #parçasında taşınır (?sorgu değil): tarayıcı bunu server'a, proxy günlüklerine ya da
 //     Referer başlığına göndermez.
-//   - Bağlantının kökü PANEL_BASE_URL'den gelir, isteğin Host/Origin başlığından değil (başlık enjeksiyonuyla
+//   - Bağlantının kökü panel adresinden (Ayarlar, app_settings.panel_base_url) gelir, isteğin Host/Origin başlığından değil (başlık enjeksiyonuyla
 //     saldırgan bir alan adına bağlantı üretilmesini önler).
 //   - Kullanıcı başına yalnızca son bağlantı geçerlidir; kullanım sonrası tüm oturumlar kapatılır.
 //   - IP başına ve e-posta başına sınır: posta bombası ve token tahmini denemeleri kısılır.
@@ -144,7 +144,7 @@ type authOptionsResponse struct {
 }
 
 // handleAuthOptions, giriş sayfasının "Şifremi unuttum" akışının çalışıp çalışmayacağını öğrenmesini sağlar
-// (SMTP ve PANEL_BASE_URL yapılandırılmış mı). Kimlik doğrulamasızdır ve başka bir şey söylemez.
+// (mail kanalı açık ve panel adresi girilmiş mi). Kimlik doğrulamasızdır ve başka bir şey söylemez.
 func (d *Deps) handleAuthOptions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, authOptionsResponse{PasswordResetEnabled: d.passwordResetEnabled()})
 }
@@ -182,7 +182,7 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	if !d.passwordResetEnabled() {
-		slog.WarnContext(r.Context(), "password reset requested but not available: set SMTP_HOST and PANEL_BASE_URL to enable it")
+		slog.WarnContext(r.Context(), "password reset requested but not available: turn on the e-mail channel and set the panel address in Settings")
 		return respond()
 	}
 	if ok, _ := d.resetEmails.Allow(email); !ok {

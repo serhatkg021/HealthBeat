@@ -90,32 +90,33 @@ services:
       # Panel proxy'lemiyorsa (API_PROXY_URL boş) zararsızdır; kapatmak için .env'de TRUSTED_PROXIES= (boş).
       TRUSTED_PROXIES: ${TRUSTED_PROXIES-panel}
       PULL_CA_CERT_FILE: ${PULL_CA_CERT_FILE:-}
-      METRICS_RETENTION_DAYS: ${METRICS_RETENTION_DAYS:-}
-      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-}
-      RESOLVED_ALERT_RETENTION_DAYS: ${RESOLVED_ALERT_RETENTION_DAYS:-}
       DB_MAX_CONNS: ${DB_MAX_CONNS:-}
-      LATEST_AGENT_VERSION: ${LATEST_AGENT_VERSION:-}
-      MIN_SUPPORTED_AGENT_VERSION: ${MIN_SUPPORTED_AGENT_VERSION:-}
       AUTO_MIGRATE: ${AUTO_MIGRATE:-}
-      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-}
-      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-}
-      RATE_LIMIT_AUTH_FAILURES_PER_MINUTE: ${RATE_LIMIT_AUTH_FAILURES_PER_MINUTE:-}
-      RATE_LIMIT_INGEST_PER_MINUTE: ${RATE_LIMIT_INGEST_PER_MINUTE:-}
-      LOG_LEVEL: ${LOG_LEVEL:-}
       LOG_FORMAT: ${LOG_FORMAT:-}
-      LOG_ERROR_BODY_BYTES: ${LOG_ERROR_BODY_BYTES:-}
       # Kalıcı log: `logs` volume'ünde günlük dosyalar (down ve güncellemelerden sonra kalır; yalnızca `down -v` siler).
       # Kapatmak için .env'de LOG_FILE= (boş).
       LOG_FILE: ${LOG_FILE-/var/log/healthbeat/server.log}
-      LOG_FILE_MAX_AGE_DAYS: ${LOG_FILE_MAX_AGE_DAYS:-}
-      LOG_FILE_MAX_TOTAL_MB: ${LOG_FILE_MAX_TOTAL_MB:-}
+      # 2.0.0'da panele taşınan ayarlar (Ayarlar sayfası; bkz. docs/DEPLOYMENT.md §2.1). Server bunları OKUMAZ: yalnızca
+      # .env'de hâlâ dolu olanları açılışta uyarıyla bildirsin diye geçirilir. Bir sonraki major sürümde kaldırılacak.
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM: ${SMTP_FROM:-}
-      # E-posta ile şifre sıfırlama için SMTP_* ile birlikte gerekli: kullanıcının tarayıcıda gördüğü panel adresi.
       PANEL_BASE_URL: ${PANEL_BASE_URL:-}
+      LATEST_AGENT_VERSION: ${LATEST_AGENT_VERSION:-}
+      MIN_SUPPORTED_AGENT_VERSION: ${MIN_SUPPORTED_AGENT_VERSION:-}
+      METRICS_RETENTION_DAYS: ${METRICS_RETENTION_DAYS:-}
+      AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-}
+      RESOLVED_ALERT_RETENTION_DAYS: ${RESOLVED_ALERT_RETENTION_DAYS:-}
+      ACCESS_TOKEN_TTL: ${ACCESS_TOKEN_TTL:-}
+      REFRESH_TOKEN_TTL: ${REFRESH_TOKEN_TTL:-}
+      RATE_LIMIT_AUTH_FAILURES_PER_MINUTE: ${RATE_LIMIT_AUTH_FAILURES_PER_MINUTE:-}
+      RATE_LIMIT_INGEST_PER_MINUTE: ${RATE_LIMIT_INGEST_PER_MINUTE:-}
+      LOG_LEVEL: ${LOG_LEVEL:-}
+      LOG_ERROR_BODY_BYTES: ${LOG_ERROR_BODY_BYTES:-}
+      LOG_FILE_MAX_AGE_DAYS: ${LOG_FILE_MAX_AGE_DAYS:-}
+      LOG_FILE_MAX_TOTAL_MB: ${LOG_FILE_MAX_TOTAL_MB:-}
     volumes:
       # Server bu dizinden yalnızca OKUR (sertifika + CA); değişiklikler yeniden başlatmadan algılanır.
       - certs:/certs:ro
@@ -151,8 +152,8 @@ services:
       retries: 5
 
   # Yalnızca geliştirme/deneme için yakalayıcı SMTP: `docker compose --profile mail up -d`. Gönderilen e-postalar
-  # gerçekten iletilmez; http://localhost:8025 adresindeki gelen kutusunda görünür. Kullanmak için .env'de
-  # SMTP_HOST=mailpit, SMTP_PORT=1025, SMTP_FROM=healthbeat@localhost ve PANEL_BASE_URL=https://localhost ayarla.
+  # gerçekten iletilmez; http://localhost:8025 adresindeki gelen kutusunda görünür. Kullanmak için panelde Ayarlar →
+  # Bildirim kanalları: sunucu mailpit, port 1025, gönderen healthbeat@localhost; Ayarlar → Panel adresi: https://localhost.
   mailpit:
     image: axllent/mailpit:v1.21.8
     profiles: ["mail"]
