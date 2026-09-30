@@ -15,6 +15,7 @@ import (
 	"healthbeat-server/internal/ratelimit"
 	"healthbeat-server/internal/rbac"
 	"healthbeat-server/internal/secretbox"
+	"healthbeat-server/internal/settings"
 	"healthbeat-server/internal/store"
 )
 
@@ -68,6 +69,11 @@ type Deps struct {
 	// resetIPs sıfırlama isteklerini kaynak IP başına, resetEmails hedef e-posta başına sınırlar (posta bombası önlemi).
 	resetIPs    *ratelimit.Limiter
 	resetEmails *ratelimit.Limiter
+
+	// appSettings ve channels, çalışma zamanı ayarları ve bildirim kanallarıdır (SetSettings); owners sistem sahipleridir.
+	appSettings *settings.Service
+	channels    *settings.Channels
+	owners      *store.NotificationOwners
 
 	// errorBodyBytes, hata alan (4xx/5xx) bir isteğin loga yazılan istek/yanıt gövdesinin azami boyutudur; 0 gövde
 	// yazmaz. Bkz. requestlog.go.
@@ -138,6 +144,7 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 		alerts:        store.NewAlerts(pool),
 		refreshTokens: store.NewRefreshTokens(pool),
 		resets:        store.NewPasswordResets(pool),
+		owners:        store.NewNotificationOwners(pool),
 	}
 	d.SetAgentPolicy(AgentPolicy{})
 	d.SetPanelBaseURL("")

@@ -21,14 +21,16 @@ func NewNotifications(pool *pgxpool.Pool) *Notifications { return &Notifications
 const routeSelect = `
 SELECT r.id, r.organization_id, r.host_id, r.user_id, r.contact_id, r.channel, r.min_level, r.created_at,
        COALESCE(u.full_name, u.email, oc.name, ''),
-       COALESCE(CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, oc.phone) ELSE COALESCE(u.email, oc.email) END, '')
+       COALESCE(CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, oc.phone) ELSE COALESCE(u.email, oc.email) END, ''),
+       c.enabled
 FROM notification_routes r
+JOIN notification_channels c ON c.channel = r.channel
 LEFT JOIN users u ON u.id = r.user_id
 LEFT JOIN organization_contacts oc ON oc.id = r.contact_id`
 
 func scanRoute(row interface{ Scan(...any) error }) (model.NotificationRoute, error) {
 	var r model.NotificationRoute
-	err := row.Scan(&r.ID, &r.OrganizationID, &r.HostID, &r.UserID, &r.ContactID, &r.Channel, &r.MinLevel, &r.CreatedAt, &r.RecipientName, &r.RecipientTarget)
+	err := row.Scan(&r.ID, &r.OrganizationID, &r.HostID, &r.UserID, &r.ContactID, &r.Channel, &r.MinLevel, &r.CreatedAt, &r.RecipientName, &r.RecipientTarget, &r.ChannelEnabled)
 	return r, err
 }
 

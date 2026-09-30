@@ -582,8 +582,8 @@ const (
 	NotificationFailed  = "failed"
 )
 
-// Bildirim kanalları. Veritabanı ileride eklenecek kanalları da kabul eder; API yalnızca burada
-// "uygulanmış" olanları kabul eder (aksi halde biri hiç gitmeyecek bir kanal seçebilirdi).
+// Bildirim kanallarının adları. Hangilerinin tanımlı ve açık olduğu notification_channels'tadır; hangilerini server'ın
+// gönderebildiği ise alert motorundaki göndericilerdir (notify.Notifier).
 const (
 	ChannelEmail    = "email"
 	ChannelSMS      = "sms"
@@ -591,26 +591,6 @@ const (
 	ChannelDiscord  = "discord"
 	ChannelTelegram = "telegram"
 )
-
-// ImplementedChannels, gerçekten mesaj gönderebilen kanallardır.
-var ImplementedChannels = []string{ChannelEmail}
-
-func ValidChannel(c string) bool {
-	switch c {
-	case ChannelEmail, ChannelSMS, ChannelSlack, ChannelDiscord, ChannelTelegram:
-		return true
-	}
-	return false
-}
-
-func ImplementedChannel(c string) bool {
-	for _, x := range ImplementedChannels {
-		if x == c {
-			return true
-		}
-	}
-	return false
-}
 
 // ValidAlertLevel, alert seviyeleri ve bildirim kuralının en düşük seviyesi için.
 func ValidAlertLevel(l string) bool {
@@ -646,4 +626,6 @@ type NotificationRoute struct {
 	// RecipientName ve RecipientTarget yalnızca listelerde doludur (gösterim için): alıcının adı ve kanalın adresi.
 	RecipientName   string `json:"recipient_name,omitempty"`
 	RecipientTarget string `json:"recipient_target,omitempty"`
+	// ChannelEnabled, kuralın kanalının açık olup olmadığıdır; kapalıysa kural çalışmaz (panel uyarı gösterir).
+	ChannelEnabled bool `json:"channel_enabled"`
 }

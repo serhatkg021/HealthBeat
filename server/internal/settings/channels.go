@@ -84,6 +84,11 @@ func (c *Channels) List() []model.NotificationChannel {
 	return out
 }
 
+// RuleCounts, her kanala bağlı bildirim kuralı sayısıdır.
+func (c *Channels) RuleCounts(ctx context.Context) (map[string]int, error) {
+	return c.store.RuleCounts(ctx)
+}
+
 // OnChange, her başarılı kanal değişikliğinden sonra çağrılacak bir abone ekler (bkz. Service.OnChange).
 func (c *Channels) OnChange(fn func(old, updated model.NotificationChannel)) {
 	c.mu.Lock()
@@ -266,6 +271,20 @@ func normalizeConfig(provider string, config map[string]any) (json.RawMessage, e
 		return out, err
 	}
 	return nil, fmt.Errorf("unknown notification provider %q", provider)
+}
+
+// Ready, kanalın ayarının gönderim için yeterli olup olmadığıdır (değilse panel "Ayar gerekli" gösterir).
+func Ready(ch model.NotificationChannel) bool { return readyToSend(ch) == nil }
+
+// DisplayConfig, kanalın ayarını bütün alanlarıyla (olağan biçimde) döndürür; migration'ın yazdığı eksik ayar
+// ({"port": 587}) boş alanlarla tamamlanır.
+func DisplayConfig(ch model.NotificationChannel) json.RawMessage {
+	if m, err := mergeConfig(ch.Config, nil); err == nil {
+		if n, err := normalizeConfig(ch.Provider, m); err == nil {
+			return n
+		}
+	}
+	return ch.Config
 }
 
 // readyToSend, açık bir kanalın gönderim için gereken ayarlarının dolu olup olmadığını denetler.

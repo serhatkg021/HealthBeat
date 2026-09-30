@@ -139,14 +139,20 @@ func SecretBox(t *testing.T) *secretbox.Box {
 // sahibi olarak ekler: warning ve üzeri alert e-postaları ona gider.
 func EmailOwner(t *testing.T, pool *pgxpool.Pool, email string) uuid.UUID {
 	t.Helper()
-	ctx := context.Background()
-	if _, err := pool.Exec(ctx, `UPDATE notification_channels SET enabled = true,
-		config = '{"host": "smtp.test", "port": 25, "from": "hb@x.test", "username": ""}' WHERE channel = 'email'`); err != nil {
-		t.Fatalf("testdb: enable the e-mail channel: %v", err)
-	}
+	EnableEmailChannel(t, pool)
 	var id uuid.UUID
-	if err := pool.QueryRow(ctx, `INSERT INTO notification_owners (name, email) VALUES ($1, $1) RETURNING id`, email).Scan(&id); err != nil {
+	if err := pool.QueryRow(context.Background(), `INSERT INTO notification_owners (name, email) VALUES ($1, $1) RETURNING id`, email).Scan(&id); err != nil {
 		t.Fatalf("testdb: insert owner %q: %v", email, err)
 	}
 	return id
+}
+
+// EnableEmailChannel, e-posta kanalını sahte bir sunucu ayarıyla açar (testler göndericiyi kendileri kurar): kanala kural
+// yazılabilir ve sahiplere e-posta gider.
+func EnableEmailChannel(t *testing.T, pool *pgxpool.Pool) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(), `UPDATE notification_channels SET enabled = true,
+		config = '{"host": "smtp.test", "port": 25, "from": "hb@x.test", "username": ""}' WHERE channel = 'email'`); err != nil {
+		t.Fatalf("testdb: enable the e-mail channel: %v", err)
+	}
 }

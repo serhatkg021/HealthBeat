@@ -106,3 +106,22 @@ func (s *NotificationChannels) MarkVerified(ctx context.Context, channel string)
 	}
 	return c, err
 }
+
+// RuleCounts, her kanala bağlı bildirim kuralı sayısıdır (kuralı olmayan kanal yer almaz).
+func (s *NotificationChannels) RuleCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := s.pool.Query(ctx, `SELECT channel, count(*) FROM notification_routes GROUP BY channel`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var ch string
+		var n int
+		if err := rows.Scan(&ch, &n); err != nil {
+			return nil, err
+		}
+		out[ch] = n
+	}
+	return out, rows.Err()
+}

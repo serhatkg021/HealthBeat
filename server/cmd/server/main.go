@@ -110,6 +110,7 @@ func main() {
 	background.Go("client IP resolver", clientIPs.Run)
 	deps.SetClientIPResolver(clientIPs)
 
+	deps.SetSettings(appSettings, channels)
 	deps.SetPasswordReset(mailer, cur.PanelBaseURL)
 	logPasswordReset(mailer.Enabled(), cur.PanelBaseURL)
 	followEmailChannel(channels, mailer, appSettings)

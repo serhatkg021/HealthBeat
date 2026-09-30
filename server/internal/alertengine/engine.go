@@ -80,6 +80,15 @@ func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, 
 	return e
 }
 
+// Notifier, kanalın bir göndericisi olup olmadığını (implemented) ve kişiye mi gittiğini (personal) söyler.
+func (e *Engine) Notifier(channel string) (personal, implemented bool) {
+	n, ok := e.notifiers[channel]
+	if !ok {
+		return false, false
+	}
+	return n.Personal(), true
+}
+
 // SetPanelBaseURL, bildirimlerdeki panel bağlantısının kökünü değiştirir ("" bağlantıyı kaldırır).
 func (e *Engine) SetPanelBaseURL(url string) {
 	url = strings.TrimSuffix(url, "/")

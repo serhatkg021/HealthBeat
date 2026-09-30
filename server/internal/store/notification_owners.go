@@ -18,7 +18,9 @@ type NotificationOwners struct {
 	pool *pgxpool.Pool
 }
 
-func NewNotificationOwners(pool *pgxpool.Pool) *NotificationOwners { return &NotificationOwners{pool: pool} }
+func NewNotificationOwners(pool *pgxpool.Pool) *NotificationOwners {
+	return &NotificationOwners{pool: pool}
+}
 
 const ownerColumns = `id, name, email, phone, email_enabled, sms_enabled, created_at, updated_at`
 
