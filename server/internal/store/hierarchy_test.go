@@ -444,9 +444,16 @@ func TestNotificationRouteConstraints(t *testing.T) {
 	if _, err := n.Create(ctx, model.NotificationRoute{OrganizationID: &org, UserID: &admin, Channel: "email", MinLevel: "critical"}); !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("duplicate route: err=%v, want ErrConflict", err)
 	}
-	// Sms gibi henüz uygulanmamış kanallar veritabanında geçerlidir (ileride açılacak).
-	if _, err := n.Create(ctx, model.NotificationRoute{OrganizationID: &org, UserID: &admin, Channel: "sms", MinLevel: "critical"}); err != nil {
-		t.Fatalf("sms is a valid channel in the schema: %v", err)
+	// Kanal notification_channels'ta tanımlı olmalı: sms'in satırı yokken kural eklenemez, satırı eklenince eklenebilir.
+	sms := model.NotificationRoute{OrganizationID: &org, UserID: &admin, Channel: "sms", MinLevel: "critical"}
+	if _, err := n.Create(ctx, sms); err == nil {
+		t.Fatal("a rule on a channel without a notification_channels row was accepted")
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO notification_channels (channel, provider) VALUES ('sms', 'test')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := n.Create(ctx, sms); err != nil {
+		t.Fatalf("sms rule once the channel exists: %v", err)
 	}
 
 	upd, err := n.Update(ctx, r.ID, "email", "critical")

@@ -486,9 +486,13 @@ func TestResolvedEmailShowsTheResolvingReadingNotTheLastEscalatedOne(t *testing.
 	}
 }
 
-// Henüz uygulanmamış bir kanaldaki kural mail yerine sessizce yutulmaz: alert yine açılır, e-posta gitmez.
+// Veritabanında tanımlı ama göndericisi uygulanmamış bir kanaldaki kural mail'e dönüşmez: alert yine açılır, e-posta
+// gitmez.
 func TestRuleWithAnUnimplementedChannelSendsNoEmail(t *testing.T) {
 	e := newEnv(t)
+	if _, err := e.pool.Exec(e.ctx, `INSERT INTO notification_channels (channel, provider) VALUES ('sms', 'test')`); err != nil {
+		t.Fatal(err)
+	}
 	admin := testdb.User(t, e.pool, "org@x.test", "org_admin", "pw")
 	testdb.AssignOrg(t, e.pool, admin, e.org)
 	if _, err := store.NewNotifications(e.pool).Create(e.ctx, model.NotificationRoute{
