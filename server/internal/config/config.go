@@ -29,14 +29,6 @@ type Config struct {
 	// alınamaz (kurtarmak için etkilenen host'ların kimlik bilgilerini yenile).
 	SecretsEncryptionKey []byte
 
-	// SMTP isteğe bağlıdır: boş SMTPHost, notify.Mailer'ın hata vermek yerine yalnızca log
-	// modunda çalışması demektir (bkz. docs/MIMARI.md bölüm 8).
-	SMTPHost     string
-	SMTPPort     string
-	SMTPUsername string
-	SMTPPassword string
-	SMTPFrom     string
-
 	// CORSAllowedOrigins, API'yi çağırmasına izin verilen tarayıcı origin'lerini listeler; panel
 	// farklı bir origin'den (static host) sunulduğunda gerekir. Boş = CORS başlığı yok.
 	// httpapi.ParseAllowedOrigins ile doğrulanır.
@@ -84,7 +76,8 @@ type Config struct {
 // maxDBMaxConns, DB_MAX_CONNS'ın üst sınırıdır; PostgreSQL'in varsayılan max_connections'ı 100'dür.
 const maxDBMaxConns = 1000
 
-// ObsoleteVars, 2.0.0'da env'den kaldırılıp panele (app_settings) taşınan değişkenlerdir.
+// ObsoleteVars, 2.0.0'da env'den kaldırılıp panele taşınan değişkenlerdir (app_settings; SMTP ise e-posta kanalı,
+// notification_channels).
 var ObsoleteVars = []string{
 	"LATEST_AGENT_VERSION", "MIN_SUPPORTED_AGENT_VERSION",
 	"METRICS_RETENTION_DAYS", "AUDIT_RETENTION_DAYS", "RESOLVED_ALERT_RETENTION_DAYS",
@@ -92,6 +85,7 @@ var ObsoleteVars = []string{
 	"RATE_LIMIT_AUTH_FAILURES_PER_MINUTE", "RATE_LIMIT_INGEST_PER_MINUTE",
 	"PANEL_BASE_URL",
 	"LOG_LEVEL", "LOG_ERROR_BODY_BYTES", "LOG_FILE_MAX_AGE_DAYS", "LOG_FILE_MAX_TOTAL_MB",
+	"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
 }
 
 func Load() (*Config, error) {
@@ -113,12 +107,6 @@ func Load() (*Config, error) {
 		TLSKeyFile:       req("TLS_KEY_FILE"),
 		JWTAccessSecret:  []byte(req("JWT_ACCESS_SECRET")),
 		JWTRefreshSecret: []byte(req("JWT_REFRESH_SECRET")),
-
-		SMTPHost:     os.Getenv("SMTP_HOST"),
-		SMTPPort:     getDefault("SMTP_PORT", "587"),
-		SMTPUsername: os.Getenv("SMTP_USERNAME"),
-		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
-		SMTPFrom:     os.Getenv("SMTP_FROM"),
 	}
 
 	secretsKey := req("SECRETS_ENCRYPTION_KEY")

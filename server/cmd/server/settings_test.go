@@ -21,6 +21,7 @@ import (
 	"healthbeat-server/internal/settings"
 	"healthbeat-server/internal/store"
 	"healthbeat-server/internal/testdb"
+	"healthbeat-server/internal/testsmtp"
 )
 
 // Açılışta veritabanındaki ayarlar bileşenlere uygulanır; panelden (settings.Service) yapılan değişiklik yeniden
@@ -108,3 +109,63 @@ func TestSettingsReachTheComponentsWithoutARestart(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// Mail kanalı panelden açılınca e-postalar yeni SMTP sunucusuna gider ve "Şifremi unuttum" açılır; kapatılınca ikisi de
+// yeniden başlatmadan kapanır.
+func TestEmailChannelReachesTheMailerWithoutARestart(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	appSettings, err := settings.New(ctx, store.NewSettings(pool))
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := testdb.User(t, pool, "root@x.test", "super_admin", "pw")
+	if _, err := appSettings.Update(ctx, &admin, settings.Patch{PanelBaseURL: ptr("https://panel.test")}); err != nil {
+		t.Fatal(err)
+	}
+	mailer := notify.New(notify.Config{})
+	channels, err := settings.NewChannels(ctx, store.NewNotificationChannels(pool, testdb.SecretBox(t)), mailer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	followEmailChannel(channels, mailer, appSettings)
+
+	deps := httpapi.NewDeps(pool, nil, nil, httpapi.RateLimits{}, testdb.SecretBox(t))
+	deps.SetPasswordReset(mailer, appSettings.Current().PanelBaseURL)
+	resetEnabled := func() bool {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		deps.Router().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/v1/auth/options", nil))
+		var o struct {
+			Enabled bool `json:"password_reset_enabled"`
+		}
+		if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &o) != nil {
+			t.Fatalf("GET /api/v1/auth/options = %d %s", rec.Code, rec.Body)
+		}
+		return o.Enabled
+	}
+	if mailer.Enabled() || resetEnabled() {
+		t.Fatal("e-mail on before the channel was set up")
+	}
+
+	srv := testsmtp.Start(t)
+	if _, err := channels.Update(ctx, &admin, model.ChannelEmail, settings.ChannelPatch{
+		Enabled: ptr(true),
+		Config:  json.RawMessage(`{"host": "` + srv.Host + `", "port": ` + srv.Port + `, "from": "hb@x.test"}`),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !resetEnabled() {
+		t.Fatal("password reset still off after the e-mail channel was turned on")
+	}
+	if err := mailer.Send(ctx, []string{"a@x.test"}, "konu", "gövde"); err != nil || len(srv.Messages()) != 1 {
+		t.Fatalf("send after enabling: err=%v, %d messages", err, len(srv.Messages()))
+	}
+
+	if _, err := channels.Update(ctx, &admin, model.ChannelEmail, settings.ChannelPatch{Enabled: ptr(false)}); err != nil {
+		t.Fatal(err)
+	}
+	if mailer.Enabled() || resetEnabled() {
+		t.Fatal("e-mail still on after the channel was turned off")
+	}
+}

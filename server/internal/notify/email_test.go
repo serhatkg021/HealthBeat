@@ -58,10 +58,12 @@ func TestSendUpgradesWithSTARTTLSWhenOffered(t *testing.T) {
 func TestSendUsesImplicitTLSOnPort465(t *testing.T) {
 	srv := testsmtp.StartMode(t, testsmtp.Implicit)
 	m := mailer(srv, "")
-	m.cfg.Port = "465"
+	cfg := *m.cfg.Load()
+	cfg.Port = "465"
+	m.SetConfig(cfg)
 	// Sahte sunucu rastgele bir portta dinler; "465" bağlantısını ona yönlendir.
 	m.dialOverride = func(ctx context.Context) (net.Conn, error) {
-		return (&tls.Dialer{Config: m.tlsCfg()}).DialContext(ctx, "tcp", net.JoinHostPort(srv.Host, srv.Port))
+		return (&tls.Dialer{Config: m.tlsCfg(cfg)}).DialContext(ctx, "tcp", net.JoinHostPort(srv.Host, srv.Port))
 	}
 	if err := m.Send(context.Background(), []string{"a@example.com"}, "s", "b"); err != nil {
 		t.Fatalf("Send: %v", err)
@@ -239,4 +241,63 @@ func TestTurkishSubjectAndBodyTravelAsASCIIAndDecodeBack(t *testing.T) {
 	if got, want := msg.Text(), "Subject: "+subject+"\n\n"+body; got != want {
 		t.Fatalf("decoded message differs:\n got: %q\nwant: %q", got, want)
 	}
+}
+
+// Mail kanalının ayarı panelden değişince bir sonraki gönderim yeni sunucuya gider; Host boşaltılınca yalnızca loglanır.
+func TestSetConfigSwitchesTheServer(t *testing.T) {
+	first, second := testsmtp.Start(t), testsmtp.Start(t)
+	m := mailer(first, "")
+	if err := m.Send(context.Background(), []string{"a@example.com"}, "bir", "b"); err != nil {
+		t.Fatal(err)
+	}
+	m.SetConfig(Config{Host: second.Host, Port: second.Port, From: "yeni@healthbeat.test"})
+	if err := m.Send(context.Background(), []string{"a@example.com"}, "iki", "b"); err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Messages()) != 1 || len(second.Messages()) != 1 || second.Messages()[0].From != "yeni@healthbeat.test" {
+		t.Fatalf("first=%d second=%d messages", len(first.Messages()), len(second.Messages()))
+	}
+	m.SetConfig(Config{})
+	if m.Enabled() {
+		t.Fatal("mailer enabled without a host")
+	}
+	if err := m.Send(context.Background(), []string{"a@example.com"}, "üç", "b"); err != nil || len(second.Messages()) != 1 {
+		t.Fatalf("log-only send: err=%v, second=%d messages", err, len(second.Messages()))
+	}
+}
+
+// SendWith kayıtlı ayarı kullanmaz (kanal kapalıyken denenebilir) ve host yoksa sessizce loga düşmek yerine hata verir.
+func TestSendWithUsesTheGivenConfig(t *testing.T) {
+	srv := testsmtp.Start(t)
+	m := New(Config{}) // kanal kapalı
+	if err := m.SendWith(context.Background(), Config{Host: srv.Host, Port: srv.Port, From: "hb@x.test"}, []string{"a@example.com"}, "Test", "b"); err != nil {
+		t.Fatal(err)
+	}
+	if len(srv.Messages()) != 1 || m.Enabled() {
+		t.Fatalf("messages=%d enabled=%v", len(srv.Messages()), m.Enabled())
+	}
+	if err := m.SendWith(context.Background(), Config{}, []string{"a@example.com"}, "Test", "b"); err == nil {
+		t.Fatal("SendWith without a host succeeded")
+	}
+}
+
+func TestSetConfigConcurrentWithSend(t *testing.T) {
+	srv := testsmtp.Start(t)
+	m := mailer(srv, "")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 50 {
+			if i%2 == 0 {
+				m.SetConfig(Config{})
+			} else {
+				m.SetConfig(Config{Host: srv.Host, Port: srv.Port, From: "hb@x.test"})
+			}
+		}
+	}()
+	for range 10 {
+		_ = m.Send(context.Background(), []string{"a@example.com"}, "s", "b")
+		_ = m.Enabled()
+	}
+	<-done
 }

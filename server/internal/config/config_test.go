@@ -235,11 +235,12 @@ func TestLoadReportsObsoleteVars(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "verbose") // eskiden açılışı durdururdu; artık yalnızca uyarı
 	t.Setenv("METRICS_RETENTION_DAYS", "-5")
 	t.Setenv("PANEL_BASE_URL", "  ")
+	t.Setenv("SMTP_HOST", "smtp.example.com") // SMTP artık mail kanalının ayarıdır
 	cfg, err := Load()
 	if err != nil {
 		t.Fatalf("an obsolete var stopped the start: %v", err)
 	}
-	if strings.Join(cfg.Obsolete, ",") != "METRICS_RETENTION_DAYS,LOG_LEVEL" {
-		t.Fatalf("obsolete = %v, want METRICS_RETENTION_DAYS,LOG_LEVEL", cfg.Obsolete)
+	if strings.Join(cfg.Obsolete, ",") != "METRICS_RETENTION_DAYS,LOG_LEVEL,SMTP_HOST" {
+		t.Fatalf("obsolete = %v, want METRICS_RETENTION_DAYS,LOG_LEVEL,SMTP_HOST", cfg.Obsolete)
 	}
 }

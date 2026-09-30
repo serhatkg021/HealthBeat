@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,4 +36,19 @@ type AppSettings struct {
 
 	UpdatedAt time.Time
 	UpdatedBy *uuid.UUID
+}
+
+// NotificationChannel, sistem düzeyindeki bir bildirim kanalıdır (notification_channels satırı). Secret çözülmüş şifre ya da
+// token'dır: yalnızca server içinde kullanılır, API'ye asla verilmez.
+type NotificationChannel struct {
+	Channel       string
+	Provider      string // kanalın gerçekleştirimi (email → smtp)
+	Enabled       bool
+	Config        json.RawMessage // sır olmayan ayarlar; biçimini provider belirler
+	Secret        string
+	SecretSet     bool
+	OwnerMinLevel string // sistem sahiplerine bu seviye ve üzeri gönderilir
+	VerifiedAt    *time.Time
+	UpdatedAt     time.Time
+	UpdatedBy     *uuid.UUID
 }

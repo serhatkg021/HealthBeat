@@ -85,13 +85,14 @@ func main() {
 
 	tokenSvc := authsvc.NewTokenService(cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cur.AccessTokenTTL, cur.RefreshTokenTTL)
 
-	mailer := notify.New(notify.Config{
-		Host:     cfg.SMTPHost,
-		Port:     cfg.SMTPPort,
-		Username: cfg.SMTPUsername,
-		Password: cfg.SMTPPassword,
-		From:     cfg.SMTPFrom,
-	})
+	// E-posta (alert'ler, şifre sıfırlama) mail kanalının ayarıyla gönderilir; kanal kapalıysa yalnızca loglanır.
+	mailer := notify.New(notify.Config{})
+	channels, err := settings.NewChannels(ctx, store.NewNotificationChannels(pool, secrets), mailer)
+	if err != nil {
+		fatal("notification channels", err)
+	}
+	email, _ := channels.Get(model.ChannelEmail)
+	mailer.SetConfig(settings.MailerConfig(email))
 	alertEngine := alertengine.New(pool, mailer, cur.PanelBaseURL)
 	// Alert bildirimleri kalıcı kuyruktan (notification_outbox) teslim edilir; gönderilemeyen yeniden denenir.
 	background.Go("alert notifications", alertEngine.RunNotifications)
@@ -111,6 +112,7 @@ func main() {
 
 	deps.SetPasswordReset(mailer, cur.PanelBaseURL)
 	logPasswordReset(mailer.Enabled(), cur.PanelBaseURL)
+	followEmailChannel(channels, mailer, appSettings)
 
 	background.Go("password mails", deps.RunMailOutbox)
 	background.Go("token purge", retention.NewTokenPurger(store.NewRefreshTokens(pool), store.NewPasswordResets(pool)).Run)
@@ -279,17 +281,32 @@ func retentionDays(s model.AppSettings) retention.Days {
 	return retention.Days{Metrics: s.MetricsRetentionDays, Audit: s.AuditRetentionDays, ResolvedAlerts: s.ResolvedAlertRetentionDays}
 }
 
+// followEmailChannel, mail kanalı panelden değişince göndericinin ayarını günceller: alert e-postaları ve şifre
+// e-postaları bir sonraki gönderimde yeni ayarı kullanır.
+func followEmailChannel(channels *settings.Channels, mailer *notify.Mailer, appSettings *settings.Service) {
+	channels.OnChange(func(_, updated model.NotificationChannel) {
+		if updated.Channel != model.ChannelEmail {
+			return
+		}
+		wasEnabled := mailer.Enabled()
+		mailer.SetConfig(settings.MailerConfig(updated))
+		if wasEnabled != mailer.Enabled() {
+			logPasswordReset(mailer.Enabled(), appSettings.Current().PanelBaseURL)
+		}
+	})
+}
+
 // logPasswordReset, e-posta ile şifre sıfırlamanın açık olup olmadığını ve neden kapalı olduğunu loglar.
-func logPasswordReset(smtpEnabled bool, panelBaseURL string) {
+func logPasswordReset(emailEnabled bool, panelBaseURL string) {
 	switch {
-	case smtpEnabled && panelBaseURL != "":
+	case emailEnabled && panelBaseURL != "":
 		slog.Info("password reset by e-mail: enabled", "panel_base_url", panelBaseURL)
-	case smtpEnabled:
-		slog.Info("password reset by e-mail: disabled — SMTP is configured but the panel address is not set (Settings)")
+	case emailEnabled:
+		slog.Info("password reset by e-mail: disabled — the e-mail channel is on but the panel address is not set (Settings)")
 	case panelBaseURL != "":
-		slog.Info("password reset by e-mail: disabled — the panel address is set but SMTP_HOST is not")
+		slog.Info("password reset by e-mail: disabled — the panel address is set but the e-mail channel is off (Settings)")
 	default:
-		slog.Info("password reset by e-mail: disabled (set SMTP_HOST and the panel address in Settings to enable it)")
+		slog.Info("password reset by e-mail: disabled (turn on the e-mail channel and set the panel address in Settings)")
 	}
 }
 

@@ -63,7 +63,7 @@ CREATE TABLE notification_channels (
     provider        TEXT NOT NULL,                   -- kanalın gerçekleştirimi (email → smtp)
     enabled         BOOLEAN NOT NULL DEFAULT false,  -- false: "ayar gerekli" ya da elle kapatıldı; gönderim yapılmaz
     config          JSONB NOT NULL DEFAULT '{}',     -- sır olmayan ayarlar; biçimini kanalın göndericisi doğrular
-    secret_enc      BYTEA,                           -- şifre/token (secretbox, aad = channel); API asla geri döndürmez
+    secret_enc      TEXT,                            -- şifre/token (secretbox, aad = "notification_channels:<channel>"); API asla geri döndürmez
     owner_min_level TEXT NOT NULL DEFAULT 'warning', -- sistem sahiplerine bu seviye ve üzeri gönderilir
     verified_at     TIMESTAMPTZ,                     -- son başarılı deneme gönderimi
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
