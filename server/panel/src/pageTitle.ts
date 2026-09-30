@@ -10,6 +10,7 @@ const TITLES: Record<string, string> = {
   '/thresholds': 'Eşikler',
   '/users': 'Kullanıcılar',
   '/audit': 'Denetim Kaydı',
+  '/settings': 'Ayarlar',
   '/my-hosts': 'Sunucularım',
   '/change-password': 'Şifre değiştir',
   '/login': 'Giriş',

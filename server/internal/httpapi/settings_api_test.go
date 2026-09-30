@@ -326,3 +326,21 @@ func TestOwnerAddedThroughTheAPIGetsTheAlert(t *testing.T) {
 		t.Fatalf("queued alert notifications = %v, want one to the owner added through the API", rows)
 	}
 }
+
+// Kural ekranı kanalların seçilebilirliğini notification.view ile okur; yanıt ayar ayrıntısı taşımaz.
+func TestChannelOptionsForTheRuleScreen(t *testing.T) {
+	a := newAPI(t)
+	root, _ := a.login("root@x.test", "super_admin")
+	a.expect(200, "PATCH", "/api/v1/notification-channels/email", root, map[string]any{"secret": "gizli-şifre"}, nil)
+	operator, _ := a.login("op@x.test", "operator")
+	var raw json.RawMessage
+	a.expect(200, "GET", "/api/v1/notification-channels/options", operator, nil, &raw)
+	if string(raw) != `[{"channel":"email","enabled":true,"ready":true,"personal":true,"implemented":true}]` {
+		t.Fatalf("options = %s", raw)
+	}
+	if _, err := a.pool.Exec(context.Background(), `DELETE FROM role_permissions WHERE permission_key = 'notification.view' AND role = 'operator'`); err != nil {
+		t.Fatal(err)
+	}
+	a.deps.ResetPermissionCache()
+	a.expect(403, "GET", "/api/v1/notification-channels/options", operator, nil, nil)
+}

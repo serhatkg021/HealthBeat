@@ -1,20 +1,20 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { BellRing, Plus, Trash2 } from 'lucide-react'
-import { notificationsApi, type RouteScope } from '../api/endpoints'
-import type { AlertLevel, NotificationChannel, NotificationRoute, RecipientCandidate } from '../types/api'
+import { channelsApi, notificationsApi, type RouteScope } from '../api/endpoints'
+import type { AlertLevel, ChannelOption, NotificationChannel, NotificationRoute, RecipientCandidate } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { EmptyState } from '../components/EmptyState'
 import { alertLevelLabel } from '../labels'
-import { CHANNELS, LEVEL_CHOICES, candidateKey, candidateLabel, candidatesForNewRoute, describeCoverage } from './notificationRules'
+import { LEVEL_CHOICES, candidateKey, candidateLabel, candidatesForNewRoute, channelChoices, channelLabel, describeCoverage } from './notificationRules'
 
-// Bir kapsamın (organizasyon ya da sunucu) bildirim kuralları. Kural yoksa varsayılan alıcılar kullanılır; kural
-// varsa yalnızca kurallardaki alıcılar bilgilendirilir. Sunucu kuralı organizasyon kurallarını, alt organizasyonun kuralı
-// üst şirketinkini o kapsamda geçersiz kılar.
+// Bir kapsamın (organizasyon ya da sunucu) bildirim kuralları: sistem sahiplerine ek alıcılar. Sunucu, organizasyon ve
+// üst organizasyon kuralları toplanır. Yalnızca açık ve kişiye giden kanallar seçilebilir; kanalı kapalı kural işaretlenir.
 export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEdit: boolean }) {
   const isHost = 'hostId' in scope
   const scopeId = isHost ? scope.hostId : scope.organizationId
   const [routes, setRoutes] = useState<NotificationRoute[] | null>(null)
   const [candidates, setCandidates] = useState<RecipientCandidate[]>([])
+  const [options, setOptions] = useState<ChannelOption[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [recipient, setRecipient] = useState('')
@@ -27,7 +27,10 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
       .list(s)
       .then(setRoutes)
       .catch((err) => setError(err instanceof Error ? err.message : 'bildirim kuralları yüklenemedi'))
-    if (canEdit) notificationsApi.candidates(s).then(setCandidates).catch(() => undefined)
+    if (canEdit) {
+      notificationsApi.candidates(s).then(setCandidates).catch(() => undefined)
+      channelsApi.options().then(setOptions).catch(() => undefined)
+    }
   }, [isHost, scopeId, canEdit])
 
   useEffect(load, [load])
@@ -63,6 +66,8 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
 
   const list = routes ?? []
   const available = candidatesForNewRoute(candidates, list, channel)
+  const choices = channelChoices(options)
+  const channelUsable = choices.some((c) => c.id === channel && !c.unavailable)
 
   return (
     <div className="card form-card rule-card">
@@ -74,7 +79,7 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
       {error && <div className="error-banner">{error}</div>}
 
       {routes !== null && list.length === 0 ? (
-        <EmptyState icon={BellRing}>Kural yok — varsayılan alıcılar bilgilendirilir.</EmptyState>
+        <EmptyState icon={BellRing}>Ek alıcı yok — bildirimler yalnızca sistem sahiplerine gider.</EmptyState>
       ) : (
         <table className="stack">
           <thead>
@@ -92,7 +97,16 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
                   {r.recipient_name ?? '—'}
                   <div className="muted mono">{r.recipient_target ?? ''}</div>
                 </td>
-                <td className="muted" data-label="Kanal">{CHANNELS.find((c) => c.id === r.channel)?.label ?? r.channel}</td>
+                <td className="muted" data-label="Kanal">
+                  {channelLabel(r.channel)}
+                  {!r.channel_enabled && (
+                    <div className="rule-warning">
+                      <StatusBadge tone="warning" title="Kanal Ayarlar’dan açılana kadar bu kurala bildirim gitmez.">
+                        Kanal kapalı — kural çalışmıyor
+                      </StatusBadge>
+                    </div>
+                  )}
+                </td>
                 <td data-label="En düşük seviye">
                   {canEdit ? (
                     <select
@@ -144,13 +158,16 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
           <div className="form-row">
             <label htmlFor="rule-channel">Kanal</label>
             <select id="rule-channel" value={channel} onChange={(e) => setChannel(e.target.value as NotificationChannel)}>
-              {CHANNELS.map((c) => (
-                <option key={c.id} value={c.id} disabled={!c.implemented}>
+              {choices.map((c) => (
+                <option key={c.id} value={c.id} disabled={!!c.unavailable}>
                   {c.label}
-                  {c.implemented ? '' : ' (yakında)'}
+                  {c.unavailable ? ` (${c.unavailable})` : ''}
                 </option>
               ))}
             </select>
+            {!channelUsable && options.length > 0 && (
+              <p className="form-hint">Bu kanal kapalı ya da ayarı yapılmamış; süper admin Ayarlar → Bildirim kanalları’ndan açabilir.</p>
+            )}
           </div>
           <div className="form-row">
             <label htmlFor="rule-level">En düşük seviye</label>
@@ -162,7 +179,7 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
               ))}
             </select>
           </div>
-          <button className="btn btn-primary" type="submit" disabled={busy || recipient === ''}>
+          <button className="btn btn-primary" type="submit" disabled={busy || recipient === '' || !channelUsable}>
             <Plus size={15} strokeWidth={1.9} />
             Kural ekle
           </button>

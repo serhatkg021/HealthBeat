@@ -55,11 +55,15 @@ export class ApiError extends Error {
   // yöneticiye iletir, yönetici logda bu kimlikle hatanın ayrıntısını bulur. 4xx'te kullanıcının düzeltebileceği bir
   // sorun olduğu için gösterilmez.
   requestId?: string
-  constructor(status: number, message: string, code?: string, requestId?: string) {
+  // Doğrulama hatasında alan adı → sorun (ör. {"access_token_ttl_seconds": "60 ile 86400 arasında olmalı"}); form
+  // hatayı ilgili alanın altında gösterir.
+  fields?: Record<string, string>
+  constructor(status: number, message: string, code?: string, requestId?: string, fields?: Record<string, string>) {
     super(status >= 500 && requestId ? `${message} (hata kimliği: ${requestId})` : message)
     this.status = status
     this.code = code
     this.requestId = requestId
+    this.fields = fields
   }
 }
 
@@ -164,7 +168,9 @@ async function rawRequest(path: string, opts: RequestOptions, retry: boolean): P
       data && typeof data === 'object' && typeof (data as { request_id?: unknown }).request_id === 'string'
         ? (data as { request_id: string }).request_id
         : (resp.headers.get('X-Request-ID') ?? undefined)
-    throw new ApiError(resp.status, message, code, requestId)
+    const rawFields = data && typeof data === 'object' ? (data as { fields?: unknown }).fields : undefined
+    const fields = rawFields && typeof rawFields === 'object' ? (rawFields as Record<string, string>) : undefined
+    throw new ApiError(resp.status, message, code, requestId, fields)
   }
 
   return { data, headers: resp.headers }

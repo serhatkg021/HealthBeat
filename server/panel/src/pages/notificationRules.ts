@@ -1,15 +1,36 @@
 // Bildirim kuralları için saf mantık (React yok; Node'un çalıştırıcısıyla birim test edilir).
 
-import type { AlertLevel, NotificationChannel, NotificationRoute, RecipientCandidate } from '../types/api.ts'
+import type { AlertLevel, ChannelOption, NotificationChannel, NotificationRoute, RecipientCandidate } from '../types/api.ts'
 
-// Kanallar: veritabanı hepsini tanır, API yalnızca implemented olanı (şimdilik e-posta) kabul eder.
-export const CHANNELS: { id: NotificationChannel; label: string; implemented: boolean }[] = [
-  { id: 'email', label: 'E-posta', implemented: true },
-  { id: 'sms', label: 'SMS', implemented: false },
-  { id: 'slack', label: 'Slack', implemented: false },
-  { id: 'discord', label: 'Discord', implemented: false },
-  { id: 'telegram', label: 'Telegram', implemented: false },
-]
+const CHANNEL_LABELS: Record<NotificationChannel, string> = {
+  email: 'E-posta',
+  sms: 'SMS',
+  slack: 'Slack',
+  discord: 'Discord',
+  telegram: 'Telegram',
+}
+
+export const channelLabel = (c: string): string => CHANNEL_LABELS[c as NotificationChannel] ?? c
+
+export interface ChannelChoice {
+  id: NotificationChannel
+  label: string
+  // Seçilemiyorsa nedeni ("ayar gerekli", "kapalı"); seçilebiliyorsa undefined.
+  unavailable?: string
+}
+
+// channelChoices, kural eklerken gösterilecek kanallardır: yalnızca server'ın gönderebildiği ve kişiye giden kanallar
+// (ortak kanallar yalnızca sistem sahiplerine gider, kurallarda yer almaz). Kapalı ya da ayarı eksik olan listede kalır
+// ama seçilemez; neden yanında yazar.
+export function channelChoices(options: ChannelOption[]): ChannelChoice[] {
+  return options
+    .filter((o) => o.implemented && o.personal)
+    .map((o) => ({
+      id: o.channel,
+      label: channelLabel(o.channel),
+      unavailable: !o.ready ? 'ayar gerekli' : !o.enabled ? 'kapalı' : undefined,
+    }))
+}
 
 export const LEVEL_CHOICES: AlertLevel[] = ['info', 'warning', 'critical']
 
@@ -39,14 +60,12 @@ export function candidatesForNewRoute(candidates: RecipientCandidate[], routes: 
   return candidates.filter((c) => !taken.has(candidateKey(c)))
 }
 
-// Kapsamın hangi alıcılara gittiğini anlatan tek paragraf.
+// Kapsamın bildirimlerinin kime gittiğini anlatan tek paragraf: sistem sahipleri her zaman alır, kurallar ek alıcıdır ve
+// sunucu, organizasyon ve üst organizasyon kuralları toplanır (hiçbiri diğerini ezmez).
 export function describeCoverage(scope: 'organization' | 'host', ruleCount: number): string {
-  if (ruleCount === 0) {
-    return scope === 'host'
-      ? 'Bu sunucuya özel kural yok: organizasyonun kuralları (o da yoksa varsayılan alıcılar: süper adminler ve organizasyon yöneticileri, e-posta, uyarı ve üstü) uygulanır.'
-      : 'Bu organizasyonda kural yok: varsayılan alıcılar bilgilendirilir (süper adminler ve organizasyon yöneticileri, e-posta, uyarı ve üstü). Alt organizasyonlar üst şirketin kurallarını miras alır.'
+  const base = 'Alert bildirimleri her zaman sistem sahiplerine gider (Ayarlar → Sistem sahipleri); buradaki kişiler ek alıcıdır.'
+  if (scope === 'host') {
+    return `${base} Bu sunucunun alert’lerinde sunucu kuralları, organizasyonunun ve üst organizasyonlarının kurallarıyla birlikte uygulanır.${ruleCount === 0 ? ' Bu sunucuya özel ek alıcı yok.' : ''}`
   }
-  return scope === 'host'
-    ? 'Bu sunucu için YALNIZCA aşağıdaki kurallar geçerlidir; organizasyon kuralları ve varsayılan alıcılar bu sunucu için devre dışıdır.'
-    : 'Bu organizasyon (ve kendi kuralı olmayan alt organizasyonları) için YALNIZCA aşağıdaki kurallar geçerlidir; varsayılan alıcılar devre dışıdır. Bir sunucuya özel kural eklenirse o sunucuda yalnızca o geçerli olur.'
+  return `${base} Bu kurallar organizasyondaki ve alt organizasyonlarındaki bütün sunucular için geçerlidir; sunucu kurallarıyla birlikte uygulanır.${ruleCount === 0 ? ' Bu organizasyonda ek alıcı yok.' : ''}`
 }

@@ -1,6 +1,13 @@
 import { apiRequest, apiRequestPage } from './client'
 import type {
   Alert,
+  ChannelInfo,
+  ChannelOption,
+  NotificationOwner,
+  SettingsField,
+  SettingsResponse,
+  SettingsValues,
+  SMTPConfig,
   AlertNotification,
   AuditLogPage,
   AlertStatus,
@@ -237,4 +244,43 @@ export const usersApi = {
       method: 'POST',
       body: { organization_id: organizationId },
     }),
+}
+
+// Sistem ayarları (settings.view okur, settings.manage değiştirir).
+export const settingsApi = {
+  get: () => apiRequest<SettingsResponse>('/api/v1/settings'),
+  update: (patch: Partial<SettingsValues>) => apiRequest<SettingsResponse>('/api/v1/settings', { method: 'PATCH', body: patch }),
+  reset: (fields: SettingsField[]) => apiRequest<SettingsResponse>('/api/v1/settings/reset', { method: 'POST', body: { fields } }),
+}
+
+export interface ChannelPatch {
+  enabled?: boolean
+  config?: Partial<SMTPConfig>
+  // "" şifreyi siler; verilmezse değişmez.
+  secret?: string
+  owner_min_level?: AlertLevel
+}
+
+export const channelsApi = {
+  list: () => apiRequest<ChannelInfo[]>('/api/v1/notification-channels'),
+  // Kural ekranı için (notification.view): hangi kanal seçilebilir.
+  options: () => apiRequest<ChannelOption[]>('/api/v1/notification-channels/options'),
+  update: (channel: string, patch: ChannelPatch) =>
+    apiRequest<ChannelInfo>(`/api/v1/notification-channels/${channel}`, { method: 'PATCH', body: patch }),
+  test: (channel: string, to: string) => apiRequest<void>(`/api/v1/notification-channels/${channel}/test`, { method: 'POST', body: { to } }),
+}
+
+export interface OwnerInput {
+  name: string
+  email: string | null
+  phone: string | null
+  email_enabled: boolean
+  sms_enabled: boolean
+}
+
+export const ownersApi = {
+  list: () => apiRequest<NotificationOwner[]>('/api/v1/notification-owners'),
+  create: (input: OwnerInput) => apiRequest<NotificationOwner>('/api/v1/notification-owners', { method: 'POST', body: input }),
+  update: (id: string, input: OwnerInput) => apiRequest<NotificationOwner>(`/api/v1/notification-owners/${id}`, { method: 'PUT', body: input }),
+  remove: (id: string) => apiRequest<void>(`/api/v1/notification-owners/${id}`, { method: 'DELETE' }),
 }

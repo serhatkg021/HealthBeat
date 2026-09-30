@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { NotificationRoute, RecipientCandidate } from '../types/api.ts'
-import { candidateKey, candidateLabel, candidatesForNewRoute, describeCoverage } from './notificationRules.ts'
+import type { ChannelOption, NotificationRoute, RecipientCandidate } from '../types/api.ts'
+import { candidateKey, candidateLabel, candidatesForNewRoute, channelChoices, describeCoverage } from './notificationRules.ts'
 
 const user = (id: string, name: string, source: RecipientCandidate['source'] = 'org_admin'): RecipientCandidate => ({ user_id: id, name, email: `${name}@x.test`, source })
 const contact = (id: string, name: string): RecipientCandidate => ({ contact_id: id, name, email: `${name}@musteri.test`, source: 'contact' })
-const route = (over: Partial<NotificationRoute>): NotificationRoute => ({ id: 'r', channel: 'email', min_level: 'warning', created_at: '', ...over })
+const route = (over: Partial<NotificationRoute>): NotificationRoute => ({ id: 'r', channel: 'email', min_level: 'warning', created_at: '', channel_enabled: true, ...over })
 
 test('users and contacts with the same id never collide', () => {
   assert.notEqual(candidateKey({ user_id: '1' }), candidateKey({ contact_id: '1' }))
@@ -24,9 +24,32 @@ test('labels show name, address and where the recipient comes from', () => {
   assert.equal(candidateLabel({ user_id: 'u', name: 'x', source: 'operator' }), 'x (Operatör)')
 })
 
-test('the coverage text warns that rules REPLACE the defaults', () => {
-  assert.match(describeCoverage('organization', 0), /varsayılan alıcılar bilgilendirilir/)
-  assert.match(describeCoverage('organization', 2), /YALNIZCA/)
-  assert.match(describeCoverage('host', 1), /YALNIZCA.*organizasyon kuralları/)
-  assert.match(describeCoverage('host', 0), /organizasyonun kuralları/)
+test('the coverage text says owners always get alerts and rules add up', () => {
+  for (const text of [describeCoverage('organization', 0), describeCoverage('host', 2)]) {
+    assert.match(text, /her zaman sistem sahiplerine/)
+    assert.match(text, /ek alıcı/)
+    assert.doesNotMatch(text, /YALNIZCA|varsayılan alıcı/)
+  }
+  assert.match(describeCoverage('host', 1), /birlikte uygulanır/)
+  assert.match(describeCoverage('organization', 0), /ek alıcı yok/)
+})
+
+test('only personal channels the server can send are offered; closed ones say why', () => {
+  const opt = (channel: ChannelOption['channel'], over: Partial<ChannelOption> = {}): ChannelOption => ({
+    channel, enabled: true, ready: true, personal: true, implemented: true, ...over,
+  })
+  assert.deepEqual(
+    channelChoices([
+      opt('email'),
+      opt('sms', { enabled: false, ready: false }),
+      opt('telegram', { enabled: false }),
+      opt('slack', { personal: false }), // yalnızca sistem sahiplerine gider
+      opt('discord', { implemented: false }),
+    ]),
+    [
+      { id: 'email', label: 'E-posta', unavailable: undefined },
+      { id: 'sms', label: 'SMS', unavailable: 'ayar gerekli' },
+      { id: 'telegram', label: 'Telegram', unavailable: 'kapalı' },
+    ],
+  )
 })

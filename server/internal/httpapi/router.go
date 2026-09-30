@@ -47,6 +47,7 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/settings", d.requirePermission("settings.manage", handle(d.handleUpdateSettings)))
 	mux.HandleFunc("POST /api/v1/settings/reset", d.requirePermission("settings.manage", handle(d.handleResetSettings)))
 	mux.HandleFunc("GET /api/v1/notification-channels", d.requirePermission("settings.view", handle(d.handleListChannels)))
+	mux.HandleFunc("GET /api/v1/notification-channels/options", d.requirePermission("notification.view", handle(d.handleChannelOptions)))
 	mux.HandleFunc("PATCH /api/v1/notification-channels/{channel}", d.requirePermission("settings.manage", handle(d.handleUpdateChannel)))
 	mux.HandleFunc("POST /api/v1/notification-channels/{channel}/test", d.requirePermission("settings.manage", handle(d.handleTestChannel)))
 	mux.HandleFunc("GET /api/v1/notification-owners", d.requirePermission("settings.view", handle(d.handleListOwners)))

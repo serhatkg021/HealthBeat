@@ -15,7 +15,7 @@ import {
   notificationStatusTone,
 } from '../labels'
 import { alertReading } from './alertText'
-import { attemptsText, deliveryTime, recipientsText } from './alertNotifications'
+import { attemptsText, deliveryTime, groupNotifications, groupSummary, recipientsText } from './alertNotifications'
 
 const when = (iso?: string): string => (iso ? new Date(iso).toLocaleString() : '—')
 
@@ -78,38 +78,52 @@ export function AlertDetail({ alert, hostTitle, onClose }: { alert: Alert | null
           {error && <div className="error-banner">{error}</div>}
           {!error && items === null && <p className="muted">Yükleniyor…</p>}
           {items?.length === 0 && (
-            <p className="muted">Bu alert için bildirim yazılmadı (bildirim kuralı ya da uygun alıcı yoktu).</p>
+            <p className="muted">Bu alert için bildirim yazılmadı (sistem sahibi ya da uygun ek alıcı yoktu, ya da kanal kapalıydı).</p>
           )}
           {items && items.length > 0 && (
             <ol className="notification-timeline">
-              {items.map((n) => {
-                const done = deliveryTime(n)
-                const attempts = attemptsText(n)
+              {groupNotifications(items).map((g) => {
+                const visible = g.items.some((n) => n.recipients && n.recipients.length > 0)
                 return (
-                  <li key={n.id}>
+                  <li key={g.key}>
                     <div className="notification-head">
-                      <time className="tnum" dateTime={n.created_at}>
-                        {when(n.created_at)}
+                      <time className="tnum" dateTime={g.created_at}>
+                        {when(g.created_at)}
                       </time>
-                      <span>{alertEventLabel(n.event)}</span>
-                      <StatusBadge tone={alertLevelTone(n.level)}>{alertLevelLabel(n.level)}</StatusBadge>
-                      <StatusBadge tone={notificationStatusTone(n.status)}>{notificationStatusLabel(n.status)}</StatusBadge>
+                      <span>{alertEventLabel(g.event)}</span>
+                      <StatusBadge tone={alertLevelTone(g.level)}>{alertLevelLabel(g.level)}</StatusBadge>
+                      <span className="muted">{groupSummary(g.items)}</span>
                     </div>
-                    <ul className="meta-list">
-                      <li>{channelLabel(n.channel)}</li>
-                      <li>{recipientsText(n)}</li>
-                      <li className="tnum">
-                        {done.label}: {when(done.at)}
-                      </li>
-                      {attempts && <li>{attempts}</li>}
-                    </ul>
-                    {n.last_error && n.status !== 'sent' && <p className="notification-error">Son hata: {n.last_error}</p>}
+                    {visible && (
+                      <ul className="delivery-list">
+                        {g.items.map((n) => {
+                          const done = deliveryTime(n)
+                          const attempts = attemptsText(n)
+                          return (
+                            <li key={n.id}>
+                              <ul className="meta-list">
+                                <li>{recipientsText(n)}</li>
+                                <li>{channelLabel(n.channel)}</li>
+                                <li>
+                                  <StatusBadge tone={notificationStatusTone(n.status)}>{notificationStatusLabel(n.status)}</StatusBadge>
+                                </li>
+                                <li className="tnum">
+                                  {done.label}: {when(done.at)}
+                                </li>
+                                {attempts && <li>{attempts}</li>}
+                              </ul>
+                              {n.last_error && n.status !== 'sent' && <p className="notification-error">Son hata: {n.last_error}</p>}
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
                     <details className="notification-content">
                       <summary>İçeriği göster</summary>
                       <pre>
-                        {n.subject}
+                        {g.subject}
                         {'\n\n'}
-                        {n.body}
+                        {g.body}
                       </pre>
                     </details>
                   </li>

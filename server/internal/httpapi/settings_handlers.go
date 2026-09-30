@@ -179,6 +179,26 @@ func (d *Deps) handleListChannels(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
+// channelOption, kural ekranının bir kanal hakkında bilmesi gerekenlerdir (ayrıntısız: config, şifre ya da sahip seviyesi
+// yok); notification.view ile okunur.
+type channelOption struct {
+	Channel     string `json:"channel"`
+	Enabled     bool   `json:"enabled"`
+	Ready       bool   `json:"ready"`
+	Personal    bool   `json:"personal"`
+	Implemented bool   `json:"implemented"`
+}
+
+func (d *Deps) handleChannelOptions(w http.ResponseWriter, r *http.Request) error {
+	out := []channelOption{}
+	for _, ch := range d.channels.List() {
+		personal, implemented := d.alertEngine.Notifier(ch.Channel)
+		out = append(out, channelOption{Channel: ch.Channel, Enabled: ch.Enabled, Ready: settings.Ready(ch), Personal: personal, Implemented: implemented})
+	}
+	writeJSON(w, http.StatusOK, out)
+	return nil
+}
+
 // channelFromPath, yoldaki kanalı döndürür; yoksa 404.
 func (d *Deps) channelFromPath(r *http.Request) (model.NotificationChannel, error) {
 	ch, ok := d.channels.Get(r.PathValue("channel"))

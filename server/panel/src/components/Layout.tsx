@@ -10,6 +10,7 @@ import {
   Menu,
   ScrollText,
   Server,
+  Settings,
   SlidersHorizontal,
   Users,
   X,
@@ -20,6 +21,7 @@ import { pageTitle } from '../pageTitle'
 import { versionInfo } from '../versionInfo'
 import { useServerVersion } from './useAgentPolicy'
 import { useDocumentTitle } from './useDocumentTitle'
+import { NotificationGapBanner } from './NotificationGapBanner'
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Süper Admin',
@@ -141,6 +143,11 @@ export function Layout() {
             Denetim Kaydı
           </SideLink>
         )}
+        {can('settings.view') && (
+          <SideLink to="/settings" icon={Settings}>
+            Ayarlar
+          </SideLink>
+        )}
 
         <div className="sidebar-footer">
           <div className={`version-note${version.mismatch ? ' mismatch' : ''}`} title={version.title}>
@@ -171,6 +178,7 @@ export function Layout() {
       </nav>
 
       <main className="main">
+        {can('settings.view') && <NotificationGapBanner />}
         <Outlet />
       </main>
     </div>
