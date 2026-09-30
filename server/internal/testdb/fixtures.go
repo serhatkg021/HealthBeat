@@ -134,3 +134,19 @@ func SecretBox(t *testing.T) *secretbox.Box {
 	}
 	return box
 }
+
+// EmailOwner, e-posta kanalını açar (ayarı sahte bir sunucudur; testler göndericiyi kendileri kurar) ve email'i sistem
+// sahibi olarak ekler: warning ve üzeri alert e-postaları ona gider.
+func EmailOwner(t *testing.T, pool *pgxpool.Pool, email string) uuid.UUID {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE notification_channels SET enabled = true,
+		config = '{"host": "smtp.test", "port": 25, "from": "hb@x.test", "username": ""}' WHERE channel = 'email'`); err != nil {
+		t.Fatalf("testdb: enable the e-mail channel: %v", err)
+	}
+	var id uuid.UUID
+	if err := pool.QueryRow(ctx, `INSERT INTO notification_owners (name, email) VALUES ($1, $1) RETURNING id`, email).Scan(&id); err != nil {
+		t.Fatalf("testdb: insert owner %q: %v", email, err)
+	}
+	return id
+}

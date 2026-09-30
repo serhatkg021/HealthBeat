@@ -93,8 +93,10 @@ type mailerChannel struct{ m Mailer }
 
 func (mailerChannel) Channel() string { return model.ChannelEmail }
 
-func (c mailerChannel) Send(ctx context.Context, to []string, msg notify.Message) error {
-	return c.m.Send(ctx, to, msg.Subject, msg.Body)
+func (mailerChannel) Personal() bool { return true }
+
+func (c mailerChannel) Send(ctx context.Context, recipient string, msg notify.Message) error {
+	return c.m.Send(ctx, []string{recipient}, msg.Subject, msg.Body)
 }
 
 // SetPanelBaseURL, sıfırlama bağlantılarının kökünü değiştirir (panelden); "" e-posta ile şifre sıfırlamayı kapatır.

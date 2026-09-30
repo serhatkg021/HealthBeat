@@ -2,6 +2,7 @@ package alertengine_test
 
 import (
 	"context"
+	"net/mail"
 	"sort"
 	"strings"
 	"sync"
@@ -30,7 +31,7 @@ type env struct {
 }
 
 // newEnv, migration'ları uygulanmış bir şema üzerinde gerçek bir engine kurar: bir org, bir push
-// host, global cpu eşiği 80 (uyarı) / 95 (kritik), bir super_admin alıcı ve e-postalar
+// host, global cpu eşiği 80 (uyarı) / 95 (kritik), açık e-posta kanalı ve bir sistem sahibi (owner@x.test) ve e-postalar
 // denetlenebilsin diye gerçek bir SMTP dinleyicisi.
 func newEnv(t *testing.T) *env {
 	t.Helper()
@@ -46,7 +47,8 @@ func newEnvWithPanel(t *testing.T, panelBaseURL string) *env {
 	org := testdb.Org(t, pool, "acme")
 	host := testdb.PushHost(t, pool, org, "web-1", "h")
 	testdb.Threshold(t, pool, nil, nil, "cpu", 80, 95)
-	admin := testdb.User(t, pool, "root@x.test", "super_admin", "pw") // her zaman bildirilir
+	admin := testdb.User(t, pool, "root@x.test", "super_admin", "pw") // alert'leri onaylayan kullanıcı
+	testdb.EmailOwner(t, pool, "owner@x.test")                        // sistem sahibi: her alert'ten haberdar olur
 
 	return &env{
 		ctx: context.Background(), pool: pool, smtp: smtp, org: org, host: host, admin: admin,
@@ -301,32 +303,48 @@ func TestNoThresholdNoAlert(t *testing.T) {
 	}
 }
 
-func TestEmailGoesToSuperAdminsAndThatOrgsAdminsOnly(t *testing.T) {
+// Bildirim sistem sahiplerine gider; super_admin, org_admin ya da operatör olmak kendiliğinden bildirim almak demek
+// değildir. Her sahip ayrı ileti alır: bir iletide tek alıcı görünür.
+func TestAlertGoesToTheOwnersEachSeparately(t *testing.T) {
 	e := newEnv(t)
-	otherOrg := testdb.Org(t, e.pool, "other")
-	adminHere := testdb.User(t, e.pool, "admin-acme@x.test", "org_admin", "pw")
-	adminElsewhere := testdb.User(t, e.pool, "admin-other@x.test", "org_admin", "pw")
+	testdb.EmailOwner(t, e.pool, "noc@x.test")
+	orgAdmin := testdb.User(t, e.pool, "admin-acme@x.test", "org_admin", "pw")
 	operator := testdb.User(t, e.pool, "op@x.test", "operator", "pw")
-	testdb.AssignOrg(t, e.pool, adminHere, e.org)
-	testdb.AssignOrg(t, e.pool, adminElsewhere, otherOrg)
+	testdb.AssignOrg(t, e.pool, orgAdmin, e.org)
 	testdb.AssignHost(t, e.pool, operator, e.host)
 
 	e.feedCPU(97)
 
 	msgs := e.messages()
-	if len(msgs) != 1 {
-		t.Fatalf("%d emails, want 1", len(msgs))
+	if got := recipients(t, msgs); got != "noc@x.test,owner@x.test" {
+		t.Fatalf("recipients = %s, want the two owners only", got)
 	}
-	to := append([]string(nil), msgs[0].To...)
-	sort.Strings(to)
-	if strings.Join(to, ",") != "admin-acme@x.test,root@x.test" {
-		t.Fatalf("recipients = %v", to)
-	}
-	for _, want := range []string{"CPU kullanım uyarısı", "Organizasyon: acme", "Title: web-1", "Seviye: KRİTİK", "Panel: https://panel.test/hosts/" + e.host.String()} {
-		if !strings.Contains(msgs[0].Text(), want) {
-			t.Errorf("email missing %q:\n%s", want, msgs[0].Text())
+	for _, m := range msgs {
+		for _, want := range []string{"CPU kullanım uyarısı", "Organizasyon: acme", "Title: web-1", "Seviye: KRİTİK", "Panel: https://panel.test/hosts/" + e.host.String()} {
+			if !strings.Contains(m.Text(), want) {
+				t.Errorf("email missing %q:\n%s", want, m.Text())
+			}
 		}
 	}
+}
+
+// recipients, iletilerin alıcılarıdır (sıralı, virgülle). Her iletinin zarfında ve To: başlığında tek alıcı olmalı:
+// alıcılar birbirini görmez.
+func recipients(t *testing.T, msgs []testsmtp.Message) string {
+	t.Helper()
+	out := []string{}
+	for _, m := range msgs {
+		parsed, err := mail.ReadMessage(strings.NewReader(m.Data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(m.To) != 1 || parsed.Header.Get("To") != m.To[0] {
+			t.Fatalf("a message to %v, want exactly one visible recipient:\n%s", m.To, m.Data)
+		}
+		out = append(out, m.To[0])
+	}
+	sort.Strings(out)
+	return strings.Join(out, ",")
 }
 
 // panelBaseURL boşsa (kurulumda ayarlanmamışsa) e-postaya asla yarım/geçersiz bir bağlantı
@@ -352,9 +370,9 @@ func TestEmailOmitsPanelLinkWhenNotConfigured(t *testing.T) {
 	}
 }
 
-// Bildirim kuralı olan kapsamda yalnızca kuralın alıcıları (panel kullanıcısı ya da iletişim kişisi) bilgilendirilir;
-// varsayılan alıcılar (super_admin, org_admin) devre dışı kalır.
-func TestNotificationRuleReplacesTheDefaultRecipients(t *testing.T) {
+// Organizasyon kuralı sahiplere ek alıcı ekler (sahipleri devre dışı bırakmaz); kuralın en düşük seviyesinin altındaki
+// alert'te kural alıcı üretmez.
+func TestOrganizationRuleAddsRecipientsToTheOwners(t *testing.T) {
 	e := newEnv(t)
 	contact, err := store.NewContacts(e.pool).Create(e.ctx, e.org, store.ContactInput{Name: "Ayşe", Email: ptr("ayse@musteri.test")})
 	if err != nil {
@@ -367,37 +385,40 @@ func TestNotificationRuleReplacesTheDefaultRecipients(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	e.feedCPU(85) // warning: kuralın en düşük seviyesinin altında, kimse bilgilendirilmez (root da değil)
-	if n := len(e.messages()); n != 0 {
-		t.Fatalf("%d emails for a warning below the rule's level, want 0", n)
+	e.feedCPU(85) // warning: kuralın en düşük seviyesinin altında, yalnızca sahip
+	if got := recipients(t, e.messages()); got != "owner@x.test" {
+		t.Fatalf("warning recipients = %s, want the owner only", got)
 	}
 	e.feedCPU(97) // aynı alert kritik olur
-	msgs := e.messages()
-	if len(msgs) != 1 || len(msgs[0].To) != 1 || msgs[0].To[0] != "ayse@musteri.test" {
-		t.Fatalf("emails = %+v, want exactly one, to the contact only", msgs)
+	if got := recipients(t, e.messages()[1:]); got != "ayse@musteri.test,owner@x.test" {
+		t.Fatalf("critical recipients = %s, want the owner and the contact", got)
 	}
 }
 
-// Sunucunun kendi kuralı organizasyonunkini ezer.
-func TestHostNotificationRuleOverridesTheOrganizationRule(t *testing.T) {
+// Kurallar toplanır: üst organizasyonun, organizasyonun ve sunucunun kuralları birlikte geçerlidir; hiçbiri diğerini
+// ezmez. Sahip olan biri bir kuralda da geçse tek ileti alır.
+func TestHostAndOrganizationRulesAddUp(t *testing.T) {
 	e := newEnv(t)
+	child := testdb.ChildOrg(t, e.pool, "acme-ist", e.org)
+	host := testdb.PushHost(t, e.pool, child, "db-1", "h")
+	parentAdmin := testdb.User(t, e.pool, "parent@x.test", "org_admin", "pw")
 	orgAdmin := testdb.User(t, e.pool, "org@x.test", "org_admin", "pw")
 	hostAdmin := testdb.User(t, e.pool, "host@x.test", "org_admin", "pw")
-	testdb.AssignOrg(t, e.pool, orgAdmin, e.org)
-	testdb.AssignOrg(t, e.pool, hostAdmin, e.org)
+	ownerAsUser := testdb.User(t, e.pool, "owner@x.test", "org_admin", "pw")
 	routes := store.NewNotifications(e.pool)
 	for _, r := range []model.NotificationRoute{
-		{OrganizationID: &e.org, UserID: &orgAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
-		{HostID: &e.host, UserID: &hostAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{OrganizationID: &e.org, UserID: &parentAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{OrganizationID: &child, UserID: &orgAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{HostID: &host, UserID: &hostAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{HostID: &host, UserID: &ownerAsUser, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
 	} {
 		if _, err := routes.Create(e.ctx, r); err != nil {
 			t.Fatal(err)
 		}
 	}
-	e.feedCPU(90)
-	msgs := e.messages()
-	if len(msgs) != 1 || len(msgs[0].To) != 1 || msgs[0].To[0] != "host@x.test" {
-		t.Fatalf("emails = %+v, want one to the host rule's recipient only", msgs)
+	e.engine.EvaluateMetrics(e.ctx, host, child, 90, 10, nil)
+	if got := recipients(t, e.messages()); got != "host@x.test,org@x.test,owner@x.test,parent@x.test" {
+		t.Fatalf("recipients = %s, want the owner plus every rule up the chain, the owner once", got)
 	}
 }
 
@@ -409,8 +430,6 @@ func TestEscalationNotifiesTheFullNewLevelAudience(t *testing.T) {
 	e := newEnv(t)
 	early := testdb.User(t, e.pool, "early@x.test", "org_admin", "pw")
 	late := testdb.User(t, e.pool, "late@x.test", "org_admin", "pw")
-	testdb.AssignOrg(t, e.pool, early, e.org)
-	testdb.AssignOrg(t, e.pool, late, e.org)
 	routes := store.NewNotifications(e.pool)
 	for _, r := range []model.NotificationRoute{
 		{OrganizationID: &e.org, UserID: &early, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
@@ -423,36 +442,26 @@ func TestEscalationNotifiesTheFullNewLevelAudience(t *testing.T) {
 
 	e.feedCPU(85)
 	msgs := e.messages()
-	if len(msgs) != 1 || len(msgs[0].To) != 1 || msgs[0].To[0] != "early@x.test" {
-		t.Fatalf("warning emails = %+v, want one to early@ only", msgs)
+	if got := recipients(t, msgs); got != "early@x.test,owner@x.test" {
+		t.Fatalf("warning recipients = %s, want early@ and the owner", got)
 	}
 	e.feedCPU(97)
 	msgs = e.messages()
-	if len(msgs) != 2 {
-		t.Fatalf("%d emails total after escalation, want 2", len(msgs))
-	}
-	to := append([]string(nil), msgs[1].To...)
-	sort.Strings(to)
-	if strings.Join(to, ",") != "early@x.test,late@x.test" {
-		t.Fatalf("escalation recipients = %v, want both early@ and late@ (full critical-level audience)", to)
+	if got := recipients(t, msgs[2:]); got != "early@x.test,late@x.test,owner@x.test" {
+		t.Fatalf("escalation recipients = %s, want the full critical-level audience", got)
 	}
 	e.feedCPU(98) // aynı seviyede kalmak yeni e-posta üretmez
-	if n := len(e.messages()); n != 2 {
-		t.Fatalf("%d emails in total, want still 2 (same level)", n)
+	if n := len(e.messages()); n != 5 {
+		t.Fatalf("%d emails in total, want still 5 (same level)", n)
 	}
 
 	e.feedCPU(85) // seviye düşer (kritikten uyarıya, alert hâlâ açık) — bu da kendi e-postasını gönderir
 	msgs = e.messages()
-	if len(msgs) != 3 {
-		t.Fatalf("%d emails total after de-escalation, want 3", len(msgs))
+	if got := recipients(t, msgs[5:]); got != "early@x.test,owner@x.test" {
+		t.Fatalf("de-escalation recipients = %s, want early@ and the owner (late@'s min_level is critical)", got)
 	}
-	to = append([]string(nil), msgs[2].To...)
-	sort.Strings(to)
-	if strings.Join(to, ",") != "early@x.test" {
-		t.Fatalf("de-escalation recipients = %v, want only early@ (late@'s min_level is critical)", to)
-	}
-	if !strings.Contains(msgs[2].Text(), "Seviye: UYARI") {
-		t.Errorf("de-escalation email missing Seviye: UYARI:\n%s", msgs[2].Text())
+	if !strings.Contains(msgs[5].Text(), "Seviye: UYARI") {
+		t.Errorf("de-escalation email missing Seviye: UYARI:\n%s", msgs[5].Text())
 	}
 }
 
@@ -494,26 +503,34 @@ func TestResolvedEmailShowsTheResolvingReadingNotTheLastEscalatedOne(t *testing.
 	}
 }
 
-// Veritabanında tanımlı ama göndericisi uygulanmamış bir kanaldaki kural mail'e dönüşmez: alert yine açılır, e-posta
-// gitmez.
-func TestRuleWithAnUnimplementedChannelSendsNoEmail(t *testing.T) {
-	e := newEnv(t)
-	if _, err := e.pool.Exec(e.ctx, `INSERT INTO notification_channels (channel, provider) VALUES ('sms', 'test')`); err != nil {
-		t.Fatal(err)
-	}
-	admin := testdb.User(t, e.pool, "org@x.test", "org_admin", "pw")
-	testdb.AssignOrg(t, e.pool, admin, e.org)
-	if _, err := store.NewNotifications(e.pool).Create(e.ctx, model.NotificationRoute{
-		OrganizationID: &e.org, UserID: &admin, Channel: model.ChannelSMS, MinLevel: model.AlertLevelWarning,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	e.feedCPU(90)
-	if n := len(e.messages()); n != 0 {
-		t.Fatalf("%d emails through an sms rule, want none", n)
-	}
-	if rows := e.rows(t, "cpu"); len(rows) != 1 || rows[0].Status != model.AlertStatusOpen {
-		t.Fatalf("the alert itself must still open: %+v", rows)
+// Kapalı ya da göndericisi uygulanmamış bir kanaldaki kural mail'e dönüşmez: alert yine açılır, sahip e-postasını alır,
+// kuralın alıcısı hiçbir şey almaz.
+func TestRuleOnAClosedOrUnimplementedChannelSendsNothing(t *testing.T) {
+	for _, enabled := range []bool{false, true} { // kapalı kanal; açık ama göndericisi olmayan kanal
+		e := newEnv(t)
+		if _, err := e.pool.Exec(e.ctx, `INSERT INTO notification_channels (channel, provider, enabled) VALUES ('sms', 'test', $1)`, enabled); err != nil {
+			t.Fatal(err)
+		}
+		admin := testdb.User(t, e.pool, "org@x.test", "org_admin", "pw")
+		if _, err := e.pool.Exec(e.ctx, `UPDATE users SET phone = '+905550000001' WHERE id = $1`, admin); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.NewNotifications(e.pool).Create(e.ctx, model.NotificationRoute{
+			OrganizationID: &e.org, UserID: &admin, Channel: model.ChannelSMS, MinLevel: model.AlertLevelWarning,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		e.feedCPU(90)
+		if got := recipients(t, e.messages()); got != "owner@x.test" {
+			t.Fatalf("sms channel enabled=%v: recipients = %s, want only the owner's e-mail", enabled, got)
+		}
+		var rows int
+		if err := e.pool.QueryRow(e.ctx, `SELECT count(*) FROM notification_outbox WHERE channel = 'sms'`).Scan(&rows); err != nil || rows != 0 {
+			t.Fatalf("sms channel enabled=%v: %d sms rows queued, want none", enabled, rows)
+		}
+		if rows := e.rows(t, "cpu"); len(rows) != 1 || rows[0].Status != model.AlertStatusOpen {
+			t.Fatalf("the alert itself must still open: %+v", rows)
+		}
 	}
 }
 

@@ -76,7 +76,7 @@ func newFixture(t *testing.T, nHosts int) *fixture {
 	}
 	testdb.Threshold(t, pool, nil, nil, "cpu", 80, 95)
 	testdb.Threshold(t, pool, nil, nil, "ram", 80, 95)
-	testdb.User(t, pool, "root@x.test", "super_admin", "pw") // bildirilecek biri
+	testdb.EmailOwner(t, pool, "owner@x.test") // bildirilecek biri
 	return f
 }
 

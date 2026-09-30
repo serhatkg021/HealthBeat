@@ -632,8 +632,8 @@ func LevelRank(l string) int {
 
 // NotificationRoute, bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceğini söyler. Kapsam bir
 // organizasyon (altındaki dal için de geçerli) ya da tek bir sunucudur; alıcı bir panel kullanıcısı ya da
-// organizasyonun bir iletişim kişisidir. Bir alert için en özel kapsamdaki kurallar geçerlidir; hiç kural yoksa
-// varsayılan alıcılar kullanılır.
+// organizasyonun bir iletişim kişisidir. Bildirim her zaman sistem sahiplerine gider; sunucunun ve organizasyon
+// zincirinin bütün kuralları buna ek alıcı ekler.
 type NotificationRoute struct {
 	ID             uuid.UUID  `json:"id"`
 	OrganizationID *uuid.UUID `json:"organization_id,omitempty"`

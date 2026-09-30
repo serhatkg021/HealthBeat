@@ -11,8 +11,8 @@ import (
 )
 
 // Bildirim kuralları: bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceği. Kapsam bir organizasyon (altındaki
-// dal için de geçerli) ya da tek bir sunucudur. Bir kapsamda kural varsa yalnızca o kurallar uygulanır; hiç kural
-// yoksa varsayılan alıcılar kullanılır (bkz. store.Notifications.ResolveRecipients).
+// dal için de geçerli) ya da tek bir sunucudur. Bildirim her zaman sistem sahiplerine gider; kurallar ek alıcıdır ve
+// toplanır (bkz. store.Notifications.ResolveRecipients).
 
 type notificationRouteRequest struct {
 	OrganizationID *uuid.UUID `json:"organization_id"`
