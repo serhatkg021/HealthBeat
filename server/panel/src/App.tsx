@@ -13,6 +13,7 @@ import { AlertsPage } from './pages/AlertsPage'
 import { ThresholdsPage } from './pages/ThresholdsPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuditPage } from './pages/AuditPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
@@ -92,6 +93,14 @@ export default function App() {
               element={
                 <RequirePermission permission="audit.view">
                   <AuditPage />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <RequirePermission permission="settings.view">
+                  <SettingsPage />
                 </RequirePermission>
               }
             />

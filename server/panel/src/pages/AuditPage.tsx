@@ -14,6 +14,8 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: 'user.', label: 'Kullanıcı' },
   { value: 'threshold.', label: 'Eşik' },
   { value: 'alert.', label: 'Alert' },
+  { value: 'notification', label: 'Bildirim' }, // kurallar, kanallar ve sistem sahipleri
+  { value: 'settings.', label: 'Ayarlar' },
 ]
 
 const PAGE_SIZE = 50

@@ -127,3 +127,51 @@ func TestSweepDropsIdleBuckets(t *testing.T) {
 		t.Fatal("active bucket was swept")
 	}
 }
+
+func TestSetRate(t *testing.T) {
+	l, clk := newTestLimiter(60, 1) // 1 jeton/sn
+
+	if ok, _ := l.Allow("a"); !ok {
+		t.Fatal("first request denied")
+	}
+	// Daha yavaş hız: harcanan hak korunur, yeni hızla dolar (dakikada 6 = 10 sn'de bir).
+	l.SetRate(6)
+	clk.advance(5 * time.Second)
+	if ok, retry := l.Allow("a"); ok || retry != 5*time.Second {
+		t.Fatalf("after slowing down: ok=%v retry=%v, want denied with 5s left", ok, retry)
+	}
+
+	// 0 kapatır (kovalar bırakılır); yeniden açınca anahtar dolu bir kovayla başlar.
+	l.SetRate(0)
+	for range 5 {
+		if ok, _ := l.Allow("a"); !ok {
+			t.Fatal("disabled limiter denied a request")
+		}
+	}
+	if n := len(l.buckets); n != 0 {
+		t.Fatalf("%d buckets kept while disabled", n)
+	}
+	l.SetRate(60)
+	if ok, _ := l.Allow("a"); !ok {
+		t.Fatal("re-enabled limiter denied the first request")
+	}
+	if ok, _ := l.Allow("a"); ok {
+		t.Fatal("re-enabled limiter allowed a request beyond burst")
+	}
+}
+
+func TestSetRateConcurrentWithAllow(t *testing.T) {
+	l := New(60, 5)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := range 200 {
+			l.SetRate(float64(i % 3 * 30))
+		}
+	}()
+	for range 200 {
+		l.Allow("a")
+		l.Check("b")
+	}
+	<-done
+}

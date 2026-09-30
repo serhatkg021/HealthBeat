@@ -10,6 +10,71 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Güncellemeden önce
+- **Bu bir major sürümdür (2.0.0):** 19 ortam değişkeni artık okunmuyor ve bildirimlerin kime gittiği değişti. Agent'lar
+  etkilenmez: agent 1.x bu server'la olduğu gibi çalışır (ingest protokolü aynı).
+- **Yedek al.** Migration `000005` (ayar, kanal ve sistem sahibi tabloları) açılışta uygulanır. Geri dönüş `.down.sql` ya da
+  yedekle olur; `.down.sql` panelden girilen ayarları, SMTP ayarını ve sistem sahiplerini siler (`docs/DISTRIBUTION.md` §8.3).
+  Migration, `email` dışında bir kanala bağlı bildirim kuralı bulursa açıklayıcı bir hatayla durur (API bunları hiç kabul
+  etmediği için beklenmez).
+- **Güncellemeden sonra panelde Ayarlar'ı doldur:** e-posta kanalı (SMTP) **kapalı** başlar ve **sistem sahibi yoktur**;
+  bunlar yapılana kadar alert bildirimleri kimseye gitmez (panel bunu bir uyarı bandıyla söyler). Bildirim kanalları'nda
+  SMTP ayarını gir, "Deneme gönder" ile doğrula ve kanalı aç; Sistem sahipleri'ni ekle; Panel adresi'ni ve gerekiyorsa agent
+  sürüm politikasını, saklama sürelerini, oturum sürelerini, hız sınırlarını ve log ayarlarını gir.
+- **`.env`'den taşınan değişkenleri sil:** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`,
+  `PANEL_BASE_URL`, `LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION`, `METRICS_RETENTION_DAYS`,
+  `AUDIT_RETENTION_DAYS`, `RESOLVED_ALERT_RETENTION_DAYS`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL`,
+  `RATE_LIMIT_AUTH_FAILURES_PER_MINUTE`, `RATE_LIMIT_INGEST_PER_MINUTE`, `LOG_LEVEL`, `LOG_ERROR_BODY_BYTES`,
+  `LOG_FILE_MAX_AGE_DAYS`, `LOG_FILE_MAX_TOTAL_MB`. Değerleri aktarılmaz; ortamda dolu kalanlar açılışta
+  `<AD> is no longer read; manage it from the panel (Settings)` uyarısıyla listelenir. Geçersiz bir değer artık açılışı durdurmaz.
+- **Bildirim kurallarını gözden geçir:** kural olmayan kapsamlarda artık süper adminlere ve organizasyon yöneticilerine
+  otomatik e-posta gitmiyor; sunucu kuralı da organizasyon kurallarını geçersiz kılmıyor, ikisi birlikte uygulanıyor.
+
+### Eklendi
+- **Panel: Ayarlar sayfası** (`settings.view` okur, `settings.manage` değiştirir; varsayılan olarak yalnızca süper admin):
+  sistem sahipleri, bildirim kanalları, agent sürüm politikası, veri saklama, oturum ve hız sınırları, panel adresi ve loglama.
+  Değişiklikler yeniden başlatmadan uygulanır, varsayılandan farklı ayarlar işaretlenir ve "Varsayılana dön" ile geri alınır.
+  API: `GET/PATCH /api/v1/settings`, `POST /api/v1/settings/reset`.
+- **Sistem sahipleri:** her alert'in bildirimini alan kişiler ya da ortak adresler (panel kullanıcısı olmaları gerekmez).
+  E-posta ve telefon bir kez girilir, sahip kanal başına almak isteyip istemediğini seçer. API: `/api/v1/notification-owners`.
+- **Bildirim kanalları panelden yönetiliyor:** e-posta (SMTP) ayarı ve şifresi veritabanında (şifre `SECRETS_ENCRYPTION_KEY`
+  ile şifreli, API'den asla okunmaz); ayarı eksik kanal açılamıyor; **Deneme gönder** kayıtlı ayarla, kanal kapalıyken de
+  hemen bir e-posta yolluyor; kanal başına sistem sahiplerine hangi seviyeden itibaren gönderileceği seçiliyor (ör. e-posta
+  uyarı, SMS yalnızca kritik). API: `GET /api/v1/notification-channels`, `PATCH …/{channel}`, `POST …/{channel}/test` (başarısız
+  denemede `502`, `code: channel_test_failed`), kural ekranı için `GET …/options` (`notification.view`).
+- **Panel: "bildirimler kimseye gitmiyor" uyarı bandı:** e-posta kanalı kapalıysa ya da e-posta alan bir sistem sahibi yoksa.
+- **Ayar değişiklikleri loglanıyor ve denetim kaydına yazılıyor:** `settings.update`, `settings.reset`,
+  `notification_channel.update`, `notification_channel.test`, `notification_owner.create|update|delete` (eski ve yeni
+  değerleriyle; şifre yalnızca "ayarlı mı" olarak). Panel: denetim kaydında "Ayarlar" ve "Bildirim" filtreleri.
+- **Doğrulama hataları alan adıyla:** geçersiz bir ayar `400` ve `fields` ile ilgili alanı adlandırıyor; panel hatayı alanın
+  altında, alanın biriminde (ör. dakika) gösteriyor.
+
+### Değişti
+- **Bildirimler sistem sahiplerine ve ek alıcılara gidiyor.** Alıcılar sistem sahipleri, sunucunun organizasyonunun ve
+  bütün üst organizasyonlarının kuralları ve sunucunun kendi kurallarının toplamı; hiçbiri diğerini ezmiyor. **Varsayılan
+  alıcılar kaldırıldı:** kural yoksa süper adminlere ve organizasyon yöneticilerine otomatik e-posta gitmiyor. Aynı adres
+  tek ileti alıyor.
+- **Her alıcı ayrı ileti alıyor:** bir alert e-postasının `To:` satırında artık tek alıcı var, alıcılar birbirini görmüyor.
+  Bildirim kuyruğuna alıcı başına bir satır yazılıyor; bir adresin hatası yalnızca onun iletisini yeniden denetiyor.
+  Panel: alert ayrıntısında bildirimler olay bazında gruplanıyor, her alıcının durumu ayrı görünüyor.
+- **Bildirim kuralları yalnızca açık ve kişiye giden kanallara yazılabiliyor;** kanalı kapatılan kurallar silinmiyor ama
+  çalışmıyor (atlanıp loglanıyor). Kural listelerinde `channel_enabled` alanı var; panel "Kanal kapalı — kural çalışmıyor"
+  gösteriyor ve seçilemeyen kanalları "(ayar gerekli)" / "(kapalı)" diye işaretliyor.
+- **Ayarlar ortamdan değil veritabanından okunuyor:** e-posta (SMTP), panel adresi, agent sürüm politikası, saklama süreleri,
+  token süreleri, hız sınırları, log seviyesi, hata gövdesi loglama ve log dosyası sınırları (yukarıdaki 19 değişken).
+  Varsayılanlar aynı kaldı; token süreleri artık sınırlı (erişim 1 dk – 24 saat, oturum 1 saat – 90 gün ve erişimden uzun).
+- **"En güncel agent" elle yönetiliyor:** server'a gömülü değil; ilk kurulumda `1.0.0`, yeni bir agent yayınlanınca
+  Ayarlar → Agent sürümleri'nden giriliyor. `scripts/release.sh agent` artık server'da bir sürüm kontrolü yapmıyor.
+- **Log dosyası açılışta, ayarlar okunana kadar hiçbir dosya silmiyor** (panelde uzatılmış bir log geçmişi yeniden
+  başlatmada varsayılan sınırla silinmesin diye). Açılış ve migration logları her zaman `info` seviyesinde.
+
+### Kaldırıldı
+- 19 ortam değişkeni (bkz. "Güncellemeden önce") ve `version.LatestAgent`.
+
+### İç değişiklikler (davranış değişmedi)
+- `internal/settings` (ayar ve kanal servisleri: bellekte kilitsiz okuma, abonelerle yeniden başlatmadan uygulama); rate
+  limiter, token servisi, saklama işi ve log dosyası çalışırken değiştirilebilir; `notify.Notifier` tek alıcılı; `version.Compare`.
+
 ## [1.1.0] - 2026-09-27
 
 Güvenilirlik, gözlemlenebilirlik ve güvenlik sürümü. Agent sürümü değişmedi: 1.0.0 agent'lar bu server'la olduğu gibi

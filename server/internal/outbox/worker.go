@@ -138,7 +138,7 @@ func (w *Worker) deliver(parent context.Context, it store.OutboxItem) (sent bool
 	}
 
 	sendCtx, cancel := context.WithTimeout(ctx, deliveryTimeout)
-	err := n.Send(sendCtx, it.Recipients, notify.Message{Subject: it.Subject, Body: it.Body})
+	err := sendEach(sendCtx, n, it.Recipients, notify.Message{Subject: it.Subject, Body: it.Body})
 	cancel()
 	if err == nil {
 		if err := w.store.MarkSent(parent, it.ID); err != nil {
@@ -185,3 +185,15 @@ func (w *Worker) purge(ctx context.Context) {
 type errUnknownChannel string
 
 func (e errUnknownChannel) Error() string { return "no notifier for channel " + string(e) }
+
+// sendEach, iletiyi her alıcıya ayrı gönderir. Yeni satırların tek alıcısı vardır; birden çok alıcılı satırı yalnızca
+// güncelleme sırasında hâlâ çalışan eski bir server yazmış olabilir (alıcılar yine birbirini görmez). Bir alıcıda hata
+// olursa satır yeniden denenir: o satırın önceki alıcıları iletiyi ikinci kez alabilir (en az bir kez teslim).
+func sendEach(ctx context.Context, n notify.Notifier, recipients []string, msg notify.Message) error {
+	for _, r := range recipients {
+		if err := n.Send(ctx, r, msg); err != nil {
+			return err
+		}
+	}
+	return nil
+}

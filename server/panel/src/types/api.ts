@@ -61,7 +61,7 @@ export interface ContactInput {
   email?: string
 }
 
-// Bildirim kanalları: veritabanı hepsini tanır, API yalnızca uygulananı (şimdilik e-posta) kabul eder.
+// Bildirim kanallarının adları. Hangilerinin tanımlı ve açık olduğunu server söyler (GET /notification-channels/options).
 export type NotificationChannel = 'email' | 'sms' | 'slack' | 'discord' | 'telegram'
 
 // Bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceği. Kapsam bir organizasyon (altındaki dal için de
@@ -77,6 +77,8 @@ export interface NotificationRoute {
   created_at: string
   recipient_name?: string
   recipient_target?: string
+  // Kuralın kanalı kapalıysa false: kural çalışmaz.
+  channel_enabled: boolean
 }
 
 // Bir kapsam için alıcı olabilecekler; kural yalnızca bunlara yazılabilir.
@@ -353,4 +355,83 @@ export interface DiskAlertSettings {
   all_mounts_alert: boolean
   custom_alert_mounts: string[]
   reported: DiskUsage[]
+}
+
+// Çalışma zamanı ayarları (GET /api/v1/settings). Süreler saniyedir; sürümlerde "" tanımsızdır.
+export interface SettingsValues {
+  latest_agent_version: string
+  min_supported_agent_version: string
+  metrics_retention_days: number
+  audit_retention_days: number
+  resolved_alert_retention_days: number
+  access_token_ttl_seconds: number
+  refresh_token_ttl_seconds: number
+  rate_limit_auth_failures_per_minute: number
+  rate_limit_ingest_per_minute: number
+  panel_base_url: string
+  log_level: string
+  log_error_body_bytes: number
+  log_file_max_age_days: number
+  log_file_max_total_mb: number
+}
+
+export type SettingsField = keyof SettingsValues
+
+export interface UserRef {
+  id: string
+  name: string
+}
+
+export interface SettingsResponse {
+  values: SettingsValues
+  defaults: SettingsValues
+  changed: SettingsField[]
+  updated_at: string
+  updated_by: UserRef | null
+}
+
+// E-posta kanalının (smtp) ayarı; şifre ayrıca gönderilir ve asla geri okunmaz.
+export interface SMTPConfig {
+  host: string
+  port: number
+  username: string
+  from: string
+}
+
+// Sistem düzeyindeki bir bildirim kanalı (GET /api/v1/notification-channels).
+export interface ChannelInfo {
+  channel: NotificationChannel
+  provider: string
+  enabled: boolean
+  config: SMTPConfig
+  secret_set: boolean
+  owner_min_level: AlertLevel
+  verified_at: string | null
+  updated_at: string
+  updated_by: UserRef | null
+  ready: boolean
+  implemented: boolean
+  personal: boolean
+  rule_count: number
+}
+
+// Kural ekranının kanal bilgisi (GET /api/v1/notification-channels/options; ayrıntısız).
+export interface ChannelOption {
+  channel: NotificationChannel
+  enabled: boolean
+  ready: boolean
+  personal: boolean
+  implemented: boolean
+}
+
+// Her alert'in bildirimini alan bir sistem sahibi (panel kullanıcısı olması gerekmez).
+export interface NotificationOwner {
+  id: string
+  name: string
+  email: string | null
+  phone: string | null
+  email_enabled: boolean
+  sms_enabled: boolean
+  created_at: string
+  updated_at: string
 }

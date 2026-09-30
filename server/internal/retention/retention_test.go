@@ -123,6 +123,15 @@ func TestZeroDaysKeepsEverything(t *testing.T) {
 	if left := count(t, pool, `SELECT count(*) FROM metrics`) + count(t, pool, `SELECT count(*) FROM audit_logs`); left != 2 {
 		t.Fatal("a row was deleted although retention is disabled")
 	}
+
+	// Süre panelden sonradan açılırsa bir sonraki tur onu kullanır.
+	p.SetDays(Days{Audit: 365})
+	if n, err := p.RunOnce(ctx); err != nil || n["audit log entries"] != 1 || n["metric samples"] != 0 {
+		t.Fatalf("RunOnce after SetDays = %v err=%v, want only the old audit entry deleted", n, err)
+	}
+	if left := count(t, pool, `SELECT count(*) FROM metrics`); left != 1 {
+		t.Fatalf("%d metric rows left, want 1 (metrics retention still 0)", left)
+	}
 }
 
 func TestRunStopsWhenContextIsCancelled(t *testing.T) {

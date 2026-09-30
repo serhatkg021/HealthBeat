@@ -11,8 +11,8 @@ import (
 )
 
 // Bildirim kuralları: bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceği. Kapsam bir organizasyon (altındaki
-// dal için de geçerli) ya da tek bir sunucudur. Bir kapsamda kural varsa yalnızca o kurallar uygulanır; hiç kural
-// yoksa varsayılan alıcılar kullanılır (bkz. store.Notifications.ResolveRecipients).
+// dal için de geçerli) ya da tek bir sunucudur. Bildirim her zaman sistem sahiplerine gider; kurallar ek alıcıdır ve
+// toplanır (bkz. store.Notifications.ResolveRecipients).
 
 type notificationRouteRequest struct {
 	OrganizationID *uuid.UUID `json:"organization_id"`
@@ -80,16 +80,31 @@ func (d *Deps) handleHostRecipientCandidates(w http.ResponseWriter, r *http.Requ
 	return nil
 }
 
-// validateRouteFields, kanal ve seviye alanlarını denetler.
-func validateRouteFields(channel, minLevel string) error {
-	if !model.ValidChannel(channel) {
-		return errors.New("channel email, sms, slack, discord veya telegram olmalı")
-	}
-	if !model.ImplementedChannel(channel) {
-		return errors.New("channel " + channel + " henüz desteklenmiyor (şimdilik yalnızca: email)")
-	}
+// validateRouteLevel, kuralın en düşük seviyesini denetler.
+func validateRouteLevel(minLevel string) error {
 	if !model.ValidAlertLevel(minLevel) {
 		return errors.New("min_level info, warning veya critical olmalı")
+	}
+	return nil
+}
+
+// routeChannelError, kanalın bir kurala seçilebilir olup olmadığını söyler: tanımlı ve server'ca gönderilebilir, kişiye
+// giden (ortak kanallar yalnızca sistem sahiplerine gider) ve açık olmalı. Seçilemiyorsa alanı adlandıran bir 400 döner.
+func (d *Deps) routeChannelError(channel string) error {
+	reject := func(message string) error {
+		e := newError(http.StatusBadRequest, message)
+		e.Fields = map[string]string{"channel": message}
+		return e
+	}
+	ch, ok := d.channels.Get(channel)
+	personal, implemented := d.alertEngine.Notifier(channel)
+	switch {
+	case !ok || !implemented:
+		return reject("bu bildirim kanalı desteklenmiyor")
+	case !personal:
+		return reject("bu kanal yalnızca sistem sahiplerine gönderir; kurallarda seçilemez")
+	case !ch.Enabled:
+		return reject("bu kanal kapalı; önce Ayarlar → Bildirim kanalları'ndan açılmalı")
 	}
 	return nil
 }
@@ -102,7 +117,7 @@ func (req *notificationRouteRequest) Validate() error {
 	if req.Channel == "" {
 		req.Channel = model.ChannelEmail
 	}
-	if err := validateRouteFields(req.Channel, req.MinLevel); err != nil {
+	if err := validateRouteLevel(req.MinLevel); err != nil {
 		return err
 	}
 	if (req.OrganizationID == nil) == (req.HostID == nil) {
@@ -118,6 +133,9 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) error {
 	fail := failWith("kural oluşturulamadı")
 	req, err := bind[notificationRouteRequest](r)
 	if err != nil {
+		return err
+	}
+	if err := d.routeChannelError(req.Channel); err != nil {
 		return err
 	}
 
@@ -205,8 +223,14 @@ func (d *Deps) handleUpdateRoute(w http.ResponseWriter, r *http.Request) error {
 	if req.MinLevel == "" {
 		req.MinLevel = existing.MinLevel
 	}
-	if err := validateRouteFields(req.Channel, req.MinLevel); err != nil {
+	if err := validateRouteLevel(req.MinLevel); err != nil {
 		return badRequest(err.Error())
+	}
+	// Kanalı kapalı bir kuralın seviyesi değiştirilebilir; başka bir kanala geçiş yeni kanalın seçilebilir olmasını ister.
+	if req.Channel != existing.Channel {
+		if err := d.routeChannelError(req.Channel); err != nil {
+			return err
+		}
 	}
 	route, err := d.notifs.Update(r.Context(), existing.ID, req.Channel, req.MinLevel)
 	if err != nil {

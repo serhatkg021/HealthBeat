@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,8 +36,9 @@ type Engine struct {
 	tx            TxRunner
 	// notifiers, kanal adına göre bildirim kanallarıdır (bkz. notify.Notifier); olmayan kanalın alıcıları atlanır.
 	notifiers map[string]notify.Notifier
-	// panelBaseURL, bildirimlerde alert'e doğrudan giden bir bağlantı eklemek için (boşsa satır hiç eklenmez).
-	panelBaseURL string
+	// panelBaseURL, bildirimlerde alert'e doğrudan giden bir bağlantı eklemek için (boşsa satır hiç eklenmez). Panelden
+	// değişebilir (SetPanelBaseURL); her bildirim kuyruğa yazılırken okunur.
+	panelBaseURL atomic.Pointer[string]
 	// worker, alert bildirimlerini kuyruktan teslim eder; DB'siz testlerde nil.
 	worker *outbox.Worker
 }
@@ -69,13 +71,28 @@ func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, 
 		notifs:        st.Recipients,
 		tx:            st.Tx,
 		notifiers:     make(map[string]notify.Notifier, len(notifiers)),
-		panelBaseURL:  strings.TrimSuffix(panelBaseURL, "/"),
 		worker:        worker,
 	}
+	e.SetPanelBaseURL(panelBaseURL)
 	for _, n := range notifiers {
 		e.notifiers[n.Channel()] = n
 	}
 	return e
+}
+
+// Notifier, kanalın bir göndericisi olup olmadığını (implemented) ve kişiye mi gittiğini (personal) söyler.
+func (e *Engine) Notifier(channel string) (personal, implemented bool) {
+	n, ok := e.notifiers[channel]
+	if !ok {
+		return false, false
+	}
+	return n.Personal(), true
+}
+
+// SetPanelBaseURL, bildirimlerdeki panel bağlantısının kökünü değiştirir ("" bağlantıyı kaldırır).
+func (e *Engine) SetPanelBaseURL(url string) {
+	url = strings.TrimSuffix(url, "/")
+	e.panelBaseURL.Store(&url)
 }
 
 // Report, bir agent raporunun alert motorunu ilgilendiren kısmıdır.

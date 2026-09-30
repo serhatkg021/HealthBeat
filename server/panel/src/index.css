@@ -2682,3 +2682,84 @@ body.scroll-lock {
 .form-card.rule-card .rule-form {
   max-width: 440px;
 }
+
+/* ---------- Sistem ayarları ---------- */
+.setting-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-with-unit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.input-with-unit input,
+.input-with-unit select {
+  flex: 1 1 auto;
+}
+
+/* Birim sütunu sabit genişlikte: aynı karttaki kutular birimin uzunluğundan bağımsız hizalanır. */
+.input-with-unit > .muted {
+  flex: 0 0 64px;
+}
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.link-btn:hover {
+  text-decoration: underline;
+}
+
+.link-btn:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.divider {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 18px 0;
+}
+
+.settings-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-alert a {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.rule-warning {
+  margin-top: 4px;
+}
+
+.delivery-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0 0 0 10px;
+  border-left: 2px solid var(--border);
+}
+
+.delivery-list > li + li {
+  margin-top: 4px;
+}
+
+.settings-card > .check-row {
+  margin-bottom: 8px;
+}

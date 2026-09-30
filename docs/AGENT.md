@@ -446,8 +446,8 @@ ve "güncel" rozetini gösterdiğini, CPU/RAM/disk verisinin aktığını birka�
 sunuculara tek tek (ya da kendi belirlediğin gruplarla) uygula. Her sunucuda çıktının `upgraded … -> X.Y.Z`
 ile bittiğini gör: `upgrade` başarısızlıkta kendi geri almasını yapar ve sıfırdan farklı kodla çıkar, yani
 "hata yok" demek çıktının sonunda `upgraded` görmek demektir. Özet ekranındaki **Agent güncellenmeli**
-sayacı ilerlemeyi gösterir; hangi sürümün "güncel" sayıldığı `LATEST_AGENT_VERSION` (server ortamı) ile
-belirlenir, yeni bir agent sürümü yayınlarken onu da güncelle (bkz. `docs/DEPLOYMENT.md`).
+sayacı ilerlemeyi gösterir; hangi sürümün "güncel" sayıldığı panelde Ayarlar → Agent sürümleri'nden belirlenir
+(yeni bir agent sürümü yayınlandığında oradan gir; bkz. `docs/COMPATIBILITY.md`).
 
 **Neden otomatik kendini güncelleme yok?** Agent'ın kendini indirip değiştirmesi, imzalı bir artifact
 dağıtım kanalı ve imza doğrulaması gerektirir; aksi halde tedarik zinciri saldırısı için ideal bir kapı
@@ -490,7 +490,7 @@ bu ortamda **denenemedi**; ilk gerçek kurulumda `systemctl status` ile kontrol 
 | Push: `x509: certificate signed by unknown authority` | Server sertifikasını özel bir CA imzalıyor: CA'yı `--ca-cert` / `ca_cert_file` ile ver (ya da halka açık CA'lı bir sertifika kullan). Yalnızca geliştirmede `insecure_skip_verify` |
 | Push: `x509: certificate is valid for …, not …` | Sertifika, `server_url`'deki host için (DNS/IP SAN) düzenlenmemiş |
 | Push: log'da `server rejected the full payload … switching to core metrics only` | Server bu agent'ın gönderdiği yeni alanları tanımıyor (agent server'dan yeni). Metrikler **kaybolmaz** (CPU/RAM/disk/Docker gider), yalnızca donanım özeti gibi yeni alanlar gelmez. Server'ı güncelle; agent her 10 döngüde tam payload'ı yoklar ve server güncellenince kendiliğinden düzelir |
-| Push: log'da `server recommends agent X … update when convenient` | Server yeni bir agent sürümü öneriyor (`LATEST_AGENT_VERSION`); bilgi amaçlı, zorunlu değil |
+| Push: log'da `server recommends agent X … update when convenient` | Server yeni bir agent sürümü öneriyor (panelde Ayarlar → Agent sürümleri); bilgi amaçlı, zorunlu değil |
 | Push: `429 çok fazla istek` | Aynı IP'den çok fazla başarısız kimlik doğrulama; birkaç dakika bekle |
 | Pull: panelde sunucu offline | Güvenlik duvarı, `allowed_server_ips`'de server IP'si yok ya da secret uyuşmuyor (bölüm 6.b/6.c) |
 | Sunucu bir süre sonra **offline** alert'i veriyor | Ajan durmuş ya da ağ kopuk (push'ta `interval_seconds × 3` sessizlik) |

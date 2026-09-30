@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,14 +21,16 @@ func NewNotifications(pool *pgxpool.Pool) *Notifications { return &Notifications
 const routeSelect = `
 SELECT r.id, r.organization_id, r.host_id, r.user_id, r.contact_id, r.channel, r.min_level, r.created_at,
        COALESCE(u.full_name, u.email, oc.name, ''),
-       COALESCE(CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, oc.phone) ELSE COALESCE(u.email, oc.email) END, '')
+       COALESCE(CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, oc.phone) ELSE COALESCE(u.email, oc.email) END, ''),
+       c.enabled
 FROM notification_routes r
+JOIN notification_channels c ON c.channel = r.channel
 LEFT JOIN users u ON u.id = r.user_id
 LEFT JOIN organization_contacts oc ON oc.id = r.contact_id`
 
 func scanRoute(row interface{ Scan(...any) error }) (model.NotificationRoute, error) {
 	var r model.NotificationRoute
-	err := row.Scan(&r.ID, &r.OrganizationID, &r.HostID, &r.UserID, &r.ContactID, &r.Channel, &r.MinLevel, &r.CreatedAt, &r.RecipientName, &r.RecipientTarget)
+	err := row.Scan(&r.ID, &r.OrganizationID, &r.HostID, &r.UserID, &r.ContactID, &r.Channel, &r.MinLevel, &r.CreatedAt, &r.RecipientName, &r.RecipientTarget, &r.ChannelEnabled)
 	return r, err
 }
 
@@ -111,104 +114,68 @@ type Recipient struct {
 	Channel string
 	Address string // e-posta adresi ya da telefon numarası
 	Name    string
+	// ChannelOff, alıcıyı veren kuralın kanalı kapalı (ya da ayarı yapılmamış) demektir: gönderilmez, alert motoru
+	// bunu loglar. Sistem sahipleri kapalı kanaldan hiç gelmez.
+	ChannelOff bool
 }
 
-// ResolveRecipients, bir alert'in alıcılarını belirler. En özel kapsamdaki kurallar geçerlidir: önce sunucunun kendi
-// kuralları; yoksa sunucunun organizasyonunun, o da yoksa üst organizasyonların (en yakın önce) kuralları. Bir kapsamda
-// kural varsa YALNIZCA o kurallar uygulanır (üst kapsamdaki kurallar ve varsayılan alıcılar yok sayılır): "buranın
-// bildirimi yalnızca şu kişiye gitsin". Kuralın en düşük seviyesi alert seviyesinin altındaysa o kural alıcı üretmez.
-// Hiçbir kapsamda kural yoksa varsayılan alıcılar kullanılır: her super_admin ile organizasyona (ya da üst
-// organizasyonlarından birine) atanmış her org_admin; e-posta, warning ve üzeri seviyeler.
+// ResolveRecipients, level seviyesindeki bir alert'in alıcılarını belirler (bkz. docs/MIMARI.md bölüm 8). Bildirimin
+// amacı sistem sahibidir; organizasyon ve sunucu kuralları "bunlara da gitsin" der ve toplanır, hiçbiri diğerini ezmez:
+//
+//  1. sistem sahipleri: her açık kanaldan, seviye kanalın sahip seviyesine (owner_min_level) ulaşıyorsa ve sahip o
+//     kanaldan almak istiyorsa (email_enabled / sms_enabled);
+//  2. sunucunun organizasyonunun ve bütün üst organizasyonlarının kuralları;
+//  3. sunucunun kendi kuralları.
+//
+// Kuralın en düşük seviyesi alert seviyesinin altındaysa kural alıcı üretmez. Aynı kanal ve adres bir kez döner (ilk
+// geldiği yerle: önce sahipler). Hiç sahip ve kural yoksa sonuç boştur.
 func (s *Notifications) ResolveRecipients(ctx context.Context, hostID, orgID uuid.UUID, level string) ([]Recipient, error) {
-	routes, err := s.effectiveRoutes(ctx, hostID, orgID)
+	rows, err := s.pool.Query(ctx, orgChainCTE(2)+`,
+	lv AS (SELECT array_position(ARRAY['info', 'warning', 'critical'], $3::text) AS rank)
+	SELECT channel, address, name, channel_off FROM (
+		SELECT c.channel,
+		       CASE c.channel WHEN 'sms' THEN CASE WHEN o.sms_enabled THEN o.phone END
+		                      ELSE CASE WHEN o.email_enabled THEN o.email END END AS address,
+		       o.name, false AS channel_off, 0 AS src, lower(o.name) AS sort_name, o.created_at
+		FROM notification_owners o
+		JOIN notification_channels c ON c.enabled
+		WHERE array_position(ARRAY['info', 'warning', 'critical'], c.owner_min_level) <= (SELECT rank FROM lv)
+		UNION ALL
+		SELECT r.channel,
+		       CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, oc.phone) ELSE COALESCE(u.email, oc.email) END,
+		       COALESCE(u.full_name, u.email, oc.name, ''), NOT c.enabled, 1, lower(COALESCE(u.full_name, u.email, oc.name, '')),
+		       r.created_at
+		FROM notification_routes r
+		JOIN notification_channels c ON c.channel = r.channel
+		LEFT JOIN users u ON u.id = r.user_id
+		LEFT JOIN organization_contacts oc ON oc.id = r.contact_id
+		WHERE (r.host_id = $1 OR r.organization_id IN (SELECT id FROM chain))
+		  AND array_position(ARRAY['info', 'warning', 'critical'], r.min_level) <= (SELECT rank FROM lv)
+	) x
+	WHERE COALESCE(address, '') <> ''
+	ORDER BY src, sort_name, created_at`, hostID, orgID, level)
 	if err != nil {
 		return nil, err
 	}
-	if routes == nil {
-		return s.defaultRecipients(ctx, orgID, level)
+	all, err := collect(rows, func(row interface{ Scan(...any) error }) (Recipient, error) {
+		var r Recipient
+		err := row.Scan(&r.Channel, &r.Address, &r.Name, &r.ChannelOff)
+		return r, err
+	})
+	if err != nil {
+		return nil, err
 	}
-	rank := model.LevelRank(level)
 	seen := map[string]bool{}
 	out := []Recipient{}
-	for _, r := range routes {
-		if model.LevelRank(r.MinLevel) > rank || r.RecipientTarget == "" {
-			continue
-		}
-		key := r.Channel + "\x00" + r.RecipientTarget
+	for _, r := range all {
+		key := r.Channel + "\x00" + strings.ToLower(r.Address)
 		if seen[key] {
 			continue
 		}
 		seen[key] = true
-		out = append(out, Recipient{Channel: r.Channel, Address: r.RecipientTarget, Name: r.RecipientName})
+		out = append(out, r)
 	}
 	return out, nil
-}
-
-// effectiveRoutes, alert için geçerli en özel kapsamın kurallarını döndürür; hiç kural yoksa nil.
-func (s *Notifications) effectiveRoutes(ctx context.Context, hostID, orgID uuid.UUID) ([]model.NotificationRoute, error) {
-	rows, err := s.pool.Query(ctx, routeSelect+` WHERE r.host_id = $1 ORDER BY r.created_at`, hostID)
-	if err != nil {
-		return nil, err
-	}
-	hostRoutes, err := collect(rows, scanRoute)
-	rows.Close()
-	if err != nil {
-		return nil, err
-	}
-	if len(hostRoutes) > 0 {
-		return hostRoutes, nil
-	}
-
-	rows, err = s.pool.Query(ctx,
-		orgChainCTE(1)+` `+routeSelect+` JOIN chain c ON c.id = r.organization_id ORDER BY c.depth, r.created_at`, orgID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []model.NotificationRoute
-	var firstScope *uuid.UUID
-	for rows.Next() {
-		r, err := scanRoute(rows)
-		if err != nil {
-			return nil, err
-		}
-		if firstScope == nil {
-			firstScope = r.OrganizationID
-		}
-		if r.OrganizationID != nil && *r.OrganizationID != *firstScope {
-			break // daha üst bir organizasyonun kuralları: en yakın kapsam kazandı
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
-}
-
-// defaultRecipients, kural olmayan sunucuların alıcılarıdır.
-func (s *Notifications) defaultRecipients(ctx context.Context, orgID uuid.UUID, level string) ([]Recipient, error) {
-	if model.LevelRank(level) < model.LevelRank(model.AlertLevelWarning) {
-		return []Recipient{}, nil // info alert'leri varsayılan olarak bildirim üretmez
-	}
-	rows, err := s.pool.Query(ctx,
-		orgChainCTE(1)+`
-		 SELECT u.email, COALESCE(u.full_name, u.email) FROM users u WHERE u.role = $2
-		 UNION
-		 SELECT u.email, COALESCE(u.full_name, u.email) FROM users u
-		 JOIN user_organizations uo ON uo.user_id = u.id
-		 JOIN chain c ON c.id = uo.organization_id
-		 WHERE u.role = $3`, orgID, model.RoleSuperAdmin, model.RoleOrgAdmin)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := []Recipient{}
-	for rows.Next() {
-		r := Recipient{Channel: model.ChannelEmail}
-		if err := rows.Scan(&r.Address, &r.Name); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
 }
 
 // Candidate, bir kapsam için alıcı olabilecek bir panel kullanıcısı ya da iletişim kişisidir.

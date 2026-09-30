@@ -8,7 +8,7 @@ import { useDocumentTitle } from '../components/useDocumentTitle'
 import { plausibleEmail } from './passwordReset'
 
 // "Şifremi unuttum": e-posta adresi girilir, server tek kullanımlık bir sıfırlama bağlantısı e-postalar. Yanıt her
-// zaman aynıdır (hesabın var olup olmadığı dışarıdan anlaşılmaz). Kurulumda e-posta (SMTP ve PANEL_BASE_URL)
+// zaman aynıdır (hesabın var olup olmadığı dışarıdan anlaşılmaz). Kurulumda e-posta (mail kanalı ve panel adresi, Ayarlar)
 // yapılandırılmamışsa bunu açıkça söyler.
 export function ForgotPasswordPage() {
   const { user } = useAuth()
@@ -71,7 +71,7 @@ export function ForgotPasswordPage() {
           <div className="notice notice-info" role="status">
             <div className="notice-title">E-posta ile sıfırlama kapalı</div>
             Bu kurulumda e-posta gönderimi yapılandırılmamış. Şifrenizi sıfırlaması için sistem yöneticinize başvurun. (Yönetici için:
-            server’da <code>SMTP_HOST</code> ve <code>PANEL_BASE_URL</code> ayarlanmalı.)
+            panelde Ayarlar’da e-posta kanalı açılmalı ve panel adresi girilmeli.)
           </div>
         )}
 

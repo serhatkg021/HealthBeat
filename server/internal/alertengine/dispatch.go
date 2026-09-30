@@ -1,7 +1,7 @@
 package alertengine
 
-// Bildirimler: alert açıldığında, seviyesi değiştiğinde ya da çözüldüğünde bildirim satırları (kanal başına bir satır)
-// değişiklikle AYNI transaction'da bildirim kuyruğuna (notification_outbox) yazılır; teslimi outbox.Worker yapar
+// Bildirimler: alert açıldığında, seviyesi değiştiğinde ya da çözüldüğünde bildirim satırları (alıcı başına bir satır:
+// alıcılar birbirini görmez) değişiklikle AYNI transaction'da bildirim kuyruğuna (notification_outbox) yazılır; teslimi outbox.Worker yapar
 // (yeniden deneme, geri çekilme). Server yeniden başlasa da bekleyen bildirim kaybolmaz.
 //
 // Alıcılar ve metnin sunucu bağlamı transaction'dan ÖNCE, havuzdan okunur (prepare): transaction yalnızca kendi
@@ -21,21 +21,16 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-// channelGroup, bir kanalın alıcılarıdır.
-type channelGroup struct {
-	channel    string
-	recipients []string
-}
-
-// pending, bir alert değişikliğinin bildirimi için önceden okunanlardır. groups boşsa bildirim yazılmaz (alıcı yok ya da
-// hiçbirinin kanalı yok).
+// pending, bir alert değişikliğinin bildirimi için önceden okunanlardır. recipients boşsa bildirim yazılmaz (alıcı yok
+// ya da hiçbirinin kanalı gönderemiyor).
 type pending struct {
-	groups []channelGroup
-	mc     messageContext
+	recipients []store.Recipient
+	mc         messageContext
 }
 
-// prepare, hostID'deki level seviyesindeki bir alert'in alıcılarını kanala göre gruplar ve bildirim metninin sunucu
-// bağlamını okur. Alıcılar okunamazsa hata loglanır ve bildirimsiz devam edilir: alert yine kaydedilir ve panelde görünür.
+// prepare, hostID'deki level seviyesindeki bir alert'in alıcılarını ve bildirim metninin sunucu bağlamını okur. Kanalı
+// kapalı ya da henüz uygulanmamış alıcılar atlanır ve loglanır. Alıcılar okunamazsa hata loglanır ve bildirimsiz devam
+// edilir: alert yine kaydedilir ve panelde görünür.
 func (e *Engine) prepare(ctx context.Context, hostID, orgID uuid.UUID, level string) pending {
 	recipients, err := e.notifs.ResolveRecipients(ctx, hostID, orgID, level)
 	if err != nil {
@@ -43,41 +38,37 @@ func (e *Engine) prepare(ctx context.Context, hostID, orgID uuid.UUID, level str
 		return pending{}
 	}
 	var p pending
-	index := map[string]int{} // kanal → groups'taki yeri; alıcı sırası korunur
 	for _, r := range recipients {
-		if _, ok := e.notifiers[r.Channel]; !ok {
-			// Diğer kanallar (sms, slack…) şemada hazır ama henüz uygulanmadı; API bunlara kural yazdırmaz.
+		switch _, implemented := e.notifiers[r.Channel]; {
+		case r.ChannelOff:
+			slog.WarnContext(ctx, "alert engine: notification channel is off, skipping rule", "channel", r.Channel, "recipient", r.Name, "host_id", hostID.String())
+		case !implemented:
 			slog.WarnContext(ctx, "alert engine: channel is not implemented, skipping recipient", "channel", r.Channel, "recipient", r.Name, "host_id", hostID.String())
-			continue
+		default:
+			p.recipients = append(p.recipients, r)
 		}
-		i, seen := index[r.Channel]
-		if !seen {
-			i = len(p.groups)
-			index[r.Channel] = i
-			p.groups = append(p.groups, channelGroup{channel: r.Channel})
-		}
-		p.groups[i].recipients = append(p.groups[i].recipients, r.Address)
 	}
-	if len(p.groups) > 0 {
+	if len(p.recipients) > 0 {
 		p.mc = e.messageContext(ctx, hostID, orgID)
 	}
 	return p
 }
 
-// enqueue, alert'in event olayının bildirimini tx içinde kanal başına bir satır olarak kuyruğa yazar.
+// enqueue, alert'in event olayının bildirimini tx içinde alıcı başına bir satır olarak kuyruğa yazar: her alıcı ayrı
+// ileti alır, biri başarısız olursa yalnızca o yeniden denenir.
 func (e *Engine) enqueue(ctx context.Context, tx Tx, p pending, event string, alert model.Alert) error {
-	if len(p.groups) == 0 {
+	if len(p.recipients) == 0 {
 		return nil
 	}
-	msg := buildMessage(alert, p.mc, e.panelBaseURL)
+	msg := buildMessage(alert, p.mc, *e.panelBaseURL.Load())
 	alertID := alert.ID
-	for _, g := range p.groups {
+	for _, r := range p.recipients {
 		if _, err := tx.Outbox().Enqueue(ctx, store.OutboxMessage{
-			Kind: store.OutboxKindAlert, Channel: g.channel, Recipients: g.recipients,
+			Kind: store.OutboxKindAlert, Channel: r.Channel, Recipients: []string{r.Address},
 			Subject: msg.Subject, Body: msg.Body, AlertID: &alertID, AlertEvent: event, AlertLevel: alert.Level,
 			RequestID: logging.RequestID(ctx),
 		}); err != nil {
-			return fmt.Errorf("enqueue %s notification: %w", g.channel, err)
+			return fmt.Errorf("enqueue %s notification: %w", r.Channel, err)
 		}
 	}
 	return nil
@@ -93,7 +84,7 @@ func (e *Engine) change(ctx context.Context, p pending, event string, fn func(tx
 	notified := false
 	err := e.tx.InTx(ctx, func(tx Tx) error {
 		alert, notify, err := fn(tx)
-		if err != nil || !notify || len(p.groups) == 0 {
+		if err != nil || !notify || len(p.recipients) == 0 {
 			return err
 		}
 		if err := tx.Savepoint(ctx, func(sp Tx) error { return e.enqueue(ctx, sp, p, event, alert) }); err != nil {

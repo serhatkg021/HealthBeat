@@ -85,7 +85,7 @@ Tam şema, ilişkiler ve kısıtlar: **`docs/VERITABANI.md`** (tek kaynak). Öne
 
 | Rol | Kapsam |
 | --- | --- |
-| **Süper Admin** | Tüm organizasyonlar ve sunucular üzerinde tam yetki (kullanıcı yönetimi, organizasyon ağacı, genel eşikler dahil) |
+| **Süper Admin** | Tüm organizasyonlar ve sunucular üzerinde tam yetki (kullanıcı yönetimi, organizasyon ağacı, genel eşikler ve sistem ayarları dahil) |
 | **Organizasyon Admin** | Atandığı organizasyon(lar)ı **ve altındaki tüm dalı** yönetir; üst zincirini yalnızca adıyla görür, kardeş dalları göremez |
 | **Operatör** | Yalnızca kendisine atanan sunucuları görür (tek tek ya da "organizasyondaki tüm sunucular" ile toplu atanır); alert'leri onaylayabilir |
 
@@ -95,6 +95,8 @@ Kurallar:
 - **Üst zincir bağlam olarak görünür:** organizasyon listesinde `access: "context"` ile, yalnızca ad ve konum; adres,
   sunucular, kişiler, eşikler ve kurallar (kendi dalının dışındakiler) kapalıdır.
 - **Organizasyon ağacını yalnızca süper admin değiştirir** (oluşturma, taşıma, silme).
+- **Sistem ayarları** (Ayarlar sayfası: çalışma zamanı ayarları, bildirim kanalları, sistem sahipleri) `settings.view` ve
+  `settings.manage` izinleriyle korunur; varsayılan olarak yalnızca süper admindedir.
 - Bir sunucu oluşturulurken organizasyon seçimi zorunludur (bkz. bölüm 6).
 
 Uygulama: her istek iki denetimden geçer. **İzin** (ne yapabilir) `role_permissions`'tan gelir (`internal/rbac`; rol başına
@@ -178,6 +180,9 @@ GET    /api/v1/me (+ permissions) | /me/hosts | /meta
 GET    /api/v1/alerts?status=open               POST /api/v1/alerts/:id/acknowledge · GET …/:id/notifications
        /api/v1/users[/:id]                      + organizations | hosts atamaları
 GET    /api/v1/audit-logs | /dashboard/summary | /dashboard/overview
+GET    /api/v1/settings  PATCH /api/v1/settings  POST /api/v1/settings/reset          (settings.view / settings.manage)
+       /api/v1/notification-channels[/:channel][/test]  + GET …/options (notification.view)
+       /api/v1/notification-owners[/:id]
 ```
 
 ### Hata yanıtları
@@ -194,8 +199,9 @@ Her hata yanıtı aynı biçimdedir ve her yanıt `X-Request-ID` başlığını 
   kodlar bunların yerine geçer: `password_change_required` (403), `reset_link_invalid` (400). Yeni kod eklenebilir, var
   olanın anlamı değişmez.
 - `request_id`: o isteğin log satırlarındaki kimlik (`docs/DEPLOYMENT.md`, "Loglama"). Panel onu yalnızca `5xx`'te gösterir.
-- `fields`: yalnızca istek gövdesi çözülemediğinde ve sorun bir alana bağlanabildiğinde (yanlış tür, bilinmeyen alan): alan
-  adı → sorun; iç içe alanlar noktayla, map anahtarı dahil (`thresholds.cpu.warning_level`). Bozuk JSON gibi alana bağlanamayan hatalarda yoktur.
+- `fields`: istek gövdesi çözülemediğinde ve sorun bir alana bağlanabildiğinde (yanlış tür, bilinmeyen alan) ya da bir sistem
+  ayarı geçersiz olduğunda (`{"access_token_ttl_seconds": "60 ile 86400 arasında olmalı"}`): alan adı → sorun; iç içe alanlar
+  noktayla, map anahtarı dahil (`thresholds.cpu.warning_level`, `config.port`). Bozuk JSON gibi alana bağlanamayan hatalarda yoktur.
   Kural ihlalleri (ör. `ip geçerli bir IP adresi olmalı`) yalnızca `error` ile döner.
 
 Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
@@ -220,24 +226,35 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   tüm alıcılarına yeniden e-posta gider; açılış ve çözülme de bildirilir.
 - **Offline tespiti:** pull'da agent'a ulaşılamazsa, push'ta beklenen sürede veri gelmezse ayrı bir `host_offline` alert'i.
   Seçili bir disk üst üste birkaç raporda görünmezse `disk_missing`.
-- **Kime gider — bildirim kuralları:** kapsam bir **organizasyon** (altındaki dal için de geçerli) ya da bir **sunucu**dur;
-  alıcı bir panel kullanıcısı ya da bir **iletişim kişisi**dir; kanal ve en düşük seviye kuralda tutulur.
-  - En özel kapsamda kural varsa **yalnızca** o kurallar uygulanır (sunucu kuralı organizasyonu, alt organizasyonun kuralı
-    üst şirketinkini geçersiz kılar).
-  - Hiçbir kapsamda kural yoksa **varsayılan alıcılar:** tüm süper adminler ve ilgili organizasyon zincirine atanmış
-    organizasyon yöneticileri; e-posta; `warning` ve üstü.
-  - Kurala yalnızca o kapsam için seçilebilir alıcılar yazılabilir (kapsamdaki yöneticiler, sunucuya atanmış operatörler,
-    organizasyonun kişileri).
-  - Şimdilik yalnızca e-posta kanalı uygulanmıştır; diğer kanallar şemada hazırdır, API onları kabul etmez.
-- **Teslim — kalıcı kuyruk:** bildirim, alert değişikliğiyle **aynı transaction'da** `notification_outbox`'a (kanal başına bir
-  satır, hazır konu ve gövdeyle) yazılır; alıcılar o anki kurallara göre çözülür. Bir işçi satırları alıp kanalın
+- **Kime gider — sistem sahipleri ve ek alıcılar:** bildirimin amacı **sistem sahibidir**; organizasyon ve sunucu kuralları
+  "bunlara da gitsin" der. Bir alert'in alıcıları üç katmanın **toplamıdır** (hiçbiri diğerini ezmez):
+  1. **Sistem sahipleri** (`notification_owners`, Ayarlar → Sistem sahipleri): her açık kanaldan, alert seviyesi kanalın
+     sahip seviyesine (`owner_min_level`, ör. e-posta ve Slack uyarı, SMS yalnızca kritik) ulaşıyorsa ve sahip o kanaldan
+     almak istiyorsa. Panel kullanıcısı olmaları gerekmez.
+  2. Sunucunun organizasyonunun **ve bütün üst organizasyonlarının** kuralları.
+  3. Sunucunun kendi kuralları.
+  - Kural: kapsam bir **organizasyon** ya da **sunucu**, alıcı bir panel kullanıcısı ya da **iletişim kişisi**, kanal ve en
+    düşük seviye. Kurala yalnızca o kapsam için seçilebilir alıcılar yazılabilir (kapsamdaki yöneticiler, sunucuya atanmış
+    operatörler, organizasyonun kişileri).
+  - Aynı kanal ve adres bir kez bildirilir (sahip olan biri bir kuralda da geçse tek ileti alır).
+  - **Varsayılan alıcı yoktur:** süper admin ya da organizasyon yöneticisi olmak kendiliğinden bildirim almak demek değildir.
+    Hiç sahip ve kural yoksa bildirim kimseye gitmez; panel bunu süper admine bir uyarı bandıyla söyler.
+- **Kanallar** (`notification_channels`, Ayarlar → Bildirim kanalları) sistem düzeyindedir: ayarı (ör. SMTP) ve sırrı
+  (şifreli) orada tutulur; ayarı eksik ya da kapalı kanal kurallarda seçilemez. İki tür kanal vardır: **kişiye giden**
+  (e-posta, SMS: adres kişinin kaydından gelir; organizasyon/sunucu kurallarında seçilebilir) ve **ortak** (ör. Slack:
+  tek bir ortak hedefe gider, yalnızca sistem sahiplerine gönderir, kurallarda seçilemez). Kanalı kapatılan kurallar
+  silinmez ama çalışmaz: alert motoru onları atlar ve loglar, panel kuralın yanında "kanal kapalı" gösterir. Şimdilik
+  yalnızca e-posta uygulanmıştır.
+- **Teslim — kalıcı kuyruk:** bildirim, alert değişikliğiyle **aynı transaction'da** `notification_outbox`'a (**alıcı başına bir
+  satır**, hazır konu ve gövdeyle) yazılır; alıcılar o anki sahiplere ve kurallara göre çözülür. Her alıcı ayrı ileti alır:
+  kişiye giden kanallarda alıcılar birbirini görmez ve bir adresin hatası yalnızca onun satırını yeniden denetir. Bir işçi satırları alıp kanalın
   `Notifier`'ıyla gönderir; başarısızlıkta geri çekilerek (30 sn, 1 dk, 2 dk… en çok 1 saat) en çok 10 kez dener, sonra
   vazgeçip ERROR loglar. Alert kaydı esastır: bildirim kuyruğa yazılamazsa alert yine kaydedilir, yalnızca o olayın
   bildirimi gitmez (ERROR). Server yeniden başlasa da bekleyen bildirim kaybolmaz; birden çok server kopyası aynı satırı
   almaz (`FOR UPDATE SKIP LOCKED`). Şifre sıfırlama ve "şifreniz değişti" e-postaları da aynı kuyruktan gider; sıfırlama
   bağlantısı şifreli saklanır, bağlantıyla birlikte geçersiz olur ve yenisi istenince eski e-posta gönderilmez.
 - **Bildirim geçmişi:** alert bildirimleri alert durdukça gövdesiyle saklanır; panelde alert ayrıntısında olay olay
-  (kimlere, ne zaman, gitti mi) görünür, listelerde toplu durum rozeti vardır. Alıcı adreslerini ve hata metnini yalnızca
+  gruplanmış olarak (her alıcının kendi durumu: gitti mi, ne zaman) görünür, listelerde toplu durum rozeti vardır. Alıcı adreslerini ve hata metnini yalnızca
   `notification.view` izni olanlar görür. Hesap e-postaları ve sahipsiz satırlar 30 gün sonra silinir.
 
 ---

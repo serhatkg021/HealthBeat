@@ -15,11 +15,14 @@ uygulanarak** üretilmiştir; şema değişince tablo ayrıntılarını yeniden 
   yalnızca içerik değişince yazılır). Panelde görünen ad `hosts.title`'dır; makinenin kendi hostname'i envanterdedir.
 - **Eşik mirası.** Bir sunucu için geçerli eşik: sunucunun kendi eşiği → organizasyonun varsayılanı → üst şirketlerin
   varsayılanı (en yakın olan) → genel varsayılan. Hiçbiri yoksa o metrik alert üretmez.
-- **Bildirim kuralları.** Alert alıcıları `notification_routes` ile belirlenir. En özel kapsamda (sunucu → organizasyon → üst
-  şirketler) kural varsa **yalnızca** o kurallar uygulanır; hiç kural yoksa varsayılan alıcılar (tüm `super_admin`'ler ve ilgili
-  organizasyon zincirindeki `org_admin`'ler; e-posta; `warning` ve üstü) kullanılır. Bir alert yükselince (ör. `warning` →
-  `critical`) yalnızca yeni seviyeyle kural eşiği aşılan alıcılar ilk kez bilgilendirilir. Veritabanı `sms`, `slack`,
-  `discord`, `telegram` kanallarını da kabul eder; API şimdilik yalnızca uygulanmış olanı (`email`) kabul eder.
+- **Bildirimler.** Her alert'in bildirimi **sistem sahiplerine** (`notification_owners`) gider; `notification_routes`
+  kuralları bunlara **ek alıcı** ekler. Alıcılar sahipler, sunucunun organizasyon zincirindeki (üst şirketler dahil) ve
+  sunucunun kendi kurallarının **toplamıdır**; varsayılan alıcı yoktur. Kanallar (`notification_channels`) sistem
+  düzeyindedir: ayarı ve şifreli sırrı orada, açık/kapalı durumu ve sahiplere hangi seviyeden itibaren gideceği
+  (`owner_min_level`) oradadır. Kural yalnızca tanımlı bir kanala yazılabilir (yabancı anahtar); kanalı kapalı kural
+  çalışmaz. Her alıcı ayrı ileti alır (`notification_outbox`'ta alıcı başına bir satır). Bkz. `docs/MIMARI.md` bölüm 8.
+- **Çalışma zamanı ayarları.** Panelden değişen işletim ayarları (`app_settings`, tek satır) veritabanındadır; varsayılanları
+  sütunların `DEFAULT`'ları, sınırları `CHECK`'lerdir ("varsayılana dön" = `SET sütun = DEFAULT`).
 - **Çift kayıt.** `host_inventory.machine_id_hash` aynı makinenin iki kez kaydedilmesini yakalamak için indekslidir; benzersiz
   değildir (klonlanmış sanal makineler aynı kimliği taşır). Panel yalnızca uyarır.
 
@@ -55,6 +58,9 @@ erDiagram
     users ||--o{ refresh_tokens : ""
     users ||--o{ password_reset_tokens : ""
     alerts ||--o{ notification_outbox : ""
+    notification_channels ||--o{ notification_routes : ""
+    users ||--o{ app_settings : ""
+    users ||--o{ notification_channels : ""
 ```
 
 ## Tablolar
@@ -387,7 +393,9 @@ Alert kayıtları. Sunucu+tür+subject başına en fazla **bir açık** alert (k
 
 ### `notification_routes`
 
-Bildirim kuralları: kapsam (organizasyon **ya da** sunucu) × alıcı (kullanıcı **ya da** kişi) × kanal × en düşük seviye. Kapsamda kural varsa yalnızca kurallar, yoksa varsayılan alıcılar (super_admin + ilgili org_admin) kullanılır.
+Bildirim kuralları (sistem sahiplerine **ek** alıcılar): kapsam (organizasyon **ya da** sunucu) × alıcı (kullanıcı **ya da**
+kişi) × kanal × en düşük seviye. Bir alert'e sunucunun ve organizasyon zincirinin bütün kuralları birlikte uygulanır. Kanal
+`notification_channels`'ta tanımlı olmalıdır (`000005`); API ayrıca açık ve kişiye giden bir kanal ister.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -400,10 +408,10 @@ Bildirim kuralları: kapsam (organizasyon **ya da** sunucu) × alıcı (kullanı
 | `min_level` | text | hayır | `'warning'::text` |
 | `created_at` | timestamptz | hayır | `now()` |
 
-- **CHECK** `notification_routes_channel_check`: ((channel = ANY (ARRAY['email'::text, 'sms'::text, 'slack'::text, 'discord'::text, 'telegram'::text])))
 - **CHECK** `notification_routes_min_level_check`: ((min_level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
 - **CHECK** `notification_routes_one_recipient_chk`: (((user_id IS NOT NULL) <> (contact_id IS NOT NULL)))
 - **CHECK** `notification_routes_one_scope_chk`: (((organization_id IS NOT NULL) <> (host_id IS NOT NULL)))
+- **FK** (channel) REFERENCES notification_channels(channel)
 - **FK** (contact_id) REFERENCES organization_contacts(id) ON DELETE CASCADE
 - **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
 - **FK** (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
@@ -478,7 +486,8 @@ E-posta ile şifre sıfırlama: tek kullanımlık, kısa ömürlü, yalnızca SH
 
 Bildirim kuyruğu (`000003`): alert bildirimleri ve hesap e-postaları gönderilmeden önce buraya yazılır; işçi satırları alıp
 gönderir, başarısızlıkta geri çekilerek yeniden dener (en çok 10 deneme). Alert bildirimleri alert değişikliğiyle aynı
-transaction'da, kanal başına bir satır olarak yazılır; `alert_event` (açılma / seviye değişimi / çözülme) ve
+transaction'da, **alıcı başına bir satır** olarak yazılır (`000005` bekleyen çok alıcılı satırları böldü; `recipients` artık
+tek alıcı taşır); `alert_event` (açılma / seviye değişimi / çözülme) ve
 `alert_level` hangi olay için, hangi seviyede gittiğini tutar (alert başına bildirim geçmişi). Şifre sıfırlama bağlantısı yalnızca şifreli (`body_sealed`,
 `SECRETS_ENCRYPTION_KEY`, satır kimliğine bağlı) saklanır ve satır bitince silinir. Alert bildirimleri alert durdukça
 gövdesiyle saklanır (alert'in bildirim geçmişi); hesap e-postaları ve alert'i silinmiş satırlar bittikten 30 gün sonra silinir.
@@ -514,6 +523,91 @@ gövdesiyle saklanır (alert'in bildirim geçmişi); hesap e-postaları ve alert
 - **İndeks** `notification_outbox_alert_id_idx`: `btree (alert_id) WHERE (alert_id IS NOT NULL)`
 - **İndeks** `notification_outbox_created_at_idx`: `btree (created_at)`
 - **İndeks** `notification_outbox_due_idx`: `btree (next_attempt_at) WHERE ((sent_at IS NULL) AND (failed_at IS NULL))`
+
+### `app_settings`
+
+Panelden (Ayarlar) değişen çalışma zamanı ayarları (`000005`): **tek satır** (`id = 1`). Varsayılanlar sütunların
+`DEFAULT`'larıdır, sınırlar `CHECK`'lerdir; server açılışta okur, değişince yeniden başlatmadan uygular. Süreler saniyedir;
+`NULL` sürüm "tanımsız" demektir. Bkz. `docs/DEPLOYMENT.md` §2.1.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `id` | smallint | hayır | `1` |
+| `latest_agent_version` | text | evet | `'1.0.0'::text` |
+| `min_supported_agent_version` | text | evet |  |
+| `metrics_retention_days` | integer | hayır | `30` |
+| `audit_retention_days` | integer | hayır | `0` |
+| `resolved_alert_retention_days` | integer | hayır | `0` |
+| `access_token_ttl_seconds` | integer | hayır | `900` |
+| `refresh_token_ttl_seconds` | integer | hayır | `604800` |
+| `rate_limit_auth_failures_per_minute` | integer | hayır | `10` |
+| `rate_limit_ingest_per_minute` | integer | hayır | `120` |
+| `panel_base_url` | text | hayır | `''::text` |
+| `log_level` | text | hayır | `'info'::text` |
+| `log_error_body_bytes` | integer | hayır | `4096` |
+| `log_file_max_age_days` | integer | hayır | `14` |
+| `log_file_max_total_mb` | integer | hayır | `1024` |
+| `updated_at` | timestamptz | hayır | `now()` |
+| `updated_by` | uuid | evet |  |
+
+- **CHECK** `app_settings_access_token_ttl_chk`: (((access_token_ttl_seconds >= 60) AND (access_token_ttl_seconds <= 86400)))
+- **CHECK** `app_settings_latest_agent_version_chk`: ((latest_agent_version ~ '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'::text))
+- **CHECK** `app_settings_log_error_body_bytes_chk`: (((log_error_body_bytes >= 0) AND (log_error_body_bytes <= 1048576)))
+- **CHECK** `app_settings_log_file_chk`: (((log_file_max_age_days >= 1) AND (log_file_max_total_mb >= 1)))
+- **CHECK** `app_settings_log_level_chk`: ((log_level = ANY (ARRAY['debug'::text, 'info'::text, 'warn'::text, 'error'::text])))
+- **CHECK** `app_settings_min_supported_agent_version_chk`: ((min_supported_agent_version ~ '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'::text))
+- **CHECK** `app_settings_rate_limit_chk`: (((rate_limit_auth_failures_per_minute >= 0) AND (rate_limit_ingest_per_minute >= 0)))
+- **CHECK** `app_settings_refresh_token_ttl_chk`: ((((refresh_token_ttl_seconds >= 3600) AND (refresh_token_ttl_seconds <= 7776000)) AND (refresh_token_ttl_seconds > access_token_ttl_seconds)))
+- **CHECK** `app_settings_retention_chk`: (((metrics_retention_days >= 0) AND (audit_retention_days >= 0) AND (resolved_alert_retention_days >= 0)))
+- **CHECK** `app_settings_single_row_chk`: ((id = 1))
+- **FK** (updated_by) REFERENCES users(id) ON DELETE SET NULL
+- **PK** (id)
+
+### `notification_channels`
+
+Sistem düzeyindeki bildirim kanalları (`000005`): server'ın desteklediği her kanal için bir satır (şimdilik `email`,
+`provider = smtp`, başlangıçta kapalı). `config` sır olmayan ayardır (biçimini kanalın göndericisi doğrular); `secret_enc`
+şifre ya da token'dır, `SECRETS_ENCRYPTION_KEY` ile şifreli ve kanal adına bağlıdır, API'den asla okunmaz.
+`owner_min_level` sistem sahiplerine hangi seviyeden itibaren gönderileceğidir; `verified_at` son başarılı deneme
+gönderimidir ve ayar ya da şifre değişince sıfırlanır.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `channel` | text | hayır |  |
+| `provider` | text | hayır |  |
+| `enabled` | boolean | hayır | `false` |
+| `config` | jsonb | hayır | `'{}'::jsonb` |
+| `secret_enc` | text | evet |  |
+| `owner_min_level` | text | hayır | `'warning'::text` |
+| `verified_at` | timestamptz | evet |  |
+| `updated_at` | timestamptz | hayır | `now()` |
+| `updated_by` | uuid | evet |  |
+
+- **CHECK** `notification_channels_config_object_chk`: ((jsonb_typeof(config) = 'object'::text))
+- **CHECK** `notification_channels_owner_min_level_chk`: ((owner_min_level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
+- **FK** (updated_by) REFERENCES users(id) ON DELETE SET NULL
+- **PK** (channel)
+
+### `notification_owners`
+
+Sistem sahipleri (`000005`): her alert'in bildirimini alanlar; panel kullanıcısı olmaları gerekmez. E-postası e-posta
+kanalında, telefonu SMS kanalında kullanılır; `email_enabled` / `sms_enabled` o kanaldan almak isteyip istemediğidir.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `id` | uuid | hayır | `gen_random_uuid()` |
+| `name` | text | hayır |  |
+| `email` | text | evet |  |
+| `phone` | text | evet |  |
+| `email_enabled` | boolean | hayır | `true` |
+| `sms_enabled` | boolean | hayır | `true` |
+| `created_at` | timestamptz | hayır | `now()` |
+| `updated_at` | timestamptz | hayır | `now()` |
+
+- **CHECK** `notification_owners_email_lowercase_chk`: ((email = lower(email)))
+- **CHECK** `notification_owners_reachable_chk`: (((email IS NOT NULL) OR (phone IS NOT NULL)))
+- **PK** (id)
+- **Benzersiz indeks** `notification_owners_email_uidx`: `btree (email) WHERE (email IS NOT NULL)`
 
 ### `healthbeat_migrations`
 

@@ -25,6 +25,8 @@ export type Permission =
   | 'contact.edit'
   | 'notification.view'
   | 'notification.edit'
+  | 'settings.view'
+  | 'settings.manage'
 
 // hasPermission, kullanıcının izni olup olmadığıdır. İzinler henüz yüklenmediyse (eski oturumdan kalan kullanıcı, /me
 // yanıtı gelmeden) hiçbir izin yok sayılır: düğme bir an geç görünür ama hiçbir zaman yetkisiz birine görünmez.

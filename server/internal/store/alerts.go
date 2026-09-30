@@ -324,7 +324,7 @@ func (s *Alerts) CountOpenByLevel(ctx context.Context, ids []uuid.UUID) (critica
 }
 
 // PurgeResolvedBefore, cutoff'tan önce çözülmüş alert'leri parti parti siler ve kaç tane sildiğini döndürür (bkz.
-// RESOLVED_ALERT_RETENTION_DAYS). Açık ve onaylanmış alert'lere dokunmaz. Silinen alert'lerin bildirim geçmişi sahipsiz
+// app_settings.resolved_alert_retention_days). Açık ve onaylanmış alert'lere dokunmaz. Silinen alert'lerin bildirim geçmişi sahipsiz
 // kalır ve outbox temizliğiyle silinir.
 func (s *Alerts) PurgeResolvedBefore(ctx context.Context, cutoff time.Time, batchSize int) (int64, error) {
 	return purgeInBatches(ctx, s.pool,

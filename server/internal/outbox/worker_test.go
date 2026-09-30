@@ -36,17 +36,24 @@ type fakeChannel struct {
 	mu   sync.Mutex
 	name string
 	fail error
-	sent []notify.Message
-	to   [][]string
+	// rejects, bu adreslere gönderimin reddedildiğini (ör. SMTP 550) taklit eder.
+	rejects map[string]bool
+	sent    []notify.Message
+	to      []string
 }
 
 func (f *fakeChannel) Channel() string { return f.name }
 
-func (f *fakeChannel) Send(_ context.Context, to []string, msg notify.Message) error {
+func (f *fakeChannel) Personal() bool { return true }
+
+func (f *fakeChannel) Send(_ context.Context, to string, msg notify.Message) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.fail != nil {
 		return f.fail
+	}
+	if f.rejects[to] {
+		return errors.New("550 mailbox unavailable: " + to)
 	}
 	f.sent = append(f.sent, msg)
 	f.to = append(f.to, to)
@@ -137,6 +144,7 @@ func (e *env) deliver() int {
 
 func TestWorkerDeliversAndMarksSent(t *testing.T) {
 	e := newEnv(t)
+	// İki alıcılı satırı yalnızca güncelleme sırasında eski bir server yazar: alıcılara yine ayrı ayrı gönderilir.
 	plain := e.enqueue(store.OutboxMessage{Subject: "alert", Body: "gövde", Recipients: []string{"a@x.test", "b@x.test"}})
 	sealed := e.enqueue(store.OutboxMessage{Kind: store.OutboxKindPasswordReset, Subject: "sıfırlama", Body: "#token=abc", Seal: true})
 	other := e.enqueue(store.OutboxMessage{Kind: store.OutboxKindPasswordChanged, Body: "başka işçinin"})
@@ -144,11 +152,11 @@ func TestWorkerDeliversAndMarksSent(t *testing.T) {
 	if n := e.deliver(); n != 2 {
 		t.Fatalf("delivered %d, want 2", n)
 	}
-	got := map[string]string{} // gövde → alıcılar (teslim sırası aynı zamanlı satırlar arasında belirsizdir)
+	got := map[string]string{} // gövde → alıcılar, gönderim başına bir (teslim sırası aynı zamanlı satırlar arasında belirsizdir)
 	for i, m := range e.email.sent {
-		got[m.Body] = strings.Join(e.email.to[i], ",")
+		got[m.Body] = strings.TrimPrefix(got[m.Body]+","+e.email.to[i], ",")
 	}
-	if len(got) != 2 || got["gövde"] != "a@x.test,b@x.test" || got["#token=abc"] != "ops@x.test" {
+	if len(got) != 2 || got["gövde"] != "a@x.test,b@x.test" || got["#token=abc"] != "ops@x.test" || len(e.email.sent) != 3 {
 		t.Fatalf("sent = %+v to %v", e.email.sent, e.email.to)
 	}
 	for _, id := range []uuid.UUID{plain, sealed} {
@@ -315,4 +323,26 @@ func decode(t *testing.T, line string) map[string]any {
 		t.Fatalf("not JSON: %q", line)
 	}
 	return rec
+}
+
+// Her alıcı ayrı satırdır: bir alıcının adresi reddedilince yalnızca onun satırı yeniden denenir, diğerleri ikinci kez
+// gönderilmez.
+func TestRejectedRecipientIsRetriedAlone(t *testing.T) {
+	e := newEnv(t)
+	e.email.rejects = map[string]bool{"bad@x.test": true}
+	good := e.enqueue(store.OutboxMessage{Body: "alert", Recipients: []string{"good@x.test"}})
+	bad := e.enqueue(store.OutboxMessage{Body: "alert", Recipients: []string{"bad@x.test"}})
+
+	if n := e.deliver(); n != 1 {
+		t.Fatalf("delivered %d, want 1", n)
+	}
+	if s := e.state(good); !s.sent {
+		t.Fatalf("good row = %+v, want sent", s)
+	}
+	if s := e.state(bad); s.sent || s.failed || !strings.Contains(s.lastError, "550") || s.nextIn <= 0 {
+		t.Fatalf("bad row = %+v, want a scheduled retry with the rejection", s)
+	}
+	if strings.Join(e.email.to, ",") != "good@x.test" {
+		t.Fatalf("sent to %v, want only good@ (once)", e.email.to)
+	}
 }

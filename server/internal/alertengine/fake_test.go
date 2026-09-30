@@ -164,7 +164,9 @@ type fakeNotifier struct{ channel string }
 
 func (f *fakeNotifier) Channel() string { return f.channel }
 
-func (f *fakeNotifier) Send(context.Context, []string, notify.Message) error { return nil }
+func (f *fakeNotifier) Personal() bool { return true }
+
+func (f *fakeNotifier) Send(context.Context, string, notify.Message) error { return nil }
 
 // fakeOutbox, kuyruğa yazılanları kaydeder; fail doluysa yazma o hatayla başarısız olur.
 type fakeOutbox struct {
@@ -286,28 +288,27 @@ func TestFakeEngineNotifiesOnLifecycleChanges(t *testing.T) {
 	}
 }
 
-// Alıcılar kanala göre gruplanır: kanal başına bir satır, aynı metin; kanalı olmayan alıcı atlanır.
-func TestFakeEngineFansOutByChannel(t *testing.T) {
+// Her alıcı kuyrukta ayrı bir satırdır (alıcılar birbirini görmez); hepsi aynı metni taşır. Göndericisi olmayan kanalın
+// alıcısı ve kanalı kapalı kuralın alıcısı atlanır.
+func TestFakeEngineQueuesOneRowPerRecipient(t *testing.T) {
 	f := newFakeEnv(t, fakeRecipients{
 		{Channel: model.ChannelEmail, Address: "a@acme.test", Name: "A"},
 		{Channel: model.ChannelSlack, Address: "#ops", Name: "Slack"},
 		{Channel: model.ChannelSMS, Address: "+905550000000", Name: "Nöbetçi"},
 		{Channel: model.ChannelEmail, Address: "b@acme.test", Name: "B"},
+		{Channel: model.ChannelEmail, Address: "c@acme.test", Name: "C", ChannelOff: true},
 	})
 	f.report(95)
 
-	if len(f.outbox.rows) != 2 {
-		t.Fatalf("rows = %+v, want one per available channel", f.outbox.rows)
+	var got []string
+	for _, row := range f.outbox.rows {
+		got = append(got, row.Channel+":"+strings.Join(row.Recipients, ","))
+		if row.Subject != f.outbox.rows[0].Subject || row.Body != f.outbox.rows[0].Body {
+			t.Fatal("recipients received different messages for the same alert")
+		}
 	}
-	email, sms := f.outbox.rows[0], f.outbox.rows[1]
-	if email.Channel != model.ChannelEmail || strings.Join(email.Recipients, ",") != "a@acme.test,b@acme.test" {
-		t.Fatalf("email row = %+v", email)
-	}
-	if sms.Channel != model.ChannelSMS || strings.Join(sms.Recipients, ",") != "+905550000000" {
-		t.Fatalf("sms row = %+v", sms)
-	}
-	if email.Subject != sms.Subject || email.Body != sms.Body {
-		t.Fatal("channels received different messages for the same alert")
+	if strings.Join(got, " ") != "email:a@acme.test sms:+905550000000 email:b@acme.test" {
+		t.Fatalf("rows = %v, want one per deliverable recipient", got)
 	}
 }
 

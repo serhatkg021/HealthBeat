@@ -42,6 +42,19 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("PUT /api/v1/notification-routes/{id}", d.requirePermission("notification.edit", handle(d.handleUpdateRoute)))
 	mux.HandleFunc("DELETE /api/v1/notification-routes/{id}", d.requirePermission("notification.edit", handle(d.handleDeleteRoute)))
 
+	// Sistem ayarları: bkz. settings_handlers.go.
+	mux.HandleFunc("GET /api/v1/settings", d.requirePermission("settings.view", handle(d.handleGetSettings)))
+	mux.HandleFunc("PATCH /api/v1/settings", d.requirePermission("settings.manage", handle(d.handleUpdateSettings)))
+	mux.HandleFunc("POST /api/v1/settings/reset", d.requirePermission("settings.manage", handle(d.handleResetSettings)))
+	mux.HandleFunc("GET /api/v1/notification-channels", d.requirePermission("settings.view", handle(d.handleListChannels)))
+	mux.HandleFunc("GET /api/v1/notification-channels/options", d.requirePermission("notification.view", handle(d.handleChannelOptions)))
+	mux.HandleFunc("PATCH /api/v1/notification-channels/{channel}", d.requirePermission("settings.manage", handle(d.handleUpdateChannel)))
+	mux.HandleFunc("POST /api/v1/notification-channels/{channel}/test", d.requirePermission("settings.manage", handle(d.handleTestChannel)))
+	mux.HandleFunc("GET /api/v1/notification-owners", d.requirePermission("settings.view", handle(d.handleListOwners)))
+	mux.HandleFunc("POST /api/v1/notification-owners", d.requirePermission("settings.manage", handle(d.handleCreateOwner)))
+	mux.HandleFunc("PUT /api/v1/notification-owners/{id}", d.requirePermission("settings.manage", handle(d.handleUpdateOwner)))
+	mux.HandleFunc("DELETE /api/v1/notification-owners/{id}", d.requirePermission("settings.manage", handle(d.handleDeleteOwner)))
+
 	mux.HandleFunc("GET /api/v1/users", d.requirePermission("user.view", handle(d.handleListUsers)))
 	mux.HandleFunc("POST /api/v1/users", d.requirePermission("user.create", handle(d.handleCreateUser)))
 	mux.HandleFunc("GET /api/v1/users/{id}", d.requirePermission("user.view", handle(d.handleGetUser)))

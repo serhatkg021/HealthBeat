@@ -6,18 +6,15 @@ import (
 	"bufio"
 	"crypto/x509"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"healthbeat-server/internal/clientip"
 	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/secretbox"
-	"healthbeat-server/internal/version"
 )
 
 type Config struct {
@@ -31,28 +28,6 @@ type Config struct {
 	// açılmayı reddeder, secret'ları açık saklamaz. Kaybedilirse saklı pull secret'lar geri
 	// alınamaz (kurtarmak için etkilenen host'ların kimlik bilgilerini yenile).
 	SecretsEncryptionKey []byte
-	AccessTokenTTL       time.Duration
-	RefreshTokenTTL      time.Duration
-
-	// SMTP isteğe bağlıdır: boş SMTPHost, notify.Mailer'ın hata vermek yerine yalnızca log
-	// modunda çalışması demektir (bkz. docs/MIMARI.md bölüm 8).
-	SMTPHost     string
-	SMTPPort     string
-	SMTPUsername string
-	SMTPPassword string
-	SMTPFrom     string
-
-	// PanelBaseURL, panelin kullanıcıya görünen adresidir (scheme://host[:port]); şifre sıfırlama e-postalarındaki
-	// bağlantının kökü olarak kullanılır. Boşsa e-posta ile şifre sıfırlama kapalıdır. İsteğin Host başlığından
-	// türetilmez: aksi halde saldırgan sıfırlama bağlantısını kendi alan adına yönlendirebilirdi.
-	PanelBaseURL string
-
-	// Hız sınırları (dakikada). Sıfır ilgili sınırlayıcıyı kapatır. AuthFailuresPerMinute, başarısız
-	// panel girişleri/yenilemeleri için kaynak IP başına ve ayrıca başarısız push-host
-	// kimlik doğrulamaları için ayrı olarak sayılır. IngestPerMinute doğrulanmış push host
-	// başına sayılır.
-	AuthFailuresPerMinute int
-	IngestPerMinute       int
 
 	// CORSAllowedOrigins, API'yi çağırmasına izin verilen tarayıcı origin'lerini listeler; panel
 	// farklı bir origin'den (static host) sunulduğunda gerekir. Boş = CORS başlığı yok.
@@ -80,49 +55,38 @@ type Config struct {
 	// `healthbeat-server migrate up` ile açıkça uygulanır.
 	AutoMigrate bool
 
-	// MetricsRetentionDays, metrik örneklerinin retention işi onları silmeden önce ne kadar
-	// saklandığıdır. 0 hepsini sonsuza dek tutar.
-	MetricsRetentionDays int
-	// AuditRetentionDays (AUDIT_RETENTION_DAYS) ve ResolvedAlertRetentionDays (RESOLVED_ALERT_RETENTION_DAYS), denetim
-	// kayıtlarının ve çözülmüş alert'lerin saklanma süresidir (gün). 0 (varsayılan) hepsini sonsuza dek tutar.
-	AuditRetentionDays         int
-	ResolvedAlertRetentionDays int
-
 	// DBMaxConns (DB_MAX_CONNS), veritabanı bağlantı havuzunun üst sınırıdır. 0 = DATABASE_URL'deki pool_max_conns,
 	// o da yoksa pgx varsayılanı (4 ile CPU sayısından büyüğü).
 	DBMaxConns int
 
-	// LatestAgentVersion/MinSupportedAgentVersion, panelin agent'ları "güncel / güncellenmeli /
-	// desteklenmiyor" diye sınıflandırdığı sürüm politikasıdır (bkz. docs/COMPATIBILITY.md).
-	// Latest varsayılanı server derlemesinin bildiği en güncel AGENT sürümüdür (version.LatestAgent; server'ın kendi
-	// sürümü değil: iki bağımsız sürüm hattı vardır); Min boşsa
-	// "desteklenmiyor" durumu hiç üretilmez. Politika yalnızca bilgilendirir: hiçbir agent
-	// reddedilmez.
-	LatestAgentVersion       string
-	MinSupportedAgentVersion string
-
-	// LogLevel (LOG_LEVEL: debug|info|warn|error, varsayılan info) ve LogFormat (LOG_FORMAT: text|json, varsayılan
-	// text) server logunu ayarlar. Başarılı ingest ve /healthz istekleri yalnızca debug'da görünür.
-	LogLevel  slog.Level
+	// LogFormat (LOG_FORMAT: text|json, varsayılan text) server logunun biçimidir. Log seviyesi ve hata gövdesi
+	// loglama panelden değişir (bkz. internal/settings).
 	LogFormat string
-	// LogErrorBodyBytes (LOG_ERROR_BODY_BYTES, varsayılan 4096), hata alan (4xx/5xx) bir isteğin loga yazılan
-	// istek/yanıt gövdesinin azami boyutudur; 0 gövde yazmaz. Şifre/token/secret alanları her zaman maskelenir.
-	LogErrorBodyBytes int
 
 	// LogFile (LOG_FILE), logun stdout'a ek olarak yazıldığı kalıcı dosyadır; o dizinde günlük dosyalar tutulur
-	// (server-YYYY-MM-DD.log, eski günler gzip'li). Boş = kapalı (bare-metal varsayılanı; Docker Compose açar).
-	// LogFileMaxAgeDays (varsayılan 14) bugün dahil kaç günün tutulacağı, LogFileMaxTotalMB (varsayılan 1024) bütün log
-	// dosyalarının toplam üst sınırıdır. Bkz. logging.FileWriter.
-	LogFile           string
-	LogFileMaxAgeDays int
-	LogFileMaxTotalMB int
+	// (server-YYYY-MM-DD.log, eski günler gzip'li). Boş = kapalı (bare-metal varsayılanı; Docker Compose açar). Saklama
+	// sınırları panelden değişir. Bkz. logging.FileWriter.
+	LogFile string
+
+	// Obsolete, artık okunmayan (panele taşınan) ama ortamda hâlâ dolu olan değişkenlerin adlarıdır; server bunları
+	// açılışta uyarı olarak loglar.
+	Obsolete []string
 }
 
 // maxDBMaxConns, DB_MAX_CONNS'ın üst sınırıdır; PostgreSQL'in varsayılan max_connections'ı 100'dür.
 const maxDBMaxConns = 1000
 
-// maxLogErrorBodyBytes, LOG_ERROR_BODY_BYTES'ın üst sınırıdır: API zaten 1 MiB'tan büyük gövde kabul etmez.
-const maxLogErrorBodyBytes = 1 << 20
+// ObsoleteVars, 2.0.0'da env'den kaldırılıp panele taşınan değişkenlerdir (app_settings; SMTP ise e-posta kanalı,
+// notification_channels).
+var ObsoleteVars = []string{
+	"LATEST_AGENT_VERSION", "MIN_SUPPORTED_AGENT_VERSION",
+	"METRICS_RETENTION_DAYS", "AUDIT_RETENTION_DAYS", "RESOLVED_ALERT_RETENTION_DAYS",
+	"ACCESS_TOKEN_TTL", "REFRESH_TOKEN_TTL",
+	"RATE_LIMIT_AUTH_FAILURES_PER_MINUTE", "RATE_LIMIT_INGEST_PER_MINUTE",
+	"PANEL_BASE_URL",
+	"LOG_LEVEL", "LOG_ERROR_BODY_BYTES", "LOG_FILE_MAX_AGE_DAYS", "LOG_FILE_MAX_TOTAL_MB",
+	"SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
+}
 
 func Load() (*Config, error) {
 	loadDotEnv(".env")
@@ -143,12 +107,6 @@ func Load() (*Config, error) {
 		TLSKeyFile:       req("TLS_KEY_FILE"),
 		JWTAccessSecret:  []byte(req("JWT_ACCESS_SECRET")),
 		JWTRefreshSecret: []byte(req("JWT_REFRESH_SECRET")),
-
-		SMTPHost:     os.Getenv("SMTP_HOST"),
-		SMTPPort:     getDefault("SMTP_PORT", "587"),
-		SMTPUsername: os.Getenv("SMTP_USERNAME"),
-		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
-		SMTPFrom:     os.Getenv("SMTP_FROM"),
 	}
 
 	secretsKey := req("SECRETS_ENCRYPTION_KEY")
@@ -167,22 +125,8 @@ func Load() (*Config, error) {
 	}
 	cfg.SecretsEncryptionKey = key
 
-	accessTTL, err := getDurationDefault("ACCESS_TOKEN_TTL", 15*time.Minute)
-	if err != nil {
-		return nil, err
-	}
-	refreshTTL, err := getDurationDefault("REFRESH_TOKEN_TTL", 7*24*time.Hour)
-	if err != nil {
-		return nil, err
-	}
-	cfg.AccessTokenTTL = accessTTL
-	cfg.RefreshTokenTTL = refreshTTL
-
 	if cfg.CORSAllowedOrigins, err = ParseAllowedOrigins(os.Getenv("CORS_ALLOWED_ORIGINS")); err != nil {
 		return nil, fmt.Errorf("invalid CORS_ALLOWED_ORIGINS: %w", err)
-	}
-	if cfg.PanelBaseURL, err = ParsePanelBaseURL(os.Getenv("PANEL_BASE_URL")); err != nil {
-		return nil, fmt.Errorf("invalid PANEL_BASE_URL: %w", err)
 	}
 	if cfg.TrustedProxies, err = clientip.ParseProxies(os.Getenv("TRUSTED_PROXIES")); err != nil {
 		return nil, fmt.Errorf("invalid TRUSTED_PROXIES: %w", err)
@@ -209,51 +153,20 @@ func Load() (*Config, error) {
 	if cfg.AutoMigrate, err = getBoolDefault("AUTO_MIGRATE", true); err != nil {
 		return nil, err
 	}
-	if cfg.LatestAgentVersion, err = semverDefault("LATEST_AGENT_VERSION", version.LatestAgent); err != nil {
-		return nil, err
-	}
-	if cfg.MinSupportedAgentVersion, err = semverDefault("MIN_SUPPORTED_AGENT_VERSION", ""); err != nil {
-		return nil, err
-	}
-	if cfg.MetricsRetentionDays, err = getIntDefault("METRICS_RETENTION_DAYS", 30); err != nil {
-		return nil, err
-	}
-	if cfg.AuditRetentionDays, err = getIntDefault("AUDIT_RETENTION_DAYS", 0); err != nil {
-		return nil, err
-	}
-	if cfg.ResolvedAlertRetentionDays, err = getIntDefault("RESOLVED_ALERT_RETENTION_DAYS", 0); err != nil {
-		return nil, err
-	}
 	if cfg.DBMaxConns, err = getIntDefault("DB_MAX_CONNS", 0); err != nil {
 		return nil, err
 	}
 	if cfg.DBMaxConns > maxDBMaxConns {
 		return nil, fmt.Errorf("invalid DB_MAX_CONNS: must be at most %d", maxDBMaxConns)
 	}
-	if cfg.AuthFailuresPerMinute, err = getIntDefault("RATE_LIMIT_AUTH_FAILURES_PER_MINUTE", 10); err != nil {
-		return nil, err
-	}
-	if cfg.IngestPerMinute, err = getIntDefault("RATE_LIMIT_INGEST_PER_MINUTE", 120); err != nil {
-		return nil, err
-	}
-	if cfg.LogLevel, err = logging.ParseLevel(os.Getenv("LOG_LEVEL")); err != nil {
-		return nil, fmt.Errorf("invalid LOG_LEVEL: %w", err)
-	}
 	if cfg.LogFormat, err = logging.ParseFormat(os.Getenv("LOG_FORMAT")); err != nil {
 		return nil, fmt.Errorf("invalid LOG_FORMAT: %w", err)
 	}
-	if cfg.LogErrorBodyBytes, err = getIntDefault("LOG_ERROR_BODY_BYTES", 4096); err != nil {
-		return nil, err
-	}
-	if cfg.LogErrorBodyBytes > maxLogErrorBodyBytes {
-		return nil, fmt.Errorf("invalid LOG_ERROR_BODY_BYTES: must be at most %d", maxLogErrorBodyBytes)
-	}
 	cfg.LogFile = strings.TrimSpace(os.Getenv("LOG_FILE"))
-	if cfg.LogFileMaxAgeDays, err = getIntDefault("LOG_FILE_MAX_AGE_DAYS", 14); err != nil || cfg.LogFileMaxAgeDays < 1 {
-		return nil, fmt.Errorf("invalid LOG_FILE_MAX_AGE_DAYS: must be a positive number of days")
-	}
-	if cfg.LogFileMaxTotalMB, err = getIntDefault("LOG_FILE_MAX_TOTAL_MB", 1024); err != nil || cfg.LogFileMaxTotalMB < 1 {
-		return nil, fmt.Errorf("invalid LOG_FILE_MAX_TOTAL_MB: must be a positive number of megabytes")
+	for _, key := range ObsoleteVars {
+		if strings.TrimSpace(os.Getenv(key)) != "" { // compose boş geçirir: yalnızca dolu olanlar uyarılır
+			cfg.Obsolete = append(cfg.Obsolete, key)
+		}
 	}
 
 	return cfg, nil
@@ -294,18 +207,6 @@ func getDefault(key, def string) string {
 	return def
 }
 
-func getDurationDefault(key string, def time.Duration) (time.Duration, error) {
-	v := os.Getenv(key)
-	if v == "" {
-		return def, nil
-	}
-	d, err := time.ParseDuration(v)
-	if err != nil {
-		return 0, fmt.Errorf("invalid %s: %w", key, err)
-	}
-	return d, nil
-}
-
 func getIntDefault(key string, def int) (int, error) {
 	v := os.Getenv(key)
 	if v == "" {
@@ -337,21 +238,6 @@ func ParseAllowedOrigins(raw string) ([]string, error) {
 		out = append(out, u.Scheme+"://"+strings.ToLower(u.Host))
 	}
 	return out, nil
-}
-
-// ParsePanelBaseURL, panelin dış adresini doğrular ve olağan biçime getirir: scheme://host[:port] (yol, sorgu ve
-// sondaki eğik çizgi yok). Boş girdi geçerlidir ve "" döner (özellik kapalı).
-func ParsePanelBaseURL(raw string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", nil
-	}
-	u, err := url.Parse(strings.TrimRight(raw, "/"))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
-		u.Path != "" || u.RawQuery != "" || u.Fragment != "" || u.User != nil {
-		return "", fmt.Errorf("%q is not a valid panel address (want scheme://host[:port], e.g. https://panel.example.com)", raw)
-	}
-	return u.Scheme + "://" + strings.ToLower(u.Host), nil
 }
 
 // minJWTSecretBytes: 256 bitlik hash çıktısından kısa HS256 imza anahtarları, ele geçirilmiş
@@ -403,16 +289,4 @@ func loadCertPool(path string) (*x509.CertPool, error) {
 		return nil, fmt.Errorf("%s contains no PEM-encoded certificate", path)
 	}
 	return pool, nil
-}
-
-// semverDefault, key'i SemVer olarak okur; boşsa def döner.
-func semverDefault(key, def string) (string, error) {
-	v := strings.TrimSpace(os.Getenv(key))
-	if v == "" {
-		return def, nil
-	}
-	if !version.ValidSemver(v) {
-		return "", fmt.Errorf("invalid %s %q: use MAJOR.MINOR.PATCH, e.g. 1.2.0", key, v)
-	}
-	return v, nil
 }

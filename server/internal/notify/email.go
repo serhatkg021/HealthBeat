@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/smtp"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,43 +34,62 @@ type Config struct {
 	From     string
 }
 
-// Mailer, Host boşsa etkisizdir (yalnızca log): SMTP yapılandırılmamış bir geliştirme/test
-// ortamı bir alert'te asla başarısız olmaz — yalnızca ne gönderileceğini loglar.
+// Mailer, Host boşsa etkisizdir (yalnızca log): SMTP yapılandırılmamış ya da mail kanalı kapalı bir kurulum bir alert'te
+// asla başarısız olmaz — yalnızca ne gönderileceğini loglar. Ayar panelden değişince SetConfig ile güncellenir; her
+// gönderim o anki ayarın bir kopyasıyla baştan sona yapılır.
 //
 // Taşıma güvenliği: 465 portu örtük TLS kullanır (bağlantı ilk bayttan TLS'tir); diğer her
 // port açık metinle başlar ve sunucu sunduğunda STARTTLS ile yükseltir. Kimlik bilgileri
 // yalnızca TLS üzerinden (ya da localhost'a) gönderilir — net/smtp'nin PlainAuth'u aksini reddeder.
 type Mailer struct {
-	cfg     Config
-	enabled bool
+	cfg atomic.Pointer[Config]
 
 	tlsConfig    *tls.Config                                 // test kancası; nil = sistem köklerine karşı doğrula
 	dialOverride func(ctx context.Context) (net.Conn, error) // test kancası: ağ bağlantısını değiştirir
 }
 
 func New(cfg Config) *Mailer {
-	return &Mailer{cfg: cfg, enabled: cfg.Host != ""}
+	m := &Mailer{}
+	m.SetConfig(cfg)
+	return m
 }
 
-// Enabled, gerçek bir SMTP sunucusu yapılandırılıp yapılandırılmadığını söyler (false = yalnızca log).
-func (m *Mailer) Enabled() bool { return m.enabled }
+// SetConfig, bundan sonraki gönderimlerin SMTP ayarını değiştirir; Host boş ise gönderim kapanır (yalnızca log).
+func (m *Mailer) SetConfig(cfg Config) { m.cfg.Store(&cfg) }
 
-func (m *Mailer) tlsCfg() *tls.Config {
+// Enabled, gerçek bir SMTP sunucusu yapılandırılıp yapılandırılmadığını söyler (false = yalnızca log).
+func (m *Mailer) Enabled() bool { return m.cfg.Load().Host != "" }
+
+func (m *Mailer) tlsCfg(cfg Config) *tls.Config {
 	if m.tlsConfig != nil {
 		c := m.tlsConfig.Clone()
 		if c.ServerName == "" {
-			c.ServerName = m.cfg.Host
+			c.ServerName = cfg.Host
 		}
 		return c
 	}
-	return &tls.Config{ServerName: m.cfg.Host, MinVersion: tls.VersionTLS12}
+	return &tls.Config{ServerName: cfg.Host, MinVersion: tls.VersionTLS12}
 }
 
 func (m *Mailer) Send(ctx context.Context, to []string, subject, body string) error {
-	if !m.enabled {
+	cfg := *m.cfg.Load()
+	if cfg.Host == "" {
 		slog.InfoContext(ctx, "notify: SMTP not configured, e-mail not sent", "subject", subject, "to", strings.Join(to, ", "))
 		return nil
 	}
+	return m.send(ctx, cfg, to, subject, body)
+}
+
+// SendWith, kayıtlı ayar yerine verilen ayarla gönderir (panelin "Test" gönderimi: kanal açılmadan önce denenebilir).
+// Host boşsa hata döner; yalnızca log moduna düşmez.
+func (m *Mailer) SendWith(ctx context.Context, cfg Config, to []string, subject, body string) error {
+	if cfg.Host == "" {
+		return fmt.Errorf("smtp host is not set")
+	}
+	return m.send(ctx, cfg, to, subject, body)
+}
+
+func (m *Mailer) send(ctx context.Context, cfg Config, to []string, subject, body string) error {
 	if len(to) == 0 {
 		return nil
 	}
@@ -77,7 +97,7 @@ func (m *Mailer) Send(ctx context.Context, to []string, subject, body string) er
 	ctx, cancel := context.WithTimeout(ctx, sessionTimeout)
 	defer cancel()
 
-	conn, err := m.dial(ctx)
+	conn, err := m.dial(ctx, cfg)
 	if err != nil {
 		return fmt.Errorf("connect to smtp server: %w", err)
 	}
@@ -91,7 +111,7 @@ func (m *Mailer) Send(ctx context.Context, to []string, subject, body string) er
 		conn.SetDeadline(dl)
 	}
 
-	c, err := smtp.NewClient(conn, m.cfg.Host)
+	c, err := smtp.NewClient(conn, cfg.Host)
 	if err != nil {
 		return fmt.Errorf("smtp greeting: %w", err)
 	}
@@ -99,18 +119,18 @@ func (m *Mailer) Send(ctx context.Context, to []string, subject, body string) er
 
 	if _, implicitTLS := conn.(*tls.Conn); !implicitTLS {
 		if ok, _ := c.Extension("STARTTLS"); ok {
-			if err := c.StartTLS(m.tlsCfg()); err != nil {
+			if err := c.StartTLS(m.tlsCfg(cfg)); err != nil {
 				return fmt.Errorf("starttls: %w", err)
 			}
 		}
 	}
-	if m.cfg.Username != "" {
-		if err := c.Auth(smtp.PlainAuth("", m.cfg.Username, m.cfg.Password, m.cfg.Host)); err != nil {
+	if cfg.Username != "" {
+		if err := c.Auth(smtp.PlainAuth("", cfg.Username, cfg.Password, cfg.Host)); err != nil {
 			return fmt.Errorf("smtp auth: %w", err)
 		}
 	}
 
-	if err := c.Mail(m.cfg.From); err != nil {
+	if err := c.Mail(cfg.From); err != nil {
 		return fmt.Errorf("smtp MAIL FROM: %w", err)
 	}
 	for _, rcpt := range to {
@@ -122,7 +142,7 @@ func (m *Mailer) Send(ctx context.Context, to []string, subject, body string) er
 	if err != nil {
 		return fmt.Errorf("smtp DATA: %w", err)
 	}
-	if _, err := w.Write(buildMessage(m.cfg.From, to, subject, body, time.Now())); err != nil {
+	if _, err := w.Write(buildMessage(cfg.From, to, subject, body, time.Now())); err != nil {
 		return fmt.Errorf("smtp write body: %w", err)
 	}
 	if err := w.Close(); err != nil {
@@ -131,14 +151,14 @@ func (m *Mailer) Send(ctx context.Context, to []string, subject, body string) er
 	return c.Quit()
 }
 
-func (m *Mailer) dial(ctx context.Context) (net.Conn, error) {
+func (m *Mailer) dial(ctx context.Context, cfg Config) (net.Conn, error) {
 	if m.dialOverride != nil {
 		return m.dialOverride(ctx)
 	}
-	addr := net.JoinHostPort(m.cfg.Host, m.cfg.Port)
+	addr := net.JoinHostPort(cfg.Host, cfg.Port)
 	d := &net.Dialer{Timeout: dialTimeout}
-	if m.cfg.Port == "465" {
-		return (&tls.Dialer{NetDialer: d, Config: m.tlsCfg()}).DialContext(ctx, "tcp", addr)
+	if cfg.Port == "465" {
+		return (&tls.Dialer{NetDialer: d, Config: m.tlsCfg(cfg)}).DialContext(ctx, "tcp", addr)
 	}
 	return d.DialContext(ctx, "tcp", addr)
 }

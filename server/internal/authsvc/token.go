@@ -2,6 +2,7 @@ package authsvc
 
 import (
 	"errors"
+	"sync/atomic"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -37,27 +38,32 @@ type Claims struct {
 type TokenService struct {
 	accessSecret  []byte
 	refreshSecret []byte
-	accessTTL     time.Duration
-	refreshTTL    time.Duration
+	// Süreler panelden çalışırken değişebilir (SetTTLs); her token üretilirken okunur.
+	accessTTL  atomic.Int64
+	refreshTTL atomic.Int64
 }
 
 func NewTokenService(accessSecret, refreshSecret []byte, accessTTL, refreshTTL time.Duration) *TokenService {
-	return &TokenService{
-		accessSecret:  accessSecret,
-		refreshSecret: refreshSecret,
-		accessTTL:     accessTTL,
-		refreshTTL:    refreshTTL,
-	}
+	s := &TokenService{accessSecret: accessSecret, refreshSecret: refreshSecret}
+	s.SetTTLs(accessTTL, refreshTTL)
+	return s
+}
+
+// SetTTLs, bundan sonra üretilecek token'ların süresini değiştirir; önceden verilmiş token'lar kendi süreleriyle
+// geçerli kalır.
+func (s *TokenService) SetTTLs(accessTTL, refreshTTL time.Duration) {
+	s.accessTTL.Store(int64(accessTTL))
+	s.refreshTTL.Store(int64(refreshTTL))
 }
 
 func (s *TokenService) IssueAccessToken(userID uuid.UUID, email, role string, mustChangePassword bool) (string, time.Time, error) {
-	return s.issue(userID, email, role, tokenTypeAccess, s.accessSecret, s.accessTTL, "", mustChangePassword)
+	return s.issue(userID, email, role, tokenTypeAccess, s.accessSecret, time.Duration(s.accessTTL.Load()), "", mustChangePassword)
 }
 
 // IssueRefreshToken, server bu belirli token'ı izleyebilsin (ve iptal edebilsin) diye jti'yi
 // JWT ID olarak gömer — bkz. store.RefreshTokens.
 func (s *TokenService) IssueRefreshToken(userID uuid.UUID, email, role string, jti uuid.UUID) (string, time.Time, error) {
-	return s.issue(userID, email, role, tokenTypeRefresh, s.refreshSecret, s.refreshTTL, jti.String(), false)
+	return s.issue(userID, email, role, tokenTypeRefresh, s.refreshSecret, time.Duration(s.refreshTTL.Load()), jti.String(), false)
 }
 
 func (s *TokenService) issue(userID uuid.UUID, email, role, typ string, secret []byte, ttl time.Duration, id string, mustChangePassword bool) (string, time.Time, error) {

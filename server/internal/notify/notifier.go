@@ -13,13 +13,17 @@ type Message struct {
 	Body    string
 }
 
-// Notifier, bir bildirim kanalıdır (docs/MIMARI.md bölüm 8). Alert motoru alıcıları kanala göre gruplar ve her grubu o
-// kanalın Notifier'ına verir; yeni bir kanal (sms, slack…) yeni bir Notifier'dır.
+// Notifier, bir bildirim kanalıdır (docs/MIMARI.md bölüm 8). Her ileti tek alıcıya gider: kişiye giden kanallarda
+// alıcılar birbirini görmez (her alıcı kuyrukta ayrı bir satırdır). Yeni bir kanal (sms, slack…) yeni bir Notifier'dır.
 type Notifier interface {
 	// Channel, kanalın adıdır; notification_routes.channel değerleriyle aynıdır (model.Channel*).
 	Channel() string
-	// Send, msg'yi recipients'a (kanalın adres biçiminde: e-posta adresi, telefon…) iletir; ctx süreyi sınırlar.
-	Send(ctx context.Context, recipients []string, msg Message) error
+	// Personal, kanalın kişiye (e-posta adresi, telefon) mi yoksa ortak bir hedefe (Slack kanalı gibi) mi gittiğidir.
+	// Organizasyon/sunucu kurallarında yalnızca kişiye giden kanallar seçilebilir; ortak kanallar yalnızca sistem
+	// sahibine gider.
+	Personal() bool
+	// Send, msg'yi recipient'a (kanalın adres biçiminde: e-posta adresi, telefon…) iletir; ctx süreyi sınırlar.
+	Send(ctx context.Context, recipient string, msg Message) error
 }
 
 // EmailChannel, Mailer'ı Notifier olarak sunar.
@@ -29,6 +33,8 @@ type EmailChannel struct {
 
 func (EmailChannel) Channel() string { return model.ChannelEmail }
 
-func (c EmailChannel) Send(ctx context.Context, recipients []string, msg Message) error {
-	return c.Mailer.Send(ctx, recipients, msg.Subject, msg.Body)
+func (EmailChannel) Personal() bool { return true }
+
+func (c EmailChannel) Send(ctx context.Context, recipient string, msg Message) error {
+	return c.Mailer.Send(ctx, []string{recipient}, msg.Subject, msg.Body)
 }

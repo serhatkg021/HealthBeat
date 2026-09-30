@@ -30,7 +30,7 @@ import (
 //     bildirim kuyruğunda şifreli (secretbox) durur ve gönderilince (ya da süresi dolunca) şifreli hâli de silinir.
 //   - Bağlantı adresin #parçasında taşınır (?sorgu değil): tarayıcı bunu server'a, proxy günlüklerine ya da
 //     Referer başlığına göndermez.
-//   - Bağlantının kökü PANEL_BASE_URL'den gelir, isteğin Host/Origin başlığından değil (başlık enjeksiyonuyla
+//   - Bağlantının kökü panel adresinden (Ayarlar, app_settings.panel_base_url) gelir, isteğin Host/Origin başlığından değil (başlık enjeksiyonuyla
 //     saldırgan bir alan adına bağlantı üretilmesini önler).
 //   - Kullanıcı başına yalnızca son bağlantı geçerlidir; kullanım sonrası tüm oturumlar kapatılır.
 //   - IP başına ve e-posta başına sınır: posta bombası ve token tahmini denemeleri kısılır.
@@ -77,7 +77,7 @@ type Mailer interface {
 // boşsa ya da mailer gerçek bir SMTP sunucusuna bağlı değilse özellik kapalı kalır (istekler 204 döner ama posta gitmez).
 func (d *Deps) SetPasswordReset(m Mailer, baseURL string) {
 	d.mailer = m
-	d.panelBaseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	d.SetPanelBaseURL(baseURL)
 	d.mailWorker = nil
 	if m != nil {
 		d.mailWorker = outbox.NewWorker(d.outbox, accountMailKinds, mailerChannel{m})
@@ -93,12 +93,20 @@ type mailerChannel struct{ m Mailer }
 
 func (mailerChannel) Channel() string { return model.ChannelEmail }
 
-func (c mailerChannel) Send(ctx context.Context, to []string, msg notify.Message) error {
-	return c.m.Send(ctx, to, msg.Subject, msg.Body)
+func (mailerChannel) Personal() bool { return true }
+
+func (c mailerChannel) Send(ctx context.Context, recipient string, msg notify.Message) error {
+	return c.m.Send(ctx, []string{recipient}, msg.Subject, msg.Body)
+}
+
+// SetPanelBaseURL, sıfırlama bağlantılarının kökünü değiştirir (panelden); "" e-posta ile şifre sıfırlamayı kapatır.
+func (d *Deps) SetPanelBaseURL(baseURL string) {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	d.panelBaseURL.Store(&baseURL)
 }
 
 func (d *Deps) passwordResetEnabled() bool {
-	return d.mailer != nil && d.mailer.Enabled() && d.panelBaseURL != ""
+	return d.mailer != nil && d.mailer.Enabled() && *d.panelBaseURL.Load() != ""
 }
 
 // RunMailOutbox, ctx bitene kadar şifre e-postalarını kuyruktan teslim eder. Kendi goroutine'inde çalıştırın.
@@ -136,7 +144,7 @@ type authOptionsResponse struct {
 }
 
 // handleAuthOptions, giriş sayfasının "Şifremi unuttum" akışının çalışıp çalışmayacağını öğrenmesini sağlar
-// (SMTP ve PANEL_BASE_URL yapılandırılmış mı). Kimlik doğrulamasızdır ve başka bir şey söylemez.
+// (mail kanalı açık ve panel adresi girilmiş mi). Kimlik doğrulamasızdır ve başka bir şey söylemez.
 func (d *Deps) handleAuthOptions(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, authOptionsResponse{PasswordResetEnabled: d.passwordResetEnabled()})
 }
@@ -174,7 +182,7 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) erro
 	}
 
 	if !d.passwordResetEnabled() {
-		slog.WarnContext(r.Context(), "password reset requested but not available: set SMTP_HOST and PANEL_BASE_URL to enable it")
+		slog.WarnContext(r.Context(), "password reset requested but not available: turn on the e-mail channel and set the panel address in Settings")
 		return respond()
 	}
 	if ok, _ := d.resetEmails.Allow(email); !ok {
@@ -212,7 +220,7 @@ func (d *Deps) handleForgotPassword(w http.ResponseWriter, r *http.Request) erro
 	}
 	d.queueMail(r.Context(), store.OutboxMessage{
 		Kind: store.OutboxKindPasswordReset, Recipients: []string{user.Email}, Subject: resetMailSubject,
-		Body: resetMailBody(user.Email, fmt.Sprintf(resetLinkPathFmt, d.panelBaseURL, token), passwordResetTTL),
+		Body: resetMailBody(user.Email, fmt.Sprintf(resetLinkPathFmt, *d.panelBaseURL.Load(), token), passwordResetTTL),
 		Seal: true, ExpiresAt: &expiresAt,
 	})
 	return respond()

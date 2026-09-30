@@ -25,6 +25,8 @@ import (
 	"healthbeat-server/internal/authsvc"
 	"healthbeat-server/internal/httpapi"
 	"healthbeat-server/internal/notify"
+	"healthbeat-server/internal/settings"
+	"healthbeat-server/internal/store"
 	"healthbeat-server/internal/testdb"
 	"healthbeat-server/internal/version"
 )
@@ -35,11 +37,13 @@ import (
 const password = "correct-horse-battery"
 
 type api struct {
-	t       *testing.T
-	pool    *pgxpool.Pool
-	handler http.Handler
-	tokens  *authsvc.TokenService
-	deps    *httpapi.Deps
+	t        *testing.T
+	pool     *pgxpool.Pool
+	handler  http.Handler
+	tokens   *authsvc.TokenService
+	deps     *httpapi.Deps
+	settings *settings.Service
+	channels *settings.Channels
 }
 
 func newAPI(t *testing.T) *api {
@@ -52,9 +56,21 @@ func newAPIWithLimits(t *testing.T, limits httpapi.RateLimits) *api {
 	t.Helper()
 	pool := testdb.New(t)
 	tokens := authsvc.NewTokenService([]byte("access"), []byte("refresh"), 15*time.Minute, time.Hour)
-	engine := alertengine.New(pool, notify.New(notify.Config{}), "") // yalnızca log'a yazan posta
+	mailer := notify.New(notify.Config{}) // yalnızca log'a yazan posta
+	engine := alertengine.New(pool, mailer, "")
 	deps := httpapi.NewDeps(pool, tokens, engine, limits, testdb.SecretBox(t))
-	return &api{t: t, pool: pool, handler: deps.Router(), tokens: tokens, deps: deps}
+	// Kurallar yalnızca açık bir kanala yazılabilir: testler e-posta kanalı açık başlar (sahipsiz; bildirim gitmez).
+	testdb.EnableEmailChannel(t, pool)
+	appSettings, err := settings.New(context.Background(), store.NewSettings(pool))
+	if err != nil {
+		t.Fatal(err)
+	}
+	channels, err := settings.NewChannels(context.Background(), store.NewNotificationChannels(pool, testdb.SecretBox(t)), mailer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps.SetSettings(appSettings, channels)
+	return &api{t: t, pool: pool, handler: deps.Router(), tokens: tokens, deps: deps, settings: appSettings, channels: channels}
 }
 
 // rawBody, call'a JSON olarak yeniden kodlanmadan gönderilecek ham bir gövde verir.

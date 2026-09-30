@@ -66,11 +66,11 @@ Yalnızca `main`'daki yayınlanmamış değişiklikleri **göndermek istemediği
 ```sh
 git switch -c release/agent-1.0 agent/v1.0.0      # düzeltilecek sürümün etiketinden aç
 git cherry-pick <düzeltme-commit'i>                # düzeltme önce main'da (PR ile) yapılır, buraya alınır
-# agent/…/version.go Version = 1.0.1 ve server/…/version.go LatestAgent = 1.0.1 (aynı commit), agent/CHANGELOG.md bölümü
+# agent/…/version.go Version = 1.0.1 ve agent/CHANGELOG.md bölümü (aynı commit)
 git tag agent/v1.0.1 && git push origin release/agent-1.0 agent/v1.0.1
 ```
 
-Sonra `LatestAgent` ve değişiklik günlüğü değişikliğinin `main`'a da işlendiğini doğrula; dalı sil. `main` zaten yayınlanabilirse
+Sonra değişiklik günlüğünün `main`'a da işlendiğini doğrula, panelde Ayarlar → Agent sürümleri'ni 1.0.1 yap; dalı sil. `main` zaten yayınlanabilirse
 release dalı açma: doğrudan `main`'dan etiketle.
 
 ## 6. GitHub ayarları (bir kez)

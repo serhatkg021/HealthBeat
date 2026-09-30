@@ -19,11 +19,13 @@ import (
 	"healthbeat-server/internal/httpapi"
 	"healthbeat-server/internal/jobs"
 	"healthbeat-server/internal/logging"
+	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/notify"
 	"healthbeat-server/internal/offlinemonitor"
 	"healthbeat-server/internal/pullscheduler"
 	"healthbeat-server/internal/retention"
 	"healthbeat-server/internal/secretbox"
+	"healthbeat-server/internal/settings"
 	"healthbeat-server/internal/store"
 	"healthbeat-server/internal/tlsreload"
 	"healthbeat-server/internal/version"
@@ -40,9 +42,16 @@ func main() {
 	if err != nil {
 		fatal("config", err)
 	}
-	logging.Setup(os.Stderr, cfg.LogLevel, cfg.LogFormat)
-	if logFile := openLogFile(cfg); logFile != nil {
+	// Log seviyesi ve log dosyasının saklama sınırları veritabanındaki ayarlardan gelir (panelden değişir). Ayarlar
+	// okunana kadar (açılış, migration) seviye info'dur ve log dosyasından hiçbir şey silinmez.
+	logLevel := new(slog.LevelVar)
+	logging.Setup(os.Stderr, logLevel, cfg.LogFormat)
+	logFile := openLogFile(cfg, logLevel)
+	if logFile != nil {
 		defer logFile.Close()
+	}
+	for _, key := range cfg.Obsolete {
+		slog.Warn(key + " is no longer read; manage it from the panel (Settings)")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -68,27 +77,27 @@ func main() {
 	if err := ensureFirstAdmin(ctx, cfg, store.NewUsers(pool)); err != nil {
 		fatal("bootstrap admin", err)
 	}
+	appSettings, err := settings.New(ctx, store.NewSettings(pool))
+	if err != nil {
+		fatal("settings", err)
+	}
+	cur := appSettings.Current()
 
-	tokenSvc := authsvc.NewTokenService(cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cfg.AccessTokenTTL, cfg.RefreshTokenTTL)
+	tokenSvc := authsvc.NewTokenService(cfg.JWTAccessSecret, cfg.JWTRefreshSecret, cur.AccessTokenTTL, cur.RefreshTokenTTL)
 
-	mailer := notify.New(notify.Config{
-		Host:     cfg.SMTPHost,
-		Port:     cfg.SMTPPort,
-		Username: cfg.SMTPUsername,
-		Password: cfg.SMTPPassword,
-		From:     cfg.SMTPFrom,
-	})
-	alertEngine := alertengine.New(pool, mailer, cfg.PanelBaseURL)
+	// E-posta (alert'ler, şifre sıfırlama) mail kanalının ayarıyla gönderilir; kanal kapalıysa yalnızca loglanır.
+	mailer := notify.New(notify.Config{})
+	channels, err := settings.NewChannels(ctx, store.NewNotificationChannels(pool, secrets), mailer)
+	if err != nil {
+		fatal("notification channels", err)
+	}
+	email, _ := channels.Get(model.ChannelEmail)
+	mailer.SetConfig(settings.MailerConfig(email))
+	alertEngine := alertengine.New(pool, mailer, cur.PanelBaseURL)
 	// Alert bildirimleri kalıcı kuyruktan (notification_outbox) teslim edilir; gönderilemeyen yeniden denenir.
 	background.Go("alert notifications", alertEngine.RunNotifications)
 
-	deps := httpapi.NewDeps(pool, tokenSvc, alertEngine, httpapi.RateLimits{
-		AuthFailuresPerMinute: cfg.AuthFailuresPerMinute,
-		IngestPerMinute:       cfg.IngestPerMinute,
-	}, secrets)
-
-	deps.SetErrorBodyLogging(cfg.LogErrorBodyBytes)
-	deps.SetAgentPolicy(httpapi.AgentPolicy{Latest: cfg.LatestAgentVersion, Min: cfg.MinSupportedAgentVersion})
+	deps := httpapi.NewDeps(pool, tokenSvc, alertEngine, rateLimits(cur), secrets)
 
 	// İstemci IP'si (hız sınırları, denetim kaydı): X-Forwarded-For yalnızca TRUSTED_PROXIES'teki bir proxy'den
 	// gelirse okunur. Host adları (compose'da "panel") arka planda periyodik çözülür.
@@ -101,24 +110,28 @@ func main() {
 	background.Go("client IP resolver", clientIPs.Run)
 	deps.SetClientIPResolver(clientIPs)
 
-	deps.SetPasswordReset(mailer, cfg.PanelBaseURL)
-	switch {
-	case mailer.Enabled() && cfg.PanelBaseURL != "":
-		slog.Info("password reset by e-mail: enabled", "panel_base_url", cfg.PanelBaseURL)
-	case mailer.Enabled():
-		slog.Info("password reset by e-mail: disabled — SMTP is configured but PANEL_BASE_URL is not set")
-	case cfg.PanelBaseURL != "":
-		slog.Info("password reset by e-mail: disabled — PANEL_BASE_URL is set but SMTP_HOST is not")
-	default:
-		slog.Info("password reset by e-mail: disabled (set SMTP_HOST and PANEL_BASE_URL to enable it)")
-	}
+	deps.SetSettings(appSettings, channels)
+	deps.SetPasswordReset(mailer, cur.PanelBaseURL)
+	logPasswordReset(mailer.Enabled(), cur.PanelBaseURL)
+	followEmailChannel(channels, mailer, appSettings)
 
 	background.Go("password mails", deps.RunMailOutbox)
 	background.Go("token purge", retention.NewTokenPurger(store.NewRefreshTokens(pool), store.NewPasswordResets(pool)).Run)
-	background.Go("retention", retention.New(
+	purger := retention.New(
 		retention.Stores{Metrics: store.NewMetrics(pool), Audit: store.NewAudit(pool), Alerts: store.NewAlerts(pool)},
-		retention.Days{Metrics: cfg.MetricsRetentionDays, Audit: cfg.AuditRetentionDays, ResolvedAlerts: cfg.ResolvedAlertRetentionDays},
-	).Run)
+		retentionDays(cur),
+	)
+	background.Go("retention", purger.Run)
+
+	// Ayarlar panelden değişince yeniden başlatmadan uygulanır.
+	targets := settingsTargets{logLevel: logLevel, logFile: logFile, tokens: tokenSvc, deps: deps, alerts: alertEngine, purger: purger}
+	targets.apply(cur)
+	appSettings.OnChange(func(old, updated model.AppSettings) {
+		targets.apply(updated)
+		if old.PanelBaseURL != updated.PanelBaseURL {
+			logPasswordReset(mailer.Enabled(), updated.PanelBaseURL)
+		}
+	})
 
 	scheduler := pullscheduler.New(pool, alertEngine, secrets, cfg.PullRootCAs)
 	background.Go("pull scheduler", scheduler.Run)
@@ -137,7 +150,7 @@ func main() {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		slog.Info("HealthBeat server listening (TLS)", "addr", cfg.HTTPAddr, "version", version.Version, "log_level", cfg.LogLevel.String(), "log_format", cfg.LogFormat)
+		slog.Info("HealthBeat server listening (TLS)", "addr", cfg.HTTPAddr, "version", version.Version, "log_level", logLevel.Level().String(), "log_format", cfg.LogFormat)
 		serverErr <- srv.ListenAndServeTLS("", "") // sertifikalar TLSConfig.GetCertificate'ten gelir
 	}()
 
@@ -216,23 +229,86 @@ func ensureFirstAdmin(ctx context.Context, cfg *config.Config, users *store.User
 }
 
 // openLogFile, LOG_FILE ayarlıysa logu stdout'a ek olarak kalıcı dosyaya da yönlendirir. Dosya açılamazsa (izin, yanlış
-// yol) server yine başlar ve bunu ERROR olarak loglar: log dosyası yüzünden izleme durmamalı.
-func openLogFile(cfg *config.Config) *logging.FileWriter {
+// yol) server yine başlar ve bunu ERROR olarak loglar: log dosyası yüzünden izleme durmamalı. Saklama sınırları ayarlar
+// okununca verilir (FileWriter.SetLimits); o zamana kadar hiçbir dosya silinmez.
+func openLogFile(cfg *config.Config, level slog.Leveler) *logging.FileWriter {
 	if cfg.LogFile == "" {
 		return nil
 	}
-	fw, err := logging.OpenFile(logging.FileOptions{
-		Path:          cfg.LogFile,
-		MaxAgeDays:    cfg.LogFileMaxAgeDays,
-		MaxTotalBytes: int64(cfg.LogFileMaxTotalMB) << 20,
-	})
+	fw, err := logging.OpenFile(logging.FileOptions{Path: cfg.LogFile})
 	if err != nil {
 		slog.Error("log file disabled: logging to stdout only", "path", cfg.LogFile, "err", err)
 		return nil
 	}
-	logging.Setup(io.MultiWriter(os.Stderr, fw), cfg.LogLevel, cfg.LogFormat)
-	slog.Info("logging to file", "path", cfg.LogFile, "max_age_days", cfg.LogFileMaxAgeDays, "max_total_mb", cfg.LogFileMaxTotalMB)
+	logging.Setup(io.MultiWriter(os.Stderr, fw), level, cfg.LogFormat)
+	slog.Info("logging to file", "path", cfg.LogFile)
 	return fw
+}
+
+// settingsTargets, panelden değişen ayarların uygulandığı bileşenlerdir.
+type settingsTargets struct {
+	logLevel *slog.LevelVar
+	logFile  *logging.FileWriter // LOG_FILE boşsa nil
+	tokens   *authsvc.TokenService
+	deps     *httpapi.Deps
+	alerts   *alertengine.Engine
+	purger   *retention.Purger
+}
+
+// apply, ayarları bileşenlere uygular: açılışta bir kez ve her değişiklikten sonra.
+func (t settingsTargets) apply(s model.AppSettings) {
+	if level, err := logging.ParseLevel(s.LogLevel); err == nil { // veritabanı yalnızca geçerli seviyeleri kabul eder
+		t.logLevel.Set(level)
+	}
+	if t.logFile != nil {
+		if err := t.logFile.SetLimits(s.LogFileMaxAgeDays, int64(s.LogFileMaxTotalMB)<<20); err != nil {
+			slog.Error("log file: invalid limits", "err", err)
+		}
+	}
+	t.tokens.SetTTLs(s.AccessTokenTTL, s.RefreshTokenTTL)
+	t.deps.SetRateLimits(rateLimits(s))
+	t.deps.SetErrorBodyLogging(s.LogErrorBodyBytes)
+	t.deps.SetAgentPolicy(httpapi.AgentPolicy{Latest: s.LatestAgentVersion, Min: s.MinSupportedAgentVersion})
+	t.deps.SetPanelBaseURL(s.PanelBaseURL)
+	t.alerts.SetPanelBaseURL(s.PanelBaseURL)
+	t.purger.SetDays(retentionDays(s))
+}
+
+func rateLimits(s model.AppSettings) httpapi.RateLimits {
+	return httpapi.RateLimits{AuthFailuresPerMinute: s.RateLimitAuthFailuresPerMinute, IngestPerMinute: s.RateLimitIngestPerMinute}
+}
+
+func retentionDays(s model.AppSettings) retention.Days {
+	return retention.Days{Metrics: s.MetricsRetentionDays, Audit: s.AuditRetentionDays, ResolvedAlerts: s.ResolvedAlertRetentionDays}
+}
+
+// followEmailChannel, mail kanalı panelden değişince göndericinin ayarını günceller: alert e-postaları ve şifre
+// e-postaları bir sonraki gönderimde yeni ayarı kullanır.
+func followEmailChannel(channels *settings.Channels, mailer *notify.Mailer, appSettings *settings.Service) {
+	channels.OnChange(func(_, updated model.NotificationChannel) {
+		if updated.Channel != model.ChannelEmail {
+			return
+		}
+		wasEnabled := mailer.Enabled()
+		mailer.SetConfig(settings.MailerConfig(updated))
+		if wasEnabled != mailer.Enabled() {
+			logPasswordReset(mailer.Enabled(), appSettings.Current().PanelBaseURL)
+		}
+	})
+}
+
+// logPasswordReset, e-posta ile şifre sıfırlamanın açık olup olmadığını ve neden kapalı olduğunu loglar.
+func logPasswordReset(emailEnabled bool, panelBaseURL string) {
+	switch {
+	case emailEnabled && panelBaseURL != "":
+		slog.Info("password reset by e-mail: enabled", "panel_base_url", panelBaseURL)
+	case emailEnabled:
+		slog.Info("password reset by e-mail: disabled — the e-mail channel is on but the panel address is not set (Settings)")
+	case panelBaseURL != "":
+		slog.Info("password reset by e-mail: disabled — the panel address is set but the e-mail channel is off (Settings)")
+	default:
+		slog.Info("password reset by e-mail: disabled (turn on the e-mail channel and set the panel address in Settings)")
+	}
 }
 
 // fatal, açılışı durduran bir hatayı loglar ve süreci sonlandırır.

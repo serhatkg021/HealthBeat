@@ -57,9 +57,10 @@ minor'ı); yalnızca hata düzeltmesi ise sürümün patch'i. Sürümü elle art
 
 **İki bağımsız sürüm hattı:** agent (`agent/vX.Y.Z`) ile server + panel (`server/vX.Y.Z`) ayrı sürümlenir; biri çıkınca
 diğerinin numarası değişmez. Uyumluluk sürüme değil **protokole** dayanır (yukarıdaki tablo): agent 1.x, protokolü
-anlayan her server ile çalışır. Server'ın panelde "güncel agent" saydığı sürüm kendi sürümü değil, derlemenin bildiği
-en güncel agent sürümüdür (`server/internal/version` içindeki `LatestAgent`; yeni bir agent yayınlanırken aynı commit'te
-artırılır, `scripts/release.sh agent` bunu doğrular). Bkz. `docs/DISTRIBUTION.md`.
+anlayan her server ile çalışır; server'ın major sürümü (ör. 2.0.0) agent'la uyumluluğu değiştirmez, agent 1.x server 2.x
+ile çalışır. Server'ın panelde "güncel agent" saydığı sürüm kendi sürümü değil, **elle yönetilen** bir ayardır (Ayarlar →
+Agent sürümleri; `app_settings.latest_agent_version`, ilk kurulumda `1.0.0`): yeni bir agent yayınlandıktan sonra oradan
+girilir, server'ı yeniden derlemek ya da başlatmak gerekmez. Bkz. `docs/DISTRIBUTION.md`.
 
 ## 3. Başlıklar
 
@@ -106,21 +107,23 @@ Durumlar (`server/panel/src/pages/agentStatus.ts`):
 
 | Durum | Ne zaman |
 | --- | --- |
-| **güncel** | sürüm ≥ `LATEST_AGENT_VERSION` (ya da politika tanımsız) |
-| **güncelleme var** | `MIN_SUPPORTED_AGENT_VERSION` ≤ sürüm < `LATEST_AGENT_VERSION` |
-| **desteklenmiyor** | sürüm < `MIN_SUPPORTED_AGENT_VERSION` |
+| **güncel** | sürüm ≥ en güncel agent sürümü (ya da politika tanımsız) |
+| **güncelleme var** | desteklenen en düşük sürüm ≤ sürüm < en güncel agent sürümü |
+| **desteklenmiyor** | sürüm < desteklenen en düşük sürüm |
 | **eski agent** | sürüm bildirmiyor (protokol 1) |
 | **bilinmiyor** | henüz rapor yok / sürüm okunamadı |
 
-Politika **yalnızca bilgilendirir**; hiçbir agent sürümü yüzünden reddedilmez. Server ortamında:
+Politika **yalnızca bilgilendirir**; hiçbir agent sürümü yüzünden reddedilmez. Panelden (Ayarlar → Agent sürümleri)
+yönetilir; 2.0.0'dan önce ortam değişkeniydi (`LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION`, artık okunmaz):
 
-| Değişken | Varsayılan | |
+| Ayar | Varsayılan | |
 | --- | --- | --- |
-| `LATEST_AGENT_VERSION` | derlemenin bildiği en güncel agent sürümü (`LatestAgent`; server'ın kendi sürümü **değil**) | panelin "güncel" saydığı agent sürümü |
-| `MIN_SUPPORTED_AGENT_VERSION` | boş | bunun altı "desteklenmiyor" görünür; boşsa hiçbiri |
+| En güncel agent sürümü | `1.0.0` | panelin "güncel" saydığı agent sürümü; boş = politika yok, her agent güncel |
+| Desteklenen en düşük sürüm | boş | bunun altı "desteklenmiyor" görünür; boşsa hiçbiri |
 
-Geçersiz (SemVer olmayan) değer server'ın açılışta başlamasını engeller. Sürüm politikası
-`GET /api/v1/meta` ile panele verilir.
+Değerler SemVer olmalı ve en düşük sürüm en güncelden büyük olamaz (API `400` ile reddeder). Sürüm politikası
+`GET /api/v1/meta` ile panele, `X-HealthBeat-Latest-Agent` başlığıyla push agent'lara verilir; değişiklik yeniden
+başlatmadan yansır.
 
 ## 6. Yeni bir ingest alanı eklerken
 
