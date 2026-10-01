@@ -1,15 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ChevronDown, KeyRound, LogOut } from 'lucide-react'
+import { ChevronDown, KeyRound, LogOut, UserRound } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { roleLabel } from '../labels'
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: 'Süper Admin',
-  org_admin: 'Organizasyon Admin',
-  operator: 'Operatör',
-}
-
-// Üst çubuğun sağındaki hesap düğmesi; tıklanınca hesap bilgisi, şifre değiştirme ve çıkış açılır. Dışarı tıklamak ya da
+// Üst çubuğun sağındaki hesap düğmesi; tıklanınca hesap bilgisi, profil, şifre değiştirme ve çıkış açılır. Dışarı tıklamak ya da
 // Escape kapatır.
 export function ProfileMenu() {
   const { user, logout } = useAuth()
@@ -34,7 +29,6 @@ export function ProfileMenu() {
 
   if (!user) return null
   const name = user.full_name?.trim() || user.email
-  const role = ROLE_LABELS[user.role] ?? user.role
 
   return (
     <div className="profile-menu" ref={root}>
@@ -59,8 +53,12 @@ export function ProfileMenu() {
               {name}
             </div>
             {name !== user.email && <div className="profile-popover-meta">{user.email}</div>}
-            <div className="profile-popover-meta">{role}</div>
+            <div className="profile-popover-meta">{roleLabel(user.role)}</div>
           </div>
+          <Link to="/profile" role="menuitem" className="profile-item" onClick={() => setOpen(false)}>
+            <UserRound size={15} strokeWidth={1.75} />
+            Profil
+          </Link>
           <Link to="/change-password" role="menuitem" className="profile-item" onClick={() => setOpen(false)}>
             <KeyRound size={15} strokeWidth={1.75} />
             Şifre değiştir

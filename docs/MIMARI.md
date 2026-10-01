@@ -170,7 +170,7 @@ GET    https://<agent>:<port>/<pull_endpoint>   Bearer paylaşılan secret
 
 # panel (auth zorunlu, rol/kapsam bazlı)
 POST   /api/v1/auth/login | refresh | logout | forgot-password | reset-password
-GET    /api/v1/me (+ permissions) | /me/hosts | /meta
+GET    /api/v1/me (+ permissions) | /me/hosts | /meta        PATCH /api/v1/me (kendi adı ve telefonu)
        /api/v1/organizations[/:id]              (ağaç: parent_organization_id, address)
        /api/v1/organizations/:id/contacts       + /api/v1/contacts/:id
        /api/v1/organizations/:id/hosts

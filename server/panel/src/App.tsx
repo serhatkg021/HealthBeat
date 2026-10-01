@@ -15,6 +15,7 @@ import { UsersPage } from './pages/UsersPage'
 import { AuditPage } from './pages/AuditPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SettingsHubPage } from './pages/SettingsHubPage'
+import { ProfilePage } from './pages/ProfilePage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
@@ -104,6 +105,7 @@ export default function App() {
                 </RequirePermission>
               }
             />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsHubPage />} />
             <Route
               path="/settings/system"

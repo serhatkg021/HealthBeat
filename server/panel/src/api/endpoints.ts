@@ -72,6 +72,7 @@ export const metaApi = {
 
 export const meApi = {
   get: () => apiRequest<User>('/api/v1/me'),
+  update: (input: { full_name?: string; phone?: string }) => apiRequest<User>('/api/v1/me', { method: 'PATCH', body: input }),
   hosts: () => apiRequest<Host[]>('/api/v1/me/hosts'),
 }
 

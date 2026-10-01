@@ -6,6 +6,12 @@ const HOST_STATUS: Record<string, string> = {
   offline: 'çevrimdışı',
 }
 
+const ROLE: Record<string, string> = {
+  super_admin: 'Süper Admin',
+  org_admin: 'Organizasyon Admin',
+  operator: 'Operatör',
+}
+
 const ALERT_LEVEL: Record<string, string> = {
   info: 'bilgi',
   critical: 'kritik',
@@ -64,6 +70,7 @@ const CHANNEL: Record<string, string> = {
 
 const label = (table: Record<string, string>, value: string): string => table[value] ?? value
 
+export const roleLabel = (role: string): string => label(ROLE, role)
 export const hostStatusLabel = (status: string): string => label(HOST_STATUS, status)
 // Alert seviyesinin rozet rengi: info yalnızca bilgi (nötr), warning sarı, critical kırmızı.
 export const alertLevelTone = (level: string): 'neutral' | 'warning' | 'critical' =>

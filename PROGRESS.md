@@ -8,8 +8,8 @@ Anlamlı bir iş bitince bu dosya güncellenir.
 yayınlanmadı): 19 ortam değişkeni panele (Ayarlar) taşındı ve yeniden başlatmadan uygulanıyor; SMTP mail kanalında;
 bildirimler sistem sahiplerine ve toplanan ek alıcılara, her alıcıya ayrı ileti olarak gidiyor (`server/CHANGELOG.md`,
 "Yayınlanmamış"). Panelin gezinmesi yenilendi: sabit üst çubuk (sayfa başlığı, seviye başına açık alert sayıları, hesap
-menüsü), açılır gruplu sol menü, kartlı Ayarlar girişi, sabit alt çubuk (tek sürüm satırı, kayan sistem uyarıları). Sırada:
-profil sayfası (`PATCH /me`), ardından 2.0.0 sürüm PR'ı.
+menüsü), açılır gruplu sol menü, kartlı Ayarlar girişi, sabit alt çubuk (tek sürüm satırı, kayan sistem uyarıları). Profil sayfası eklendi
+(`PATCH /api/v1/me`: kişi kendi adını ve telefonunu değiştirir). Sırada 2.0.0 sürüm PR'ı.
 
 ## Durum
 

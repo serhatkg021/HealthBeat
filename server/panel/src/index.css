@@ -3178,3 +3178,26 @@ textarea {
     height: 4px;
   }
 }
+
+/* Profil sayfasındaki salt-okunur hesap bilgileri: etiket solda, değer sağda; dar ekranda alt alta. */
+.profile-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 24px;
+  margin: 0 0 14px;
+}
+
+.profile-facts dt {
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+.profile-facts dd {
+  margin: 2px 0 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.form-actions .save-note {
+  margin-bottom: 0;
+}
