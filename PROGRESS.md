@@ -4,16 +4,14 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-01 — Çalışma zamanı ayarları ve bildirim modeli (server + panel **2.0.0** için, henüz
-yayınlanmadı): 19 ortam değişkeni panele (Ayarlar) taşındı ve yeniden başlatmadan uygulanıyor; SMTP mail kanalında;
-bildirimler sistem sahiplerine ve toplanan ek alıcılara, her alıcıya ayrı ileti olarak gidiyor (`server/CHANGELOG.md`,
-"Yayınlanmamış"). Panelin gezinmesi yenilendi: sabit üst çubuk (sayfa başlığı, seviye başına açık alert sayıları, hesap
-menüsü), açılır gruplu sol menü, kartlı Ayarlar girişi, sabit alt çubuk (tek sürüm satırı, kayan sistem uyarıları). Profil sayfası eklendi
-(`PATCH /api/v1/me`: kişi kendi adını ve telefonunu değiştirir). Sırada 2.0.0 sürüm PR'ı.
+**Son güncelleme:** 2026-10-01 — Server + panel **2.0.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
+"Güncellemeden önce" notları): çalışma zamanı ayarları ve bildirim kanalları panelde, bildirimler sistem sahiplerine ve
+toplanan ek alıcılara gidiyor, panel gezinmesi yenilendi (sabit üst ve alt çubuk, açılır menü, kartlı Ayarlar), profil
+sayfası eklendi. Birleşince `main`'den `server/v2.0.0` etiketi atılacak.
 
 ## Durum
 
-Sürümler: **server + panel 1.1.0** (2.0.0 hazırlanıyor), **agent 1.0.0** (ayrı hatlar; 1.1.0 ingest protokolünü değiştirmedi). Monitoring, alert, bildirim kuralları, organizasyon ağacı, panel: tamam.
+Sürümler: **server + panel 2.0.0**, **agent 1.0.0** (ayrı hatlar; 2.0.0 ingest protokolünü değiştirmedi). Monitoring, alert, bildirim kuralları, organizasyon ağacı, panel: tamam.
 Geliştirme sürecinden gelen tarih temizlendi: tek baseline migration, `client` → `agent`/`host` adlandırması, panel `server/panel/` altında.
 
 ## Ortam ve nasıl çalıştırılır

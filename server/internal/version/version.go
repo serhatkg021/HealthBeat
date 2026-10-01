@@ -10,7 +10,7 @@ import (
 
 // Version server (ve onunla birlikte yayınlanan panel) sürümüdür (SemVer). Elle artırılır; `server/vX.Y.Z`
 // etiketiyle yayınlanır. Agent'ın sürümünden BAĞIMSIZDIR (bkz. docs/DISTRIBUTION.md, iki sürüm hattı).
-var Version = "1.1.0"
+var Version = "2.0.0"
 
 // Protocol, server'ın anladığı en yüksek ingest protokolüdür (agent'ın version.Protocol'ü ile
 // aynı anlam): 1 = sürüm bildirmeyen eski agent'lar, 2 = donanım özeti + sürüm başlıkları, 3 = makine envanteri (host_info) + inode.
