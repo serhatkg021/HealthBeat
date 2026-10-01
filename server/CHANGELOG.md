@@ -10,6 +10,21 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+## [2.0.0] - 2026-10-01
+
+Ayarların ve bildirim kanallarının panele taşındığı, panel gezinmesinin yenilendiği sürüm. Agent sürümü değişmedi: 1.0.0
+agent'lar bu server'la olduğu gibi çalışır (ingest protokolü aynı).
+
+### Öne çıkanlar
+- Çalışma zamanı ayarları panelde: 19 ortam değişkeni Ayarlar → Sistem Ayarları'na taşındı ve yeniden başlatmadan uygulanıyor.
+- SMTP ayarı ve alert'leri alan sistem sahipleri panelden yönetiliyor; "Deneme gönder" ile doğrulanıyor.
+- Yeni bildirim modeli: alert'ler sistem sahiplerine, organizasyon zincirinin ve sunucunun kurallarındaki ek alıcılara gidiyor;
+  her alıcı ayrı ileti alıyor. Varsayılan alıcılar kaldırıldı.
+- Panel gezinmesi yenilendi: sabit üst çubuk (sayfa başlığı, seviye başına açık alert sayıları, hesap menüsü), açılır gruplu
+  sol menü, kartlı Ayarlar girişi, sabit alt çubuk (sürüm ve kayan sistem uyarıları).
+- Profil sayfası: herkes kendi adını ve telefonunu değiştirebiliyor.
+- Alert'ler seviyeye göre süzülüyor; dar ekranda menüler ve tablolar düzeltildi.
+
 ### Güncellemeden önce
 - **Bu bir major sürümdür (2.0.0):** 19 ortam değişkeni artık okunmuyor ve bildirimlerin kime gittiği değişti. Agent'lar
   etkilenmez: agent 1.x bu server'la olduğu gibi çalışır (ingest protokolü aynı).
@@ -17,8 +32,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   yedekle olur; `.down.sql` panelden girilen ayarları, SMTP ayarını ve sistem sahiplerini siler (`docs/DISTRIBUTION.md` §8.3).
   Migration, `email` dışında bir kanala bağlı bildirim kuralı bulursa açıklayıcı bir hatayla durur (API bunları hiç kabul
   etmediği için beklenmez).
-- **Güncellemeden sonra panelde Ayarlar'ı doldur:** e-posta kanalı (SMTP) **kapalı** başlar ve **sistem sahibi yoktur**;
-  bunlar yapılana kadar alert bildirimleri kimseye gitmez (panel bunu bir uyarı bandıyla söyler). Bildirim kanalları'nda
+- **Güncellemeden sonra panelde Ayarlar → Sistem Ayarları'nı doldur:** e-posta kanalı (SMTP) **kapalı** başlar ve **sistem
+  sahibi yoktur**; bunlar yapılana kadar alert bildirimleri kimseye gitmez (panel bunu alt çubuktaki uyarı şeridiyle söyler).
+  Bildirim kanalları'nda
   SMTP ayarını gir, "Deneme gönder" ile doğrula ve kanalı aç; Sistem sahipleri'ni ekle; Panel adresi'ni ve gerekiyorsa agent
   sürüm politikasını, saklama sürelerini, oturum sürelerini, hız sınırlarını ve log ayarlarını gir.
 - **`.env`'den taşınan değişkenleri sil:** `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`,
