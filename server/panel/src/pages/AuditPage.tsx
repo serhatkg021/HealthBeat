@@ -56,7 +56,7 @@ export function AuditPage() {
 
   return (
     <div>
-      <PageHeader title="Denetim Kaydı" subtitle="Panelde ve API'de yapılan yönetim işlemleri" />
+      <PageHeader back={{ to: '/settings', label: 'Ayarlar' }} title="Denetim Kaydı" subtitle="Panelde ve API'de yapılan yönetim işlemleri" />
       {error && <div className="error-banner">{error}</div>}
 
       <div className="toolbar">

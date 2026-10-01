@@ -185,10 +185,11 @@ export const hostsApi = {
 }
 
 export const alertsApi = {
-  list: (params: { status?: AlertStatus; hostId?: string; q: string; limit: number; offset: number }) =>
+  list: (params: { status?: AlertStatus; level?: AlertLevel; hostId?: string; q: string; limit: number; offset: number }) =>
     apiRequestPage<Alert>('/api/v1/alerts', {
       query: {
         status: params.status,
+        level: params.level,
         host_id: params.hostId,
         q: params.q || undefined,
         limit: String(params.limit),

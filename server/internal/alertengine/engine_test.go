@@ -69,7 +69,7 @@ func (e *env) messages() []testsmtp.Message {
 
 func (e *env) rows(t *testing.T, metric string) []model.Alert {
 	t.Helper()
-	all, _, err := e.alerts.List(e.ctx, "", store.ListParams{})
+	all, _, err := e.alerts.List(e.ctx, store.AlertFilter{}, store.ListParams{})
 	if err != nil {
 		t.Fatal(err)
 	}

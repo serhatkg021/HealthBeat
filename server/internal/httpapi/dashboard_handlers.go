@@ -17,6 +17,7 @@ type dashboardSummaryResponse struct {
 	OpenAlerts         int `json:"open_alerts"`
 	OpenCriticalAlerts int `json:"open_critical_alerts"`
 	OpenWarningAlerts  int `json:"open_warning_alerts"`
+	OpenInfoAlerts     int `json:"open_info_alerts"`
 }
 
 // handleDashboardSummary, panelin genel bakış ekranını besler (bkz.
@@ -34,7 +35,7 @@ func (d *Deps) handleDashboardSummary(w http.ResponseWriter, r *http.Request) er
 	if err != nil {
 		return fail("dashboard summary: count hosts", err)
 	}
-	critical, warning, err := d.alerts.CountOpenByLevel(r.Context(), hostIDs)
+	open, err := d.alerts.CountOpenByLevel(r.Context(), hostIDs)
 	if err != nil {
 		return fail("dashboard summary: count alerts", err)
 	}
@@ -43,9 +44,10 @@ func (d *Deps) handleDashboardSummary(w http.ResponseWriter, r *http.Request) er
 		TotalHosts:         online + offline,
 		OnlineHosts:        online,
 		OfflineHosts:       offline,
-		OpenAlerts:         critical + warning,
-		OpenCriticalAlerts: critical,
-		OpenWarningAlerts:  warning,
+		OpenAlerts:         open.Critical + open.Warning + open.Info,
+		OpenCriticalAlerts: open.Critical,
+		OpenWarningAlerts:  open.Warning,
+		OpenInfoAlerts:     open.Info,
 	})
 	return nil
 }
@@ -97,14 +99,14 @@ func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) e
 		if hosts, err = d.hosts.ListAll(r.Context()); err != nil {
 			return fail("list hosts", err)
 		}
-		if alerts, _, err = d.alerts.List(r.Context(), model.AlertStatusOpen, store.ListParams{}); err != nil {
+		if alerts, _, err = d.alerts.List(r.Context(), store.AlertFilter{Status: model.AlertStatusOpen}, store.ListParams{}); err != nil {
 			return fail("list alerts", err)
 		}
 	} else {
 		if hosts, err = d.hosts.ListByIDs(r.Context(), hostIDs); err != nil {
 			return fail("list hosts", err)
 		}
-		if alerts, _, err = d.alerts.ListForHosts(r.Context(), model.AlertStatusOpen, hostIDs, store.ListParams{}); err != nil {
+		if alerts, _, err = d.alerts.ListForHosts(r.Context(), store.AlertFilter{Status: model.AlertStatusOpen}, hostIDs, store.ListParams{}); err != nil {
 			return fail("list alerts", err)
 		}
 	}

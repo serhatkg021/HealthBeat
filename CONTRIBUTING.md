@@ -70,7 +70,7 @@ git cherry-pick <düzeltme-commit'i>                # düzeltme önce main'da (P
 git tag agent/v1.0.1 && git push origin release/agent-1.0 agent/v1.0.1
 ```
 
-Sonra değişiklik günlüğünün `main`'a da işlendiğini doğrula, panelde Ayarlar → Agent sürümleri'ni 1.0.1 yap; dalı sil. `main` zaten yayınlanabilirse
+Sonra değişiklik günlüğünün `main`'a da işlendiğini doğrula, panelde Ayarlar → Sistem Ayarları → Agent sürümleri'ni 1.0.1 yap; dalı sil. `main` zaten yayınlanabilirse
 release dalı açma: doğrudan `main`'dan etiketle.
 
 ## 6. GitHub ayarları (bir kez)

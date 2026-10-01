@@ -153,7 +153,7 @@ services:
 
   # Yalnızca geliştirme/deneme için yakalayıcı SMTP: `docker compose --profile mail up -d`. Gönderilen e-postalar
   # gerçekten iletilmez; http://localhost:8025 adresindeki gelen kutusunda görünür. Kullanmak için panelde Ayarlar →
-  # Bildirim kanalları: sunucu mailpit, port 1025, gönderen healthbeat@localhost; Ayarlar → Panel adresi: https://localhost.
+  # Bildirim kanalları: sunucu mailpit, port 1025, gönderen healthbeat@localhost; Ayarlar → Sistem Ayarları → Panel adresi: https://localhost.
   mailpit:
     image: axllent/mailpit:v1.21.8
     profiles: ["mail"]

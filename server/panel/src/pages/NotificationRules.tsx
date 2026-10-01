@@ -166,7 +166,7 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
               ))}
             </select>
             {!channelUsable && options.length > 0 && (
-              <p className="form-hint">Bu kanal kapalı ya da ayarı yapılmamış; süper admin Ayarlar → Bildirim kanalları’ndan açabilir.</p>
+              <p className="form-hint">Bu kanal kapalı ya da ayarı yapılmamış; süper admin Ayarlar → Sistem Ayarları → Bildirim kanalları’ndan açabilir.</p>
             )}
           </div>
           <div className="form-row">

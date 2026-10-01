@@ -349,6 +349,7 @@ export interface DashboardSummary {
   open_alerts: number
   open_critical_alerts: number
   open_warning_alerts: number
+  open_info_alerts: number
 }
 
 export interface DiskAlertSettings {

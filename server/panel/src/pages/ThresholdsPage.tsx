@@ -93,7 +93,8 @@ export function ThresholdsPage() {
   return (
     <div className="page-readable">
       <PageHeader
-        title="Eşikler"
+        back={{ to: '/settings', label: 'Ayarlar' }}
+        title="Sistem Eşikleri"
         subtitle="Kendi değeri olmayan tüm sunucuların kullandığı varsayılan alert eşikleri"
       />
       <div className="notice notice-info">

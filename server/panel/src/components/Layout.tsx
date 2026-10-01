@@ -1,49 +1,81 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import {
-  Activity,
-  Bell,
-  Building2,
-  KeyRound,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  ScrollText,
-  Server,
-  Settings,
-  SlidersHorizontal,
-  Users,
-  X,
-  type LucideIcon,
-} from 'lucide-react'
+import { Activity, Bell, Building2, ChevronDown, LayoutDashboard, Menu, Server, Settings, Users, X, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { SETTINGS_PATH, groupHasActive, inSettingsArea, navigation, type NavGroup, type NavItem } from '../navigation'
 import { pageTitle } from '../pageTitle'
 import { versionInfo } from '../versionInfo'
+import { AlertCounters } from './AlertCounters'
+import { HeaderSlotContext } from './headerSlot'
+import { ProfileMenu } from './ProfileMenu'
+import { SystemTicker } from './SystemTicker'
 import { useServerVersion } from './useAgentPolicy'
 import { useDocumentTitle } from './useDocumentTitle'
-import { NotificationGapBanner } from './NotificationGapBanner'
+import { useOpenAlertCounts } from './useOpenAlertCounts'
+import { useScrollStrips } from './useScrollStrips'
+import { useSystemNotices } from './useSystemNotices'
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: 'Süper Admin',
-  org_admin: 'Organizasyon Admin',
-  operator: 'Operatör',
+const ICONS: Record<string, LucideIcon> = {
+  ozet: LayoutDashboard,
+  sunucularim: Server,
+  alertler: Bell,
+  organizasyonlar: Building2,
+  kullanicilar: Users,
 }
 
-function SideLink({ to, icon: Icon, end, children }: { to: string; icon: LucideIcon; end?: boolean; children: string }) {
+const COLLAPSED_KEY = 'healthbeat_nav_collapsed'
+
+function loadCollapsed(): string[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function SideLink({ item }: { item: NavItem }) {
+  const Icon = ICONS[item.id]
   return (
-    <NavLink to={to} end={end} className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}>
-      <Icon size={16} strokeWidth={1.75} />
-      {children}
+    <NavLink to={item.to} end={item.end} className={({ isActive }) => `sidebar-link${isActive ? ' active' : ''}`}>
+      {Icon && <Icon size={16} strokeWidth={1.75} />}
+      {item.label}
     </NavLink>
   )
 }
 
+// Açılır menü grubu. Kapalı tercih tarayıcıda saklanır; grubun bir sayfası açıkken grup açık görünür.
+function SideGroup({ group, collapsed, onToggle }: { group: NavGroup; collapsed: boolean; onToggle: () => void }) {
+  const active = groupHasActive(group, useLocation().pathname)
+  const open = !collapsed || active
+  const listId = `nav-group-${group.id}`
+  return (
+    <div className="sidebar-section">
+      <button type="button" className="sidebar-group" aria-expanded={open} aria-controls={listId} onClick={onToggle}>
+        {group.label}
+        <ChevronDown size={14} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <div id={listId} className="sidebar-group-items" hidden={!open}>
+        {group.items.map((item) => (
+          <SideLink key={item.id} item={item} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function Layout() {
-  const { user, logout, can } = useAuth()
+  const { user, can } = useAuth()
+  const { pathname } = useLocation()
   const [navOpen, setNavOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(loadCollapsed)
+  const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null)
   // Detay sayfaları (sunucu, organizasyon) başlığı kendileri verir; burada yalnızca sabit rotalar.
-  useDocumentTitle(pageTitle(useLocation().pathname))
+  useDocumentTitle(pageTitle(pathname))
+  useScrollStrips()
   const version = versionInfo(typeof __PANEL_VERSION__ === 'string' ? __PANEL_VERSION__ : 'dev', useServerVersion())
+  const counts = useOpenAlertCounts(!!user && can('alert.view') && can('dashboard.view'))
+  const notices = useSystemNotices(!!user && can('settings.view'), version.mismatch ? version.title : null)
 
   useEffect(() => {
     document.body.classList.toggle('nav-open', navOpen)
@@ -60,29 +92,18 @@ export function Layout() {
 
   if (!user) return null
 
-  // Organizasyonları göremeyen (operatör) kendisine atanmış sunucuları "Sunucularım"da görür.
-  const canSeeOrganizations = can('organization.view')
+  const nav = navigation(can)
+
+  function toggleGroup(id: string) {
+    setCollapsed((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      localStorage.setItem(COLLAPSED_KEY, JSON.stringify(next))
+      return next
+    })
+  }
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label="Menüyü aç"
-          aria-expanded={navOpen}
-          aria-controls="sidebar"
-          onClick={() => setNavOpen(true)}
-        >
-          <Menu size={20} strokeWidth={1.75} />
-        </button>
-        <div className="brand">
-          <span className="brand-mark">
-            <Activity size={16} strokeWidth={2.25} />
-          </span>
-          HealthBeat
-        </div>
-      </header>
       <div className={`scrim${navOpen ? ' open' : ''}`} onClick={() => setNavOpen(false)} aria-hidden="true" />
 
       <nav
@@ -107,80 +128,53 @@ export function Layout() {
           )}
         </div>
 
-        <div className="sidebar-group">İzleme</div>
-        <SideLink to="/" end icon={LayoutDashboard}>
-          Özet
-        </SideLink>
-        {!canSeeOrganizations && (
-          <SideLink to="/my-hosts" icon={Server}>
-            Sunucularım
-          </SideLink>
-        )}
-        {can('alert.view') && (
-          <SideLink to="/alerts" icon={Bell}>
-            Alert'ler
-          </SideLink>
-        )}
+        {nav.top.map((item) => (
+          <SideLink key={item.id} item={item} />
+        ))}
+        {nav.groups.map((group) => (
+          <SideGroup key={group.id} group={group} collapsed={collapsed.includes(group.id)} onToggle={() => toggleGroup(group.id)} />
+        ))}
 
-        <div className="sidebar-group">Yönetim</div>
-        {canSeeOrganizations && (
-          <SideLink to="/organizations" icon={Building2}>
-            Organizasyonlar
-          </SideLink>
-        )}
-        {can('threshold.view') && (
-          <SideLink to="/thresholds" icon={SlidersHorizontal}>
-            Eşikler
-          </SideLink>
-        )}
-        {can('user.view') && (
-          <SideLink to="/users" icon={Users}>
-            Kullanıcılar
-          </SideLink>
-        )}
-        {can('audit.view') && (
-          <SideLink to="/audit" icon={ScrollText}>
-            Denetim Kaydı
-          </SideLink>
-        )}
-        {can('settings.view') && (
-          <SideLink to="/settings" icon={Settings}>
-            Ayarlar
-          </SideLink>
-        )}
-
-        <div className="sidebar-footer">
-          <div className={`version-note${version.mismatch ? ' mismatch' : ''}`} title={version.title}>
-            <span>Panel {version.panel}</span>
-            <span aria-hidden="true">·</span>
-            <span>Server {version.server}</span>
-            {version.mismatch && <span className="visually-hidden"> — {version.title}</span>}
+        {nav.settings.length > 0 && (
+          <div className="sidebar-footer">
+            <NavLink to={SETTINGS_PATH} className={`sidebar-link${inSettingsArea(pathname) ? ' active' : ''}`}>
+              <Settings size={16} strokeWidth={1.75} />
+              Ayarlar
+            </NavLink>
           </div>
-          <div className="user-chip">
-            <span className="avatar" aria-hidden="true">
-              {user.email.charAt(0)}
-            </span>
-            <div className="user-chip-text">
-              <div className="user-chip-email" title={user.email}>
-                {user.email}
-              </div>
-              <div className="user-chip-role">{ROLE_LABELS[user.role] ?? user.role}</div>
-            </div>
-          </div>
-          <SideLink to="/change-password" icon={KeyRound}>
-            Şifre değiştir
-          </SideLink>
-          <button type="button" className="sidebar-link sidebar-button" onClick={logout}>
-            <LogOut size={16} strokeWidth={1.75} />
-            Çıkış yap
-          </button>
-        </div>
+        )}
       </nav>
 
-      <main className="main">
-        {can('settings.view') && <NotificationGapBanner />}
-        <Outlet />
-      </main>
+      <div className="shell-body">
+        <header className="topbar">
+          <button
+            type="button"
+            className="icon-btn nav-toggle"
+            aria-label="Menüyü aç"
+            aria-expanded={navOpen}
+            aria-controls="sidebar"
+            onClick={() => setNavOpen(true)}
+          >
+            <Menu size={20} strokeWidth={1.75} />
+          </button>
+          <div className="topbar-title" ref={setTitleSlot} />
+          {counts && <AlertCounters counts={counts} />}
+          <ProfileMenu />
+        </header>
+
+        <main className="main">
+          <HeaderSlotContext.Provider value={titleSlot}>
+            <Outlet />
+          </HeaderSlotContext.Provider>
+        </main>
+
+        <footer className="statusbar">
+          <span className={`version-note${version.mismatch ? ' mismatch' : ''}`} title={version.title}>
+            {version.label}
+          </span>
+          <SystemTicker notices={notices} />
+        </footer>
+      </div>
     </div>
   )
 }

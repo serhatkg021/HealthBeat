@@ -42,7 +42,14 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   hemen bir e-posta yolluyor; kanal başına sistem sahiplerine hangi seviyeden itibaren gönderileceği seçiliyor (ör. e-posta
   uyarı, SMS yalnızca kritik). API: `GET /api/v1/notification-channels`, `PATCH …/{channel}`, `POST …/{channel}/test` (başarısız
   denemede `502`, `code: channel_test_failed`), kural ekranı için `GET …/options` (`notification.view`).
-- **Panel: "bildirimler kimseye gitmiyor" uyarı bandı:** e-posta kanalı kapalıysa ya da e-posta alan bir sistem sahibi yoksa.
+- **Panel: "bildirimler kimseye gitmiyor" uyarısı:** e-posta kanalı kapalıysa ya da e-posta alan bir sistem sahibi yoksa alt
+  çubuktaki uyarı şeridinde görünür.
+- **Panel: sabit üst çubuk.** Sayfa başlığı (geri okuyla) üstte sabit duruyor; sağında açık alert'lerin bilgi / uyarı / kritik
+  sayıları (tıklanınca o seviyenin açık alert'leri) ve hesap menüsü (şifre değiştir, çıkış yap) var.
+- **Panel: sabit alt çubuk.** Solda tek sürüm satırı (`HealthBeat Server X.Y.Z`), yanında kayan sistem uyarıları şeridi
+  (üzerine gelince durur; "hareketi azalt" tercihinde kaymaz). Panel ve server sürümü farklıysa uyarı burada çıkıyor.
+- **Alert'ler seviyeye göre süzülüyor:** `GET /api/v1/alerts?level=info|warning|critical`; panelde Alert'ler sayfasında seviye
+  süzgeci (`?seviye=`). `GET /api/v1/dashboard/summary` yanıtına `open_info_alerts` eklendi.
 - **Ayar değişiklikleri loglanıyor ve denetim kaydına yazılıyor:** `settings.update`, `settings.reset`,
   `notification_channel.update`, `notification_channel.test`, `notification_owner.create|update|delete` (eski ve yeni
   değerleriyle; şifre yalnızca "ayarlı mı" olarak). Panel: denetim kaydında "Ayarlar" ve "Bildirim" filtreleri.
@@ -64,9 +71,21 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   token süreleri, hız sınırları, log seviyesi, hata gövdesi loglama ve log dosyası sınırları (yukarıdaki 19 değişken).
   Varsayılanlar aynı kaldı; token süreleri artık sınırlı (erişim 1 dk – 24 saat, oturum 1 saat – 90 gün ve erişimden uzun).
 - **"En güncel agent" elle yönetiliyor:** server'a gömülü değil; ilk kurulumda `1.0.0`, yeni bir agent yayınlanınca
-  Ayarlar → Agent sürümleri'nden giriliyor. `scripts/release.sh agent` artık server'da bir sürüm kontrolü yapmıyor.
+  Ayarlar → Sistem Ayarları → Agent sürümleri'nden giriliyor. `scripts/release.sh agent` artık server'da bir sürüm kontrolü yapmıyor.
 - **Log dosyası açılışta, ayarlar okunana kadar hiçbir dosya silmiyor** (panelde uzatılmış bir log geçmişi yeniden
   başlatmada varsayılan sınırla silinmesin diye). Açılış ve migration logları her zaman `info` seviyesinde.
+
+- **Panel: sol menü yeniden düzenlendi.** Özet ve Alert'ler doğrudan bağlantı; Organizasyonlar ve Kullanıcılar açılır
+  "Yönetim" grubunda; Ayarlar en altta sabit. Ayarlar artık bir giriş sayfası: Sistem Eşikleri, Denetim Kaydı ve Sistem
+  Ayarları kartları (her biri kendi iznine göre görünür). Sistem ayarlarının adresi `/settings/system` oldu.
+- `GET /api/v1/dashboard/summary` yanıtındaki `open_alerts` artık bilgi seviyesindeki açık alert'leri de sayıyor.
+- **Panel: dar ekranda yana kayan menüler** (sekmeler, bölüm menüleri, süzgeçler) seçili öğeyi görünür alana getiriyor,
+  görünmeyen öğe kalan kenarı solduruyor ve fare tekerleğiyle kayıyor.
+
+### Düzeltildi
+- Panel (mobil): bildirim kurallarında uzun e-posta adresi sayfayı yana kaydırmıyor; Sistem sahipleri kartında açıklama ile
+  düğme üst üste binmiyor; Özet'teki sunucu araması kartın dışına taşmıyor; çok satırlı metin kutuları diğer alanlarla aynı
+  yazı tipini kullanıyor.
 
 ### Kaldırıldı
 - 19 ortam değişkeni (bkz. "Güncellemeden önce") ve `version.LatestAgent`.

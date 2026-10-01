@@ -14,6 +14,7 @@ import { ThresholdsPage } from './pages/ThresholdsPage'
 import { UsersPage } from './pages/UsersPage'
 import { AuditPage } from './pages/AuditPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { SettingsHubPage } from './pages/SettingsHubPage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ResetPasswordPage } from './pages/ResetPasswordPage'
@@ -79,7 +80,14 @@ export default function App() {
             <Route path="/my-hosts" element={<MyHostsPage />} />
             <Route path="/hosts/:id" element={<HostDetailPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
-            <Route path="/thresholds" element={<ThresholdsPage />} />
+            <Route
+              path="/thresholds"
+              element={
+                <RequirePermission permission="threshold.view">
+                  <ThresholdsPage />
+                </RequirePermission>
+              }
+            />
             <Route
               path="/users"
               element={
@@ -96,8 +104,9 @@ export default function App() {
                 </RequirePermission>
               }
             />
+            <Route path="/settings" element={<SettingsHubPage />} />
             <Route
-              path="/settings"
+              path="/settings/system"
               element={
                 <RequirePermission permission="settings.view">
                   <SettingsPage />

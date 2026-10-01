@@ -213,33 +213,43 @@ func (s *Alerts) Acknowledge(ctx context.Context, id, by uuid.UUID) (model.Alert
 // (arama title'ı da kapsar); alertColumns tablo öneki olmadan alias'sız sorgularda kalır.
 const alertColumnsJoined = `a.id, a.host_id, a.alert_type, COALESCE(a.subject, ''), a.level, a.status, a.value, a.threshold, a.created_at, a.acknowledged_at, a.acknowledged_by, a.resolved_at`
 
-// List, isteğe bağlı bir durum, bir arama (ListParams.Search — subject/alert_type/title'da
+// AlertFilter, alert listesinin isteğe bağlı süzgeçleridir; boş alan "hepsi" demektir.
+type AlertFilter struct {
+	Status string
+	Level  string
+}
+
+// List, isteğe bağlı bir durum ve seviye, bir arama (ListParams.Search — subject/alert_type/title'da
 // alt dize) ve sayfalama ile alert'leri döndürür. total, filtreye uyan toplam satır sayısıdır;
 // Limit==0 ise tüm satırlar döner ve total = len(sonuç).
-func (s *Alerts) List(ctx context.Context, status string, p ListParams) ([]model.Alert, int, error) {
-	return s.listWhere(ctx, "", nil, status, p)
+func (s *Alerts) List(ctx context.Context, f AlertFilter, p ListParams) ([]model.Alert, int, error) {
+	return s.listWhere(ctx, "", nil, f, p)
 }
 
 // ListForHosts ayrıca hostIDs ile kısıtlar — org_admin/operator kapsamı.
-func (s *Alerts) ListForHosts(ctx context.Context, status string, hostIDs []uuid.UUID, p ListParams) ([]model.Alert, int, error) {
+func (s *Alerts) ListForHosts(ctx context.Context, f AlertFilter, hostIDs []uuid.UUID, p ListParams) ([]model.Alert, int, error) {
 	if len(hostIDs) == 0 {
 		return []model.Alert{}, 0, nil
 	}
-	return s.listWhere(ctx, "a.host_id = ANY($%d)", []any{hostIDs}, status, p)
+	return s.listWhere(ctx, "a.host_id = ANY($%d)", []any{hostIDs}, f, p)
 }
 
 // listWhere, List ve ListForHosts'ın paylaştığı sorgu kurucusudur. scopeClause verilirse (bir
 // tane %d yer tutucusuyla) scopeArgs[0] ile birlikte WHERE'e eklenir.
-func (s *Alerts) listWhere(ctx context.Context, scopeClause string, scopeArgs []any, status string, p ListParams) ([]model.Alert, int, error) {
+func (s *Alerts) listWhere(ctx context.Context, scopeClause string, scopeArgs []any, f AlertFilter, p ListParams) ([]model.Alert, int, error) {
 	var conds []string
 	var args []any
 	if scopeClause != "" {
 		args = append(args, scopeArgs...)
 		conds = append(conds, fmt.Sprintf(scopeClause, len(args)))
 	}
-	if status != "" {
-		args = append(args, status)
+	if f.Status != "" {
+		args = append(args, f.Status)
 		conds = append(conds, fmt.Sprintf("a.status = $%d", len(args)))
+	}
+	if f.Level != "" {
+		args = append(args, f.Level)
+		conds = append(conds, fmt.Sprintf("a.level = $%d", len(args)))
 	}
 	if p.Search != "" {
 		args = append(args, p.SearchPattern())
@@ -291,9 +301,14 @@ const alertNotificationStatus = `(SELECT CASE
 	    WHEN count(*) > 0 THEN 'sent'
 	END FROM notification_outbox o WHERE o.alert_id = a.id)`
 
+// OpenAlertCounts, açık (onaylanmamış, çözülmemiş) alert'lerin seviye başına sayısıdır.
+type OpenAlertCounts struct {
+	Critical, Warning, Info int
+}
+
 // CountOpenByLevel dashboard özetini besler — Hosts.CountByStatus ile aynı
 // ids==nil-kapsamsız-demektir kuralı.
-func (s *Alerts) CountOpenByLevel(ctx context.Context, ids []uuid.UUID) (critical, warning int, err error) {
+func (s *Alerts) CountOpenByLevel(ctx context.Context, ids []uuid.UUID) (OpenAlertCounts, error) {
 	query := `SELECT level, count(*) FROM alerts WHERE status = 'open' GROUP BY level`
 	args := []any{}
 	if ids != nil {
@@ -303,24 +318,27 @@ func (s *Alerts) CountOpenByLevel(ctx context.Context, ids []uuid.UUID) (critica
 
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
-		return 0, 0, err
+		return OpenAlertCounts{}, err
 	}
 	defer rows.Close()
 
+	var c OpenAlertCounts
 	for rows.Next() {
 		var level string
 		var count int
 		if err := rows.Scan(&level, &count); err != nil {
-			return 0, 0, err
+			return OpenAlertCounts{}, err
 		}
 		switch level {
-		case "critical":
-			critical = count
-		case "warning":
-			warning = count
+		case model.AlertLevelCritical:
+			c.Critical = count
+		case model.AlertLevelWarning:
+			c.Warning = count
+		case model.AlertLevelInfo:
+			c.Info = count
 		}
 	}
-	return critical, warning, rows.Err()
+	return c, rows.Err()
 }
 
 // PurgeResolvedBefore, cutoff'tan önce çözülmüş alert'leri parti parti siler ve kaç tane sildiğini döndürür (bkz.

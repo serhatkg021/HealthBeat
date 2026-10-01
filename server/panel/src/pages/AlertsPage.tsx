@@ -1,10 +1,11 @@
 import { alertReading } from './alertText'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useTab } from '../components/useTab'
 import { alertsApi, hostsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import { usePagedQuery } from '../api/usePagedQuery'
-import type { Alert, AlertStatus } from '../types/api'
+import type { Alert, AlertLevel, AlertStatus } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel } from '../labels'
 import { PageHeader } from '../components/PageHeader'
@@ -21,11 +22,24 @@ const STATUS_TABS: { value: AlertStatus | ''; label: string }[] = [
   { value: '', label: 'Tümü' },
 ]
 
+// Seviye süzgeci adreste tutulur (`?seviye=critical`): üst çubuktaki sayaçlar doğrudan o seviyeye bağlanır.
+const LEVEL_PARAM = 'seviye'
+const LEVEL_ALL = 'tumu'
+const LEVEL_TABS: { value: AlertLevel | typeof LEVEL_ALL; label: string }[] = [
+  { value: LEVEL_ALL, label: 'Tüm seviyeler' },
+  { value: 'info', label: 'Bilgi' },
+  { value: 'warning', label: 'Uyarı' },
+  { value: 'critical', label: 'Kritik' },
+]
+const LEVEL_IDS = LEVEL_TABS.map((t) => t.value)
+
 const PAGE_SIZE = 20
 
 export function AlertsPage() {
   const { can } = useAuth()
   const [status, setStatus] = useState<AlertStatus | ''>('open')
+  const [levelTab, setLevelTab] = useTab(LEVEL_IDS, LEVEL_ALL, LEVEL_PARAM)
+  const level = levelTab === LEVEL_ALL ? undefined : (levelTab as AlertLevel)
   const [hostTitles, setHostTitles] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<Alert | null>(null)
 
@@ -41,9 +55,13 @@ export function AlertsPage() {
     error,
     setError,
     reload,
-  } = usePagedQuery((p) => alertsApi.list({ status: status || undefined, q: p.q, limit: p.limit, offset: p.offset }), PAGE_SIZE, [
+  } = usePagedQuery((p) => alertsApi.list({ status: status || undefined, level, q: p.q, limit: p.limit, offset: p.offset }), PAGE_SIZE, [
     status,
+    level,
   ])
+
+  // Süzgeç değişince (üst çubuktaki sayaçtan da gelebilir) ilk sayfaya dönülür.
+  useEffect(() => setPage(1), [status, level, setPage])
 
   // Görüntülenen sayfadaki host_id'ler için sunucu adı çöz — yalnızca henüz bilinmeyenler için.
   useEffect(() => {
@@ -92,6 +110,13 @@ export function AlertsPage() {
         <div className="segmented" role="group" aria-label="Durum süzgeci">
           {STATUS_TABS.map((tab) => (
             <button key={tab.value} type="button" aria-pressed={status === tab.value} onClick={() => setStatus(tab.value)}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="segmented" role="group" aria-label="Seviye süzgeci">
+          {LEVEL_TABS.map((tab) => (
+            <button key={tab.value} type="button" aria-pressed={levelTab === tab.value} onClick={() => setLevelTab(tab.value)}>
               {tab.label}
             </button>
           ))}

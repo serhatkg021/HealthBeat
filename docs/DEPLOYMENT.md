@@ -87,8 +87,8 @@ kullanılmış/süresi dolmuş kayıtlar saatlik işle temizlenir. Kullanıcı y
 **e-posta hesabı ele geçirilirse şifre de ele geçirilir**, bu yüzden yönetici hesaplarında güvenilir bir kutu kullan.
 
 Denemek için gerçek SMTP gerekmez: `docker compose --profile mail up -d` bir **Mailpit** yakalayıcısı başlatır
-(e-postalar iletilmez, `http://localhost:8025` gelen kutusunda görünür). Panelde Ayarlar → Bildirim kanalları'nda sunucu
-`mailpit`, port `1025`, gönderen `healthbeat@localhost` girip kanalı aç ve "Deneme gönder" ile dene; Ayarlar → Panel
+(e-postalar iletilmez, `http://localhost:8025` gelen kutusunda görünür). Panelde Ayarlar → Sistem Ayarları → Bildirim kanalları'nda sunucu
+`mailpit`, port `1025`, gönderen `healthbeat@localhost` girip kanalı aç ve "Deneme gönder" ile dene; Ayarlar → Sistem Ayarları → Panel
 adresi'ne `https://localhost` yaz. Yeniden başlatma gerekmez.
 
 **Alert e-postaları kalıcı bir kuyruktan gönderilir:** metrik alma (push/pull) yolunu bloklamazlar; alert değişikliğiyle
@@ -109,13 +109,13 @@ Server logu stderr'e yazar (Docker'da `docker compose logs server`); her satır�
   `ip` bulunur.
 - **İstek satırları:** metot, yol, durum ve süre (`duration_ms`, milisaniye; ör. `duration_ms > 500` ile yavaş istekler
   süzülür). `5xx` → `ERROR`, `4xx` → `WARN`, diğerleri `INFO`; başarılı agent raporları (`POST /api/v1/metrics`)
-  ve `/healthz` yalnızca log seviyesi `debug`'dayken görünür (Ayarlar → Loglama) (150+ agent ~30 sn'de bir rapor verir).
+  ve `/healthz` yalnızca log seviyesi `debug`'dayken görünür (Ayarlar → Sistem Ayarları → Loglama) (150+ agent ~30 sn'de bir rapor verir).
 - **Hata ayrıntısı:** hata alan isteklerde veriyle ilgili sorunlar yeniden üretmeden incelenebilsin diye `query`, izin
   listesindeki başlıklar (`req_headers`: Content-Type, User-Agent, agent sürümü vb.), istek gövdesi (`req_body`) ve
   hata yanıtı (`resp_body`) de yazılır; en fazla "hata isteklerinde gövde" ayarı kadar bayt (kesilirse `req_body_truncated=true`).
   Adında `password`, `token`, `secret` geçen alanlar `[REDACTED]` olur; `Authorization` ve `Cookie` başlıkları hiç
   yazılmaz. Gövdeler e-posta adresi gibi kişisel veri içerebilir: log erişimini buna göre sınırla ya da
-  Ayarlar → Loglama'da o ayarı `0` yaparak kapat.
+  Ayarlar → Sistem Ayarları → Loglama'da o ayarı `0` yaparak kapat.
 - **Arka plan işleri:** alert motoru, pull scheduler, offline izleyici ve retention da seviyeli ve alanlı yazar
   (`host_id`, `alert_id`, `metric` …): veritabanı hataları ve gönderilemeyen e-postalar `ERROR`, beklenen operasyonel
   durumlar (ulaşılamayan pull agent, dolan e-posta kuyruğu) `WARN`. Bir agent raporu sırasında yazılan alert motoru
@@ -138,7 +138,7 @@ satırları birlikte — o dizindeki günlük dosyalara da yazılır:
 ```
 
 - **Saklama:** bugün dahil son "log dosyası geçmişi" kadar gün (varsayılan 14) tutulur; toplam boyut "log dosyaları toplamı"nı
-  (varsayılan 1024 MB) aşarsa en eski günler daha erken silinir (ikisi de Ayarlar → Loglama). Server yeniden başlarsa aynı günün dosyasına devam eder.
+  (varsayılan 1024 MB) aşarsa en eski günler daha erken silinir (ikisi de Ayarlar → Sistem Ayarları → Loglama). Server yeniden başlarsa aynı günün dosyasına devam eder.
   Gün sınırı container saatine göredir (varsayılan UTC; log zaman damgaları da UTC).
 - **Kalıcılık (Docker Compose):** dosyalar `logs` volume'ündedir: `docker compose down` / `restart` ve sürüm
   güncellemeleri (`up -d --build`, yeni imaj) onları silmez; yalnızca `docker compose down -v` siler. `docker compose logs`
@@ -380,10 +380,10 @@ olmadığından CORS'tan etkilenmez.
 - [ ] Server bir proxy arkasındaysa `TRUSTED_PROXIES` yalnızca o proxy'yi içeriyor; iki farklı istemciden giriş yapılıp
       denetim kaydında (`/audit`) iki farklı IP görüldü
 - [ ] Panel gerçek bir sertifika sunuyor (kendinden imzalı değil) — bkz. "Gerçek sertifika kullanmak"
-- [ ] Ayarlar → Bildirim kanalları'nda e-posta kanalı kuruldu, "Deneme gönder" ile doğrulandı ve kanal açıldı
-- [ ] Ayarlar → Sistem sahipleri'ne alert'leri alacak kişiler/ortak adresler eklendi (panelde uyarı bandı kalmadı) ve bir test
+- [ ] Ayarlar → Sistem Ayarları → Bildirim kanalları'nda e-posta kanalı kuruldu, "Deneme gönder" ile doğrulandı ve kanal açıldı
+- [ ] Ayarlar → Sistem Ayarları → Sistem sahipleri'ne alert'leri alacak kişiler/ortak adresler eklendi (alt çubuktaki uyarı şeridi kalmadı) ve bir test
       alert'iyle e-postanın gittiği görüldü
-- [ ] Ayarlar → Panel adresi girildi; "Şifremi unuttum" bir hesapla uçtan uca denendi
+- [ ] Ayarlar → Sistem Ayarları → Panel adresi girildi; "Şifremi unuttum" bir hesapla uçtan uca denendi
 - [ ] `.env`'de 2.0.0'da taşınan eski değişken kalmadı (açılış logunda `is no longer read` uyarısı yok)
 - [ ] Agent'lar `insecure_skip_verify: false` ile bağlanıyor (özel CA kullanıyorsan `ca_cert_file` ile)
 - [ ] Pull agent kullanılıyorsa `PULL_CA_CERT_FILE` kararı verildi (agent sertifikalarında IP SAN'ı unutma)
