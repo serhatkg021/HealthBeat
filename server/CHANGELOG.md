@@ -48,6 +48,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   sayıları (tıklanınca o seviyenin açık alert'leri) ve hesap menüsü (şifre değiştir, çıkış yap) var.
 - **Panel: sabit alt çubuk.** Solda tek sürüm satırı (`HealthBeat Server X.Y.Z`), yanında kayan sistem uyarıları şeridi
   (üzerine gelince durur; "hareketi azalt" tercihinde kaymaz). Panel ve server sürümü farklıysa uyarı burada çıkıyor.
+- **Profil sayfası:** herkes kendi görünen adını ve telefonunu değiştirebiliyor (hesap menüsü → Profil); e-posta ve rolü
+  yalnızca bir yönetici değiştirir. API: `PATCH /api/v1/me` (`full_name`, `phone`; izin gerekmez, denetim kaydında
+  `user.update_self`).
 - **Alert'ler seviyeye göre süzülüyor:** `GET /api/v1/alerts?level=info|warning|critical`; panelde Alert'ler sayfasında seviye
   süzgeci (`?seviye=`). `GET /api/v1/dashboard/summary` yanıtına `open_info_alerts` eklendi.
 - **Ayar değişiklikleri loglanıyor ve denetim kaydına yazılıyor:** `settings.update`, `settings.reset`,

@@ -13,6 +13,7 @@ const TITLES: Record<string, string> = {
   '/settings': 'Ayarlar',
   '/settings/system': 'Sistem Ayarları',
   '/my-hosts': 'Sunucularım',
+  '/profile': 'Profil',
   '/change-password': 'Şifre değiştir',
   '/login': 'Giriş',
   '/forgot-password': 'Şifremi unuttum',

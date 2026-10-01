@@ -10,6 +10,8 @@ interface AuthContextValue {
   error: string | null
   login: (email: string, password: string) => Promise<void>
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>
+  // updateProfile, kişinin kendi adını ve telefonunu günceller; saklı kullanıcı (ve üst çubuktaki ad) hemen yenilenir.
+  updateProfile: (input: { full_name?: string; phone?: string }) => Promise<User>
   logout: () => void
   // can, oturumdaki kullanıcının izni olup olmadığıdır (bkz. permissions.ts).
   can: (permission: Permission) => boolean
@@ -87,6 +89,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(me)
   }, [])
 
+  const updateProfile = useCallback(async (input: { full_name?: string; phone?: string }) => {
+    const me = await meApi.update(input)
+    storeUser(me)
+    setUser(me)
+    return me
+  }, [])
+
   const logout = useCallback(() => {
     void revokeSession() // refresh token'ı, aşağıda temizlenmeden önce eşzamanlı olarak okur
     clearTokens()
@@ -97,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const can = useCallback((permission: Permission) => hasPermission(user, permission), [user])
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, changePassword, logout, can }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, loading, error, login, changePassword, updateProfile, logout, can }}>{children}</AuthContext.Provider>
   )
 }
 

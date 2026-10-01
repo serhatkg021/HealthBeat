@@ -19,6 +19,7 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/reset-password", handle(d.handleResetPassword))
 
 	mux.HandleFunc("GET /api/v1/me", d.requireAuthEvenIfPasswordChangeDue(handle(d.handleGetMe)))
+	mux.HandleFunc("PATCH /api/v1/me", d.requireAuth(handle(d.handleUpdateMe)))
 	mux.HandleFunc("POST /api/v1/me/password", d.requireAuthEvenIfPasswordChangeDue(handle(d.handleChangeOwnPassword)))
 	mux.HandleFunc("GET /api/v1/me/hosts", d.requireAuth(handle(d.handleGetMyHosts)))
 	mux.HandleFunc("GET /api/v1/meta", d.requireAuth(d.handleMeta))
