@@ -74,6 +74,7 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 ### İç değişiklikler (davranış değişmedi)
 - `internal/settings` (ayar ve kanal servisleri: bellekte kilitsiz okuma, abonelerle yeniden başlatmadan uygulama); rate
   limiter, token servisi, saklama işi ve log dosyası çalışırken değiştirilebilir; `notify.Notifier` tek alıcılı; `version.Compare`.
+- Panel: geliştirme bağımlılıkları güncellendi — `oxlint` 1.86, `@types/node` 24.19.0.
 
 ## [1.1.0] - 2026-09-27
 
