@@ -12,7 +12,7 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-// handleListAlerts, GET /api/v1/alerts'i sunar. ?q= subject/metrik/sunucu hostname'inde alt dize
+// handleListAlerts, GET /api/v1/alerts'i sunar. ?status= ve ?level= süzer; ?q= subject/metrik/sunucu hostname'inde alt dize
 // arar; ?limit=&offset= verilmezse (geriye dönük uyumlu) kapsamdaki tüm alert'ler döner. Toplam
 // sayı X-Total-Count başlığındadır.
 func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) error {
@@ -21,6 +21,11 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) error {
 	if status != "" && status != model.AlertStatusOpen && status != model.AlertStatusAcknowledged && status != model.AlertStatusResolved {
 		return badRequest("status open, acknowledged veya resolved olmalı")
 	}
+	level := r.URL.Query().Get("level")
+	if level != "" && level != model.AlertLevelInfo && level != model.AlertLevelWarning && level != model.AlertLevelCritical {
+		return badRequest("level info, warning veya critical olmalı")
+	}
+	filter := store.AlertFilter{Status: status, Level: level}
 	p, err := parseListParams(r)
 	if err != nil {
 		return badRequest(err.Error())
@@ -51,7 +56,7 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) error {
 		if !allowed {
 			return forbidden()
 		}
-		alerts, total, err = d.alerts.ListForHosts(r.Context(), status, []uuid.UUID{hostID}, p)
+		alerts, total, err = d.alerts.ListForHosts(r.Context(), filter, []uuid.UUID{hostID}, p)
 		if err != nil {
 			return fail("list alerts", err)
 		}
@@ -65,9 +70,9 @@ func (d *Deps) handleListAlerts(w http.ResponseWriter, r *http.Request) error {
 		return fail("list alerts: resolve scope", err)
 	}
 	if hostIDs == nil { // super_admin: kapsamsız
-		alerts, total, err = d.alerts.List(r.Context(), status, p)
+		alerts, total, err = d.alerts.List(r.Context(), filter, p)
 	} else {
-		alerts, total, err = d.alerts.ListForHosts(r.Context(), status, hostIDs, p)
+		alerts, total, err = d.alerts.ListForHosts(r.Context(), filter, hostIDs, p)
 	}
 	if err != nil {
 		return fail("list alerts", err)

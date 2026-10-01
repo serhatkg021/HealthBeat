@@ -281,7 +281,7 @@ func TestOutboxAlertHistoryIsKeptAndSummarized(t *testing.T) {
 		t.Fatalf("pending entry = %+v", pending[0])
 	}
 
-	list, _, err := alerts.List(ctx, "", store.ListParams{})
+	list, _, err := alerts.List(ctx, store.AlertFilter{}, store.ListParams{})
 	if err != nil {
 		t.Fatal(err)
 	}

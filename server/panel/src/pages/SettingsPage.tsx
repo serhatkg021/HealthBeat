@@ -55,7 +55,11 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader title="Ayarlar" subtitle="Kurulum genelindeki ayarlar; değişiklikler yeniden başlatmadan uygulanır" />
+      <PageHeader
+        back={{ to: '/settings', label: 'Ayarlar' }}
+        title="Sistem Ayarları"
+        subtitle="Kurulum genelindeki ayarlar; değişiklikler yeniden başlatmadan uygulanır"
+      />
       {error && <div className="error-banner">{error}</div>}
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Ayar bölümleri">

@@ -104,7 +104,7 @@ func (d *Deps) routeChannelError(channel string) error {
 	case !personal:
 		return reject("bu kanal yalnızca sistem sahiplerine gönderir; kurallarda seçilemez")
 	case !ch.Enabled:
-		return reject("bu kanal kapalı; önce Ayarlar → Bildirim kanalları'ndan açılmalı")
+		return reject("bu kanal kapalı; önce Ayarlar → Sistem Ayarları → Bildirim kanalları'ndan açılmalı")
 	}
 	return nil
 }

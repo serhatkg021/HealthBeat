@@ -168,7 +168,7 @@ export function channelStatus(ch: Pick<ChannelInfo, 'enabled' | 'ready'>): { lab
   return { label: 'Açık', tone: 'good' }
 }
 
-// notificationGap, alert bildirimlerinin sistem sahiplerine hiç gitmediği durumu anlatır (uyarı bandı); sorun yoksa null.
+// notificationGap, alert bildirimlerinin sistem sahiplerine hiç gitmediği durumu anlatır (alt çubuktaki uyarı şeridi); sorun yoksa null.
 // Şimdilik tek kanal e-postadır: kanal kapalıysa ya da e-posta alan bir sahip yoksa kimse bilgilendirilmez.
 export function notificationGap(channels: Pick<ChannelInfo, 'channel' | 'enabled'>[], owners: Pick<NotificationOwner, 'email' | 'email_enabled'>[]): string | null {
   const email = channels.find((c) => c.channel === 'email')
@@ -177,5 +177,5 @@ export function notificationGap(channels: Pick<ChannelInfo, 'channel' | 'enabled
   return null
 }
 
-// SETTINGS_CHANGED, Ayarlar sayfasında kanal ya da sahip değiştiğinde yayılan olaydır; uyarı bandı kendini yeniler.
+// SETTINGS_CHANGED, Ayarlar sayfasında kanal ya da sahip değiştiğinde yayılan olaydır; uyarı şeridi kendini yeniler.
 export const SETTINGS_CHANGED = 'healthbeat:settings-changed'

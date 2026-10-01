@@ -7,6 +7,8 @@ test('static routes have a title; trailing slashes are ignored', () => {
   assert.equal(pageTitle('/alerts'), 'Alert’ler')
   assert.equal(pageTitle('/audit/'), 'Denetim Kaydı')
   assert.equal(pageTitle('/settings'), 'Ayarlar')
+  assert.equal(pageTitle('/settings/system'), 'Sistem Ayarları')
+  assert.equal(pageTitle('/thresholds'), 'Sistem Eşikleri')
   assert.equal(pageTitle('/login'), 'Giriş')
   assert.equal(pageTitle('/forgot-password'), 'Şifremi unuttum')
   assert.equal(pageTitle('/reset-password'), 'Yeni şifre')
@@ -19,7 +21,7 @@ test('detail routes get their title from the page (data), so the route table ret
 })
 
 test('fullTitle appends the app name; no title means just the app name', () => {
-  assert.equal(fullTitle('Eşikler'), 'Eşikler · HealthBeat')
+  assert.equal(fullTitle('Alert’ler'), 'Alert’ler · HealthBeat')
   assert.equal(fullTitle('  web-1  '), 'web-1 · HealthBeat')
   assert.equal(fullTitle(''), 'HealthBeat')
   assert.equal(fullTitle(undefined), 'HealthBeat')

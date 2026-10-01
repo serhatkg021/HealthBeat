@@ -7,7 +7,9 @@ Anlamlı bir iş bitince bu dosya güncellenir.
 **Son güncelleme:** 2026-10-01 — Çalışma zamanı ayarları ve bildirim modeli (server + panel **2.0.0** için, henüz
 yayınlanmadı): 19 ortam değişkeni panele (Ayarlar) taşındı ve yeniden başlatmadan uygulanıyor; SMTP mail kanalında;
 bildirimler sistem sahiplerine ve toplanan ek alıcılara, her alıcıya ayrı ileti olarak gidiyor (`server/CHANGELOG.md`,
-"Yayınlanmamış"). Sırada 2.0.0 sürüm PR'ı.
+"Yayınlanmamış"). Panelin gezinmesi yenilendi: sabit üst çubuk (sayfa başlığı, seviye başına açık alert sayıları, hesap
+menüsü), açılır gruplu sol menü, kartlı Ayarlar girişi, sabit alt çubuk (tek sürüm satırı, kayan sistem uyarıları). Sırada:
+profil sayfası (`PATCH /me`), ardından 2.0.0 sürüm PR'ı.
 
 ## Durum
 

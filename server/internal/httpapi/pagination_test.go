@@ -112,6 +112,28 @@ func TestAlertsPaginationAndSearch(t *testing.T) {
 		t.Fatalf("q=cpu -> %+v (total %d), want 2", byMetric, totalCount(t, h))
 	}
 
+	// seviye süzgeci: üç alert de critical (95 > 90); warning boş döner, bilinmeyen seviye reddedilir.
+	var byLevel []struct{ Level string }
+	code, h = a.callHeaders("GET", "/api/v1/alerts?status=open&level=critical", root, &byLevel)
+	if code != 200 || len(byLevel) != 3 || totalCount(t, h) != 3 {
+		t.Fatalf("level=critical -> %+v (total %d), want 3", byLevel, totalCount(t, h))
+	}
+	code, h = a.callHeaders("GET", "/api/v1/alerts?status=open&level=warning", root, &byLevel)
+	if code != 200 || len(byLevel) != 0 || totalCount(t, h) != 0 {
+		t.Fatalf("level=warning -> %+v (total %d), want none", byLevel, totalCount(t, h))
+	}
+	a.expect(400, "GET", "/api/v1/alerts?level=fatal", root, nil, nil)
+
+	var sum struct {
+		Open     int  `json:"open_alerts"`
+		Critical int  `json:"open_critical_alerts"`
+		Info     *int `json:"open_info_alerts"`
+	}
+	a.expect(200, "GET", "/api/v1/dashboard/summary", root, nil, &sum)
+	if sum.Open != 3 || sum.Critical != 3 || sum.Info == nil || *sum.Info != 0 {
+		t.Fatalf("summary = %+v, want 3 open / 3 critical / open_info_alerts present and 0", sum)
+	}
+
 	a.expect(400, "GET", "/api/v1/alerts?limit=0", root, nil, nil)
 	a.expect(400, "GET", "/api/v1/alerts?limit=201", root, nil, nil)
 }

@@ -243,25 +243,36 @@ func TestAlertListScoping(t *testing.T) {
 	alerts.Create(ctx, c1, "ram", "warning")
 	alerts.Create(ctx, c2, "cpu", "warning")
 
-	all, total, _ := alerts.List(ctx, "open", store.ListParams{})
+	all, total, _ := alerts.List(ctx, store.AlertFilter{Status: "open"}, store.ListParams{})
 	if len(all) != 3 || total != 3 {
 		t.Fatalf("List(open) = %d (total %d), want 3", len(all), total)
 	}
-	scoped, total, err := alerts.ListForHosts(ctx, "open", []uuid.UUID{c1}, store.ListParams{})
+	scoped, total, err := alerts.ListForHosts(ctx, store.AlertFilter{Status: "open"}, []uuid.UUID{c1}, store.ListParams{})
 	if err != nil || len(scoped) != 2 || total != 2 {
 		t.Fatalf("ListForHosts(c1) = %d (total %d) err=%v, want 2", len(scoped), total, err)
 	}
-	if none, _, _ := alerts.ListForHosts(ctx, "open", []uuid.UUID{}, store.ListParams{}); len(none) != 0 {
+	if none, _, _ := alerts.ListForHosts(ctx, store.AlertFilter{Status: "open"}, []uuid.UUID{}, store.ListParams{}); len(none) != 0 {
 		t.Fatalf("empty scope returned %d alerts, want 0", len(none))
 	}
 
-	crit, warn, err := alerts.CountOpenByLevel(ctx, nil)
-	if err != nil || crit != 1 || warn != 2 {
-		t.Fatalf("CountOpenByLevel(nil) = %d/%d err=%v, want 1/2", crit, warn, err)
+	if _, err := alerts.Create(ctx, c2, "ram", "info"); err != nil {
+		t.Fatal(err)
 	}
-	crit, warn, _ = alerts.CountOpenByLevel(ctx, []uuid.UUID{c2})
-	if crit != 0 || warn != 1 {
-		t.Fatalf("CountOpenByLevel(c2) = %d/%d, want 0/1", crit, warn)
+	critical, total, err := alerts.List(ctx, store.AlertFilter{Status: "open", Level: "critical"}, store.ListParams{})
+	if err != nil || len(critical) != 1 || total != 1 || critical[0].Level != "critical" {
+		t.Fatalf("List(open, critical) = %+v (total %d) err=%v, want the one critical alert", critical, total, err)
+	}
+	if info, _, _ := alerts.ListForHosts(ctx, store.AlertFilter{Level: "info"}, []uuid.UUID{c1}, store.ListParams{}); len(info) != 0 {
+		t.Fatalf("ListForHosts(c1, info) = %d alerts, want 0 (the info alert is on c2)", len(info))
+	}
+
+	counts, err := alerts.CountOpenByLevel(ctx, nil)
+	if want := (store.OpenAlertCounts{Critical: 1, Warning: 2, Info: 1}); err != nil || counts != want {
+		t.Fatalf("CountOpenByLevel(nil) = %+v err=%v, want %+v", counts, err, want)
+	}
+	counts, _ = alerts.CountOpenByLevel(ctx, []uuid.UUID{c2})
+	if want := (store.OpenAlertCounts{Warning: 1, Info: 1}); counts != want {
+		t.Fatalf("CountOpenByLevel(c2) = %+v, want %+v", counts, want)
 	}
 }
 

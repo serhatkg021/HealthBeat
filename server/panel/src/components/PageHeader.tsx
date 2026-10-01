@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react'
+import { useContext, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { ChevronLeft } from 'lucide-react'
+import { HeaderSlotContext } from './headerSlot'
 
 interface Props {
   title: ReactNode
@@ -11,23 +13,34 @@ interface Props {
   actions?: ReactNode
 }
 
+// Başlık (geri bağlantısı ve rozetiyle) sabit üst çubuğa çizilir; alt başlık ve düğmeler sayfanın içinde kalır.
 export function PageHeader({ title, subtitle, back, badge, actions }: Props) {
+  const slot = useContext(HeaderSlotContext)
+  const heading = (
+    <>
+      {back && (
+        <Link to={back.to} className="back-link" aria-label={`Geri: ${back.label}`} title={back.label}>
+          <ChevronLeft size={18} strokeWidth={2} />
+        </Link>
+      )}
+      <h1 className="page-title">
+        <span className="page-title-text">{title}</span>
+        {badge}
+      </h1>
+    </>
+  )
   return (
-    <div className="page-header">
-      <div className="page-header-main">
-        {back && (
-          <Link to={back.to} className="back-link">
-            <ChevronLeft size={15} strokeWidth={2} />
-            {back.label}
-          </Link>
-        )}
-        <h1 className="page-title">
-          {title}
-          {badge}
-        </h1>
-        {subtitle && <p className="page-subtitle">{subtitle}</p>}
-      </div>
-      {actions && <div className="page-actions">{actions}</div>}
-    </div>
+    <>
+      {slot && createPortal(heading, slot)}
+      {(!slot || subtitle || actions) && (
+        <div className="page-header">
+          <div className="page-header-main">
+            {!slot && heading}
+            {subtitle && <p className="page-subtitle">{subtitle}</p>}
+          </div>
+          {actions && <div className="page-actions">{actions}</div>}
+        </div>
+      )}
+    </>
   )
 }

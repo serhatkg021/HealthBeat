@@ -29,3 +29,10 @@ test('whitespace is ignored and the comparison is exact (a prerelease differs fr
   assert.equal(versionInfo('1.4.0', '  ').server, '—', 'a blank server version is unknown')
   assert.equal(versionInfo('1.4.0-rc.1', '1.4.0').mismatch, true)
 })
+
+test('the label is one line with the server version; the panel version stands in when the server is unknown', () => {
+  assert.equal(versionInfo('2.0.0', '2.0.0').label, 'HealthBeat Server 2.0.0')
+  assert.equal(versionInfo('2.0.0', '1.1.0').label, 'HealthBeat Server 1.1.0')
+  assert.equal(versionInfo('2.0.0', undefined).label, 'HealthBeat Server 2.0.0')
+  assert.equal(versionInfo(undefined, undefined).label, 'HealthBeat Server —')
+})
