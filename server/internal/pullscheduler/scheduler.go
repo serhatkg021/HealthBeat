@@ -12,6 +12,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -213,4 +215,37 @@ func agentInfo(h http.Header, unknown []string) model.AgentInfo {
 	info := model.ParseAgentInfo(h.Get(version.HeaderAgentVersion), "", h.Get(version.HeaderProtocol))
 	info.UnsupportedFields = unknown
 	return info
+}
+
+// PolledHost, zamanlayıcının bir pull host hakkında bellekte tuttuğudur (bkz. Snapshot).
+type PolledHost struct {
+	HostID       uuid.UUID `json:"host_id"`
+	LastPolledAt time.Time `json:"last_polled_at"`
+	// InFlight, sorgusu şu an süren host'tur (yanıt bekleniyor).
+	InFlight bool `json:"in_flight"`
+}
+
+// Snapshot, zamanlayıcının salt okunur anlık görüntüsüdür (Sistem Araçları → Cache Durumu).
+type Snapshot struct {
+	// VerifiesTLS, sorgulanan host'ların sertifikalarının doğrulanıp doğrulanmadığıdır (PULL_CA_CERT_FILE).
+	VerifiesTLS bool         `json:"verifies_tls"`
+	Hosts       []PolledHost `json:"hosts"`
+}
+
+// Snapshot, bilinen pull host'ları en son sorgulanan önce döndürür.
+func (s *Scheduler) Snapshot() Snapshot {
+	snap := Snapshot{VerifiesTLS: s.verifiesTLS, Hosts: []PolledHost{}}
+	s.mu.Lock()
+	for id, at := range s.lastPolled {
+		_, busy := s.inFlight[id]
+		snap.Hosts = append(snap.Hosts, PolledHost{HostID: id, LastPolledAt: at, InFlight: busy})
+	}
+	s.mu.Unlock()
+	slices.SortFunc(snap.Hosts, func(a, b PolledHost) int {
+		if c := b.LastPolledAt.Compare(a.LastPolledAt); c != 0 {
+			return c
+		}
+		return strings.Compare(a.HostID.String(), b.HostID.String())
+	})
+	return snap
 }

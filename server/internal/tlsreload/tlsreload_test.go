@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -154,5 +155,33 @@ func TestTLSConfig(t *testing.T) {
 	cfg := r.TLSConfig()
 	if cfg.GetCertificate == nil || cfg.MinVersion < 0x0303 {
 		t.Fatalf("TLSConfig = %+v, want GetCertificate and TLS >= 1.2", cfg)
+	}
+}
+
+// Snapshot, sunulan sertifikayı özetler ve yenilenen sertifikayı izler.
+func TestSnapshotDescribesTheServedCertificate(t *testing.T) {
+	dir := t.TempDir()
+	mod := time.Now().Add(-time.Hour).Truncate(time.Second)
+	certFile, keyFile := writePair(t, dir, "eski.example.com", mod)
+	r, clk := newReloader(t, certFile, keyFile)
+
+	snap, err := r.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(snap.Subject, "eski.example.com") || !snap.SelfSigned || snap.Issuer != snap.Subject ||
+		!snap.NotAfter.After(time.Now()) || !snap.NotBefore.Before(time.Now()) || !snap.FileModifiedAt.Equal(mod) ||
+		snap.DNSNames == nil || snap.IPs == nil {
+		t.Fatalf("snapshot = %+v", snap)
+	}
+
+	newMod := mod.Add(30 * time.Minute)
+	writePair(t, dir, "yeni.example.com", newMod)
+	clk.t = clk.t.Add(2 * recheckEvery)
+	if _, err := r.GetCertificate(nil); err != nil {
+		t.Fatal(err)
+	}
+	if snap, err = r.Snapshot(); err != nil || !strings.Contains(snap.Subject, "yeni.example.com") || !snap.FileModifiedAt.Equal(newMod) {
+		t.Fatalf("after renewal: %+v err=%v", snap, err)
 	}
 }

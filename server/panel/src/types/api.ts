@@ -486,3 +486,53 @@ export interface QueueItemPage {
   items: QueueItem[]
   next_cursor: string | null
 }
+
+// Hız sınırlayıcının bir anahtarı: remaining, anahtarın şu an kullanabileceği hak sayısıdır (0 ile burst arası).
+export interface LimiterEntry {
+  key: string
+  // Anahtarın okunur adı (host anahtarında sunucu başlığı); yoksa boş.
+  label: string
+  remaining: number
+  last_used_at: string
+}
+
+export type LimiterKeyKind = 'ip' | 'email' | 'host'
+
+export interface RateLimiterStatus {
+  id: string
+  key_kind: LimiterKeyKind
+  per_minute: number
+  burst: number
+  enabled: boolean
+  // Hakkı eksik olan anahtar sayısı; entries bunların en çok 200'ünü (en az hakkı kalan önce) taşır.
+  keys: number
+  entries: LimiterEntry[]
+}
+
+// Server sürecinin bellekte tuttuğu durum (GET /api/v1/system/cache). Bağlı olmayan kaynak null gelir.
+export interface CacheStatus {
+  generated_at: string
+  permissions: {
+    ttl_seconds: number
+    roles: { role: string; permissions: string[]; expires_at: string }[]
+  }
+  rate_limiters: RateLimiterStatus[]
+  pull_scheduler: {
+    verifies_tls: boolean
+    hosts: { host_id: string; title: string; last_polled_at: string; in_flight: boolean }[]
+  } | null
+  trusted_proxies: {
+    prefixes: string[]
+    hosts: { name: string; addrs: string[]; failing: boolean }[]
+  } | null
+  tls_certificate: {
+    subject: string
+    issuer: string
+    dns_names: string[]
+    ips: string[]
+    self_signed: boolean
+    not_before: string
+    not_after: string
+    file_modified_at: string
+  } | null
+}

@@ -3,6 +3,7 @@ package rbac
 import (
 	"context"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -71,4 +72,33 @@ func (c *Cache) Invalidate() {
 	c.mu.Lock()
 	clear(c.roles)
 	c.mu.Unlock()
+}
+
+// CachedRole, önbellekteki bir rolün izinleridir (bkz. Snapshot).
+type CachedRole struct {
+	Role        string    `json:"role"`
+	Permissions []string  `json:"permissions"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+// CacheSnapshot, izin önbelleğinin salt okunur anlık görüntüsüdür (Sistem Araçları → Cache Durumu).
+type CacheSnapshot struct {
+	TTLSeconds int          `json:"ttl_seconds"` // 0 = önbellek kapalı
+	Roles      []CachedRole `json:"roles"`
+}
+
+// Snapshot, süresi dolmamış girdileri rol adına göre sıralı döndürür. Süresi dolmuş girdi listelenmez: bir sonraki
+// soruda tablodan yeniden okunacaktır.
+func (c *Cache) Snapshot() CacheSnapshot {
+	now := c.now()
+	snap := CacheSnapshot{TTLSeconds: int(max(c.ttl, 0).Seconds()), Roles: []CachedRole{}}
+	c.mu.Lock()
+	for role, cached := range c.roles {
+		if now.Before(cached.expires) {
+			snap.Roles = append(snap.Roles, CachedRole{Role: role, Permissions: slices.Clone(cached.keys), ExpiresAt: cached.expires})
+		}
+	}
+	c.mu.Unlock()
+	slices.SortFunc(snap.Roles, func(a, b CachedRole) int { return strings.Compare(a.Role, b.Role) })
+	return snap
 }

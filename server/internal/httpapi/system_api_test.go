@@ -3,8 +3,11 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
+
+	"healthbeat-server/internal/httpapi"
 )
 
 type queueStatusView struct {
@@ -118,5 +121,103 @@ func TestQueueStatusAPI(t *testing.T) {
 
 	for _, bad := range []string{"?status=bekleyen", "?kind=sms", "?limit=0", "?limit=201", "?cursor=!!"} {
 		a.expect(400, "GET", "/api/v1/system/queue/items"+bad, root, nil, nil)
+	}
+}
+
+type cacheStatusView struct {
+	Permissions struct {
+		TTLSeconds int `json:"ttl_seconds"`
+		Roles      []struct {
+			Role        string   `json:"role"`
+			Permissions []string `json:"permissions"`
+			ExpiresAt   string   `json:"expires_at"`
+		} `json:"roles"`
+	} `json:"permissions"`
+	RateLimiters []struct {
+		ID      string  `json:"id"`
+		KeyKind string  `json:"key_kind"`
+		PerMin  float64 `json:"per_minute"`
+		Burst   int     `json:"burst"`
+		Enabled bool    `json:"enabled"`
+		Keys    int     `json:"keys"`
+		Entries []struct {
+			Key       string  `json:"key"`
+			Label     string  `json:"label"`
+			Remaining float64 `json:"remaining"`
+		} `json:"entries"`
+	} `json:"rate_limiters"`
+	PullScheduler  *json.RawMessage `json:"pull_scheduler"`
+	TrustedProxies *struct {
+		Prefixes []string `json:"prefixes"`
+	} `json:"trusted_proxies"`
+	TLSCertificate *json.RawMessage `json:"tls_certificate"`
+}
+
+func TestCacheStatusAPI(t *testing.T) {
+	a := newAPIWithLimits(t, httpapi.RateLimits{AuthFailuresPerMinute: 6, IngestPerMinute: 60})
+	root, _ := a.login("root@x.test", "super_admin")
+	orgAdmin, _ := a.login("oa@x.test", "org_admin")
+	a.expect(403, "GET", "/api/v1/system/cache", orgAdmin, nil, nil)
+	a.expect(401, "GET", "/api/v1/system/cache", "", nil, nil)
+
+	// Sınırlayıcılara iz bırak: başarısız giriş (IP), şifre sıfırlama (e-posta) ve bir push (host).
+	a.trustProxies("")
+	a.expect(401, "POST", "/api/v1/auth/login", "", map[string]string{"email": "root@x.test", "password": "yanlış-şifre-1"}, nil)
+	a.deps.SetPasswordReset(&fakeMailer{enabled: true}, "https://panel.x.test")
+	a.forgot("oa@x.test", 204)
+	host := a.createPushHost(root, a.createOrg(root, "acme"), "web-1")
+	if code := a.push(host, host.APIToken, metrics(10, 10)); code != 204 {
+		t.Fatalf("push = %d", code)
+	}
+
+	var st cacheStatusView
+	a.expect(200, "GET", "/api/v1/system/cache", root, nil, &st)
+
+	// İzin önbelleği: bu istekleri yapan roller önbellekte, izinleriyle.
+	roles := map[string][]string{}
+	for _, r := range st.Permissions.Roles {
+		roles[r.Role] = r.Permissions
+	}
+	if st.Permissions.TTLSeconds != 60 || !slices.Contains(roles["super_admin"], "system.cache.view") || slices.Contains(roles["org_admin"], "system.cache.view") {
+		t.Fatalf("permission cache = %+v", st.Permissions)
+	}
+
+	byID := map[string]int{}
+	for i, l := range st.RateLimiters {
+		byID[l.ID] = i
+	}
+	if len(st.RateLimiters) != 5 {
+		t.Fatalf("rate limiters = %+v", st.RateLimiters)
+	}
+	login := st.RateLimiters[byID["login_failures"]]
+	if login.KeyKind != "ip" || !login.Enabled || login.PerMin != 6 || login.Keys != 1 || login.Entries[0].Remaining >= float64(login.Burst) {
+		t.Fatalf("login failures = %+v", login)
+	}
+	// E-posta anahtarı olduğu gibi gösterilir (maskesiz).
+	emails := st.RateLimiters[byID["reset_emails"]]
+	if emails.KeyKind != "email" || emails.Keys != 1 || emails.Entries[0].Key != "oa@x.test" {
+		t.Fatalf("reset e-mails = %+v", emails)
+	}
+	// Host anahtarı sunucu başlığıyla etiketlenir.
+	ingest := st.RateLimiters[byID["ingest_rate"]]
+	if ingest.KeyKind != "host" || ingest.Keys != 1 || ingest.Entries[0].Key != host.ID.String() || ingest.Entries[0].Label != "web-1" {
+		t.Fatalf("ingest rate = %+v", ingest)
+	}
+
+	// Bağlı olmayan kaynaklar null döner; güvenilir proxy çözücüsü (test ortamında boş) bağlıysa listesi boştur.
+	if st.PullScheduler != nil || st.TLSCertificate != nil {
+		t.Fatalf("unwired sources are present: pull=%v tls=%v", st.PullScheduler, st.TLSCertificate)
+	}
+	if st.TrustedProxies == nil || len(st.TrustedProxies.Prefixes) != 0 {
+		t.Fatalf("trusted proxies = %+v", st.TrustedProxies)
+	}
+
+	// Yanıtta sır yok: token, şifre özeti ya da anahtar alanı bulunmaz.
+	var raw json.RawMessage
+	a.expect(200, "GET", "/api/v1/system/cache", root, nil, &raw)
+	for _, leak := range []string{host.APIToken, "password", "secret", "token"} {
+		if strings.Contains(string(raw), leak) {
+			t.Fatalf("cache status contains %q: %s", leak, raw)
+		}
 	}
 }

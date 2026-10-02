@@ -287,3 +287,36 @@ func hostOnly(remoteAddr string) string {
 	}
 	return remoteAddr
 }
+
+// ProxyHost, ad olarak verilmiş güvenilir bir proxy'nin çözüm durumudur (bkz. Snapshot).
+type ProxyHost struct {
+	Name string `json:"name"`
+	// Addrs, son başarılı çözümün adresleridir; hiç çözülemediyse boştur (o zamana kadar proxy güvenilir sayılmaz).
+	Addrs []string `json:"addrs"`
+	// Failing, son çözüm denemesinin başarısız olduğunu söyler (Addrs son bilinen adreslerdir).
+	Failing bool `json:"failing"`
+}
+
+// Snapshot, güvenilir proxy'lerin salt okunur anlık görüntüsüdür (Sistem Araçları → Cache Durumu).
+type Snapshot struct {
+	Prefixes []string    `json:"prefixes"`
+	Hosts    []ProxyHost `json:"hosts"`
+}
+
+// Snapshot, TRUSTED_PROXIES'teki aralıkları ve host adlarının bellekteki çözümünü (yapılandırma sırasıyla) döndürür.
+func (r *Resolver) Snapshot() Snapshot {
+	snap := Snapshot{Prefixes: make([]string, 0, len(r.proxies.Prefixes)), Hosts: make([]ProxyHost, 0, len(r.proxies.Hosts))}
+	for _, p := range r.proxies.Prefixes {
+		snap.Prefixes = append(snap.Prefixes, p.String())
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for _, host := range r.proxies.Hosts {
+		h := ProxyHost{Name: host, Addrs: make([]string, 0, len(r.resolved[host])), Failing: r.failing[host]}
+		for _, a := range r.resolved[host] {
+			h.Addrs = append(h.Addrs, a.String())
+		}
+		snap.Hosts = append(snap.Hosts, h)
+	}
+	return snap
+}

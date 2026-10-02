@@ -282,3 +282,32 @@ func TestTriggeredRefreshesAreRateLimited(t *testing.T) {
 		t.Fatalf("lookups = %d, want 1: triggers within minTriggeredGap must not reach DNS", got)
 	}
 }
+
+// Snapshot, aralıkları ve host adlarının bellekteki çözümünü verir; çözülemeyen ad son bilinen adresleriyle işaretlenir.
+func TestSnapshot(t *testing.T) {
+	r := mustResolver(t, "10.0.0.0/8, panel, lb")
+	var lbErr error
+	r.lookup = func(_ context.Context, host string) ([]netip.Addr, error) {
+		if host == "lb" {
+			return []netip.Addr{netip.MustParseAddr("172.18.0.9")}, lbErr
+		}
+		return []netip.Addr{netip.MustParseAddr("172.18.0.6"), netip.MustParseAddr("172.18.0.5")}, nil
+	}
+
+	snap := r.Snapshot()
+	if len(snap.Prefixes) != 1 || snap.Prefixes[0] != "10.0.0.0/8" || len(snap.Hosts) != 2 || snap.Hosts[0].Name != "panel" ||
+		snap.Hosts[0].Addrs == nil || len(snap.Hosts[0].Addrs) != 0 || snap.Hosts[0].Failing {
+		t.Fatalf("before the first lookup = %+v", snap)
+	}
+
+	r.Refresh(context.Background())
+	lbErr = errors.New("temporary failure")
+	r.Refresh(context.Background())
+	snap = r.Snapshot()
+	if strings.Join(snap.Hosts[0].Addrs, ",") != "172.18.0.5,172.18.0.6" || snap.Hosts[0].Failing {
+		t.Fatalf("panel = %+v", snap.Hosts[0])
+	}
+	if strings.Join(snap.Hosts[1].Addrs, ",") != "172.18.0.9" || !snap.Hosts[1].Failing {
+		t.Fatalf("lb = %+v, want the last known address and failing", snap.Hosts[1])
+	}
+}

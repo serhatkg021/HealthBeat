@@ -59,7 +59,10 @@ export function navigation(can: Can): Navigation {
     },
   ].filter((g) => g.items.length > 0)
   // Her aracın kendi izni vardır (system.*; varsayılan olarak yalnızca süper admin).
-  const tools = [...(can('system.queue.view') ? [{ id: 'kuyruk', label: 'Kuyruk Durumu' }] : [])]
+  const tools = [
+    ...(can('system.queue.view') ? [{ id: 'kuyruk', label: 'Kuyruk Durumu' }] : []),
+    ...(can('system.cache.view') ? [{ id: 'cache', label: 'Cache Durumu' }] : []),
+  ]
   const settings = [
     ...card(can('threshold.view'), {
       id: 'esikler',

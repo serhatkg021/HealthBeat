@@ -4,6 +4,8 @@ package tlsreload
 
 import (
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -88,4 +90,45 @@ func (r *Reloader) load() error {
 	}
 	r.cert, r.certMod, r.keyMod = &cert, c.ModTime(), k.ModTime()
 	return nil
+}
+
+// Snapshot, sunulan sertifikanın salt okunur özetidir (Sistem Araçları → Cache Durumu). Özel anahtar hiç yer almaz.
+type Snapshot struct {
+	Subject  string   `json:"subject"`
+	Issuer   string   `json:"issuer"`
+	DNSNames []string `json:"dns_names"`
+	IPs      []string `json:"ips"`
+	// SelfSigned, sertifikanın kendi kendini imzaladığını söyler (certs-init'in ürettiği gibi).
+	SelfSigned bool      `json:"self_signed"`
+	NotBefore  time.Time `json:"not_before"`
+	NotAfter   time.Time `json:"not_after"`
+	// FileModifiedAt, yüklü sertifika dosyasının değişme zamanıdır (yenilenen sertifika buradan anlaşılır).
+	FileModifiedAt time.Time `json:"file_modified_at"`
+}
+
+// Snapshot, şu an sunulan sertifikayı özetler; sertifika ayrıştırılamazsa hata döner.
+func (r *Reloader) Snapshot() (Snapshot, error) {
+	r.mu.Lock()
+	cert, mod := r.cert, r.certMod
+	r.mu.Unlock()
+	if cert == nil || len(cert.Certificate) == 0 {
+		return Snapshot{}, errors.New("tls: no certificate is loaded")
+	}
+	leaf := cert.Leaf
+	if leaf == nil {
+		var err error
+		if leaf, err = x509.ParseCertificate(cert.Certificate[0]); err != nil {
+			return Snapshot{}, fmt.Errorf("tls: parse certificate: %w", err)
+		}
+	}
+	snap := Snapshot{
+		Subject: leaf.Subject.String(), Issuer: leaf.Issuer.String(),
+		DNSNames: append([]string{}, leaf.DNSNames...), IPs: make([]string, 0, len(leaf.IPAddresses)),
+		SelfSigned: leaf.Subject.String() == leaf.Issuer.String() && leaf.CheckSignature(leaf.SignatureAlgorithm, leaf.RawTBSCertificate, leaf.Signature) == nil,
+		NotBefore:  leaf.NotBefore, NotAfter: leaf.NotAfter, FileModifiedAt: mod,
+	}
+	for _, ip := range leaf.IPAddresses {
+		snap.IPs = append(snap.IPs, ip.String())
+	}
+	return snap, nil
 }
