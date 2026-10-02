@@ -9,6 +9,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Değişti
+- Proje MIT lisansıyla yayınlanıyor: `.deb`/`.rpm` paketlerinin lisans alanı `MIT` oldu, `LICENSE` dosyası paketlere
+  (`/usr/share/doc/healthbeat/LICENSE`) ve tarball'a eklendi.
+
 ### İç değişiklikler (davranış değişmedi)
 - `install_test.sh`: senaryoların kök dizinleri `mktemp` ile açılıyor; `$RANDOM` adları arada çakışıp testi dengesizleştiriyordu.
 

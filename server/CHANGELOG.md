@@ -10,6 +10,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Değişti
+- Proje MIT lisansıyla yayınlanıyor (`LICENSE`); Docker imajları `org.opencontainers.image.licenses=MIT` etiketini taşıyor.
+
 ### Düzeltildi
 - `SECRETS_ENCRYPTION_KEY` değiştiğinde (ya da veritabanı başka bir anahtarla geri yüklendiğinde) kayıtlı SMTP şifresi
   çözülemediği için server açılmıyordu. Artık açılıyor: e-posta kanalı "şifre yeniden girilmeli" durumuna geçiyor, e-posta

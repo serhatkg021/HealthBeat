@@ -75,7 +75,7 @@ uid="$(getent passwd healthbeat | cut -d: -f3)"; shell="$(getent passwd healthbe
 [ "$(stat -c '%a %U:%G' /etc/healthbeat)" = "750 root:healthbeat" ] && ok "/etc/healthbeat is 750 root:healthbeat" || bad "/etc/healthbeat perms" "$(stat -c '%a %U:%G' /etc/healthbeat)"
 [ -x /usr/bin/healthbeat-agent ] && [ -x /usr/sbin/healthbeat-agent-setup ] && [ -x /usr/share/healthbeat/install.sh ] && ok "binary, setup and install.sh are executable" || bad "executables"
 [ -f /usr/share/healthbeat/installed-from-package ] && ok "package marker present" || bad "package marker"
-[ -f /usr/share/doc/healthbeat/AGENT.md ] && ok "docs installed" || bad "docs"
+[ -f /usr/share/doc/healthbeat/AGENT.md ] && [ -f /usr/share/doc/healthbeat/LICENSE ] && ok "docs and license installed" || bad "docs"
 
 # --- envanter: bu dağıtımda çalışır, doğru işletim sistemini ve konteyner ortamını bildirir
 inv="$(/usr/bin/healthbeat-agent --print-inventory 2>&1)"; rc=$?

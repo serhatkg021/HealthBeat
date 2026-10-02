@@ -4,9 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-02 — `SECRETS_ENCRYPTION_KEY` değişince kayıtlı SMTP şifresi çözülemediği için server açılmıyordu;
-artık açılıyor, e-posta kanalı "şifre yeniden girilmeli" olarak işaretleniyor ve panel uyarıyor (`server/CHANGELOG.md`
-"Yayınlanmamış"). Server + panel **2.0.0** yayında (2026-10-01, `server/v2.0.0`).
+**Son güncelleme:** 2026-10-02 — Proje MIT lisansıyla yayınlanıyor (`LICENSE`): agent paketlerinin lisans alanı ve içeriği,
+Docker imaj etiketi ve panel `package.json` güncellendi; bir sonraki agent ve server sürümleriyle dağıtıma girer. Yayınlanmış
+agent 1.0.0 paketleri `Proprietary` etiketli kalır. Server + panel **2.0.0** yayında (2026-10-01); çözülemeyen SMTP şifresi
+düzeltmesi "Yayınlanmamış"ta.
 
 ## Durum
 
