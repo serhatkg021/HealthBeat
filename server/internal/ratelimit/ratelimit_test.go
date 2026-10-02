@@ -175,3 +175,55 @@ func TestSetRateConcurrentWithAllow(t *testing.T) {
 	}
 	<-done
 }
+
+// Snapshot hakkı eksik anahtarları en az kalandan başlayarak listeler, dolumu hesaba katar ve hiçbir kovayı değiştirmez.
+func TestSnapshotListsKeysWithMissingTokens(t *testing.T) {
+	l, clock := newTestLimiter(60, 5) // 1 jeton/sn, burst 5
+	for range 4 {
+		l.Allow("b")
+	}
+	for range 2 {
+		l.Allow("a")
+	}
+	l.Allow("c")
+
+	snap := l.Snapshot(10)
+	if !snap.Enabled || snap.PerMinute != 60 || snap.Burst != 5 || snap.Keys != 3 || len(snap.Entries) != 3 {
+		t.Fatalf("snapshot = %+v", snap)
+	}
+	if snap.Entries[0].Key != "b" || snap.Entries[0].Remaining != 1 || snap.Entries[1].Key != "a" || snap.Entries[1].Remaining != 3 ||
+		snap.Entries[2].Key != "c" || !snap.Entries[0].LastUsedAt.Equal(clock.now()) {
+		t.Fatalf("entries = %+v", snap.Entries)
+	}
+
+	// Sınır: en dolu olmayanlar öne; toplam yine bildirilir.
+	if top := l.Snapshot(1); top.Keys != 3 || len(top.Entries) != 1 || top.Entries[0].Key != "b" {
+		t.Fatalf("limited snapshot = %+v", top)
+	}
+
+	// Dolum hesaba katılır; tamamen dolan anahtar listeden düşer. Snapshot kovaları değiştirmez.
+	clock.advance(2 * time.Second)
+	snap = l.Snapshot(10)
+	if snap.Keys != 1 || snap.Entries[0].Key != "b" || snap.Entries[0].Remaining != 3 {
+		t.Fatalf("after 2s = %+v", snap)
+	}
+	if again := l.Snapshot(10); again.Entries[0].Remaining != 3 {
+		t.Fatalf("a snapshot changed the bucket: %+v", again)
+	}
+	for range 3 {
+		if ok, _ := l.Allow("b"); !ok {
+			t.Fatal("b lost tokens to a snapshot")
+		}
+	}
+	if ok, _ := l.Allow("b"); ok {
+		t.Fatal("b gained tokens from a snapshot")
+	}
+}
+
+func TestSnapshotOfADisabledLimiter(t *testing.T) {
+	l, _ := newTestLimiter(0, 5)
+	l.Allow("a")
+	if snap := l.Snapshot(10); snap.Enabled || snap.Keys != 0 || snap.Entries == nil || len(snap.Entries) != 0 {
+		t.Fatalf("disabled snapshot = %+v", snap)
+	}
+}

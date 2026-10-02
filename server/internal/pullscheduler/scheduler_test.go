@@ -613,3 +613,17 @@ func TestPollStoresHostInfo(t *testing.T) {
 		t.Fatalf("host info after poll = %+v", h)
 	}
 }
+
+// Snapshot, sorgulanmış host'ları son sorgulama zamanıyla verir; hiçbir şey sorgulanmadan boştur.
+func TestSnapshotListsPolledHosts(t *testing.T) {
+	e := newEnv(t, 30, report(10, 20))
+	if snap := e.s.Snapshot(); snap.VerifiesTLS || snap.Hosts == nil || len(snap.Hosts) != 0 {
+		t.Fatalf("before the first poll = %+v", snap)
+	}
+	before := time.Now()
+	e.poll()
+	snap := e.s.Snapshot()
+	if len(snap.Hosts) != 1 || snap.Hosts[0].HostID != e.host.ID || snap.Hosts[0].InFlight || snap.Hosts[0].LastPolledAt.Before(before) {
+		t.Fatalf("after a poll = %+v", snap)
+	}
+}

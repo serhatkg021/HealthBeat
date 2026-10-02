@@ -146,6 +146,8 @@ func main() {
 		fatal("tls", err)
 	}
 
+	deps.SetSystemSources(scheduler, certs)
+
 	srv := httpapi.NewServer(cfg.HTTPAddr, httpapi.WithCORS(deps.Router(), cfg.CORSAllowedOrigins), certs.TLSConfig())
 
 	serverErr := make(chan error, 1)

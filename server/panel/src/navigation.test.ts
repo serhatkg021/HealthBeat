@@ -12,11 +12,12 @@ test('a super admin sees the summary, alerts, the management group and all three
   assert.deepEqual(ids(nav.groups), ['yonetim'])
   assert.deepEqual(ids(nav.groups[0].items), ['organizasyonlar', 'kullanicilar'])
   assert.deepEqual(ids(nav.settings), ['esikler', 'denetim', 'sistem'])
-  assert.deepEqual(ids(nav.tools), ['kuyruk'])
+  assert.deepEqual(ids(nav.tools), ['kuyruk', 'cache'])
 })
 
 test('system tools show only the tabs the user has a permission for; with none the menu entry disappears', () => {
   assert.deepEqual(ids(navigation(canOnly('system.queue.view')).tools), ['kuyruk'])
+  assert.deepEqual(ids(navigation(canOnly('system.cache.view')).tools), ['cache'])
   // Ayarları görebilmek Sistem Araçları'nı açmaz; her aracın kendi izni vardır.
   assert.deepEqual(navigation(canOnly('settings.view', 'settings.manage', 'audit.view')).tools, [])
   assert.deepEqual(navigation(() => false).tools, [])

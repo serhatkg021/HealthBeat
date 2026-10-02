@@ -3,7 +3,9 @@
 package ratelimit
 
 import (
+	"cmp"
 	"math"
+	"slices"
 	"sync"
 	"time"
 )
@@ -111,4 +113,53 @@ func (l *Limiter) sweep(now time.Time) {
 			delete(l.buckets, k)
 		}
 	}
+}
+
+// Entry, bir anahtarın anlık durumudur (bkz. Snapshot).
+type Entry struct {
+	Key string `json:"key"`
+	// Remaining, anahtarın şu an kullanabileceği hak sayısıdır (0 ile Burst arası; dolum hesaba katılmıştır).
+	Remaining  float64   `json:"remaining"`
+	LastUsedAt time.Time `json:"last_used_at"`
+}
+
+// Snapshot, sınırlayıcının salt okunur anlık görüntüsüdür (Sistem Araçları → Cache Durumu).
+type Snapshot struct {
+	PerMinute float64 `json:"per_minute"`
+	Burst     int     `json:"burst"`
+	// Enabled false ise sınırlama kapalıdır (hız ya da kapasite 0).
+	Enabled bool `json:"enabled"`
+	// Keys, hakkı eksik olan anahtar sayısıdır; Entries bunların en azı kalanlardan başlayarak en çok maxEntries tanesidir.
+	Keys    int     `json:"keys"`
+	Entries []Entry `json:"entries"`
+}
+
+// Snapshot, hakkı eksik anahtarları (en az hakkı kalan önce, sonra anahtar sırasıyla) döndürür; hiçbir kovayı
+// değiştirmez. Dolumu tamamlanmış kovalar listelenmez: sınırlayıcı için hiç var olmamış bir anahtarla aynıdırlar.
+func (l *Limiter) Snapshot(maxEntries int) Snapshot {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	snap := Snapshot{PerMinute: l.rate * 60, Burst: int(l.burst), Enabled: !l.disabled(), Entries: []Entry{}}
+	if !snap.Enabled {
+		return snap
+	}
+	now := l.now()
+	for k, b := range l.buckets {
+		remaining := math.Min(l.burst, b.tokens+now.Sub(b.last).Seconds()*l.rate)
+		if remaining >= l.burst {
+			continue
+		}
+		snap.Entries = append(snap.Entries, Entry{Key: k, Remaining: remaining, LastUsedAt: b.last})
+	}
+	slices.SortFunc(snap.Entries, func(a, b Entry) int {
+		if c := cmp.Compare(a.Remaining, b.Remaining); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Key, b.Key)
+	})
+	snap.Keys = len(snap.Entries)
+	if maxEntries >= 0 && len(snap.Entries) > maxEntries {
+		snap.Entries = snap.Entries[:maxEntries]
+	}
+	return snap
 }

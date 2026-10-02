@@ -1,14 +1,16 @@
 import { Navigate } from 'react-router-dom'
-import { ListChecks, type LucideIcon } from 'lucide-react'
+import { DatabaseZap, ListChecks, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/PageHeader'
 import { TabPanel, Tabs } from '../components/Tabs'
 import { useTab } from '../components/useTab'
 import { navigation } from '../navigation'
+import { SystemCache } from './SystemCache'
 import { SystemQueue } from './SystemQueue'
 
 const ICONS: Record<string, LucideIcon> = {
   kuyruk: ListChecks,
+  cache: DatabaseZap,
 }
 
 // Sistem Araçları: server'ın iç durumunu salt okunur gösteren sekmeler. Her sekme kendi izniyle görünür; hiçbirini
@@ -25,6 +27,9 @@ export function SystemToolsPage() {
       <Tabs items={tabs.map((t) => ({ ...t, icon: ICONS[t.id] }))} active={active} onChange={setActive} label="Sistem araçları" />
       <TabPanel id="kuyruk" active={active}>
         <SystemQueue />
+      </TabPanel>
+      <TabPanel id="cache" active={active}>
+        <SystemCache />
       </TabPanel>
     </div>
   )

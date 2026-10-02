@@ -12,11 +12,13 @@ import (
 	"healthbeat-server/internal/clientip"
 	"healthbeat-server/internal/ingest"
 	"healthbeat-server/internal/outbox"
+	"healthbeat-server/internal/pullscheduler"
 	"healthbeat-server/internal/ratelimit"
 	"healthbeat-server/internal/rbac"
 	"healthbeat-server/internal/secretbox"
 	"healthbeat-server/internal/settings"
 	"healthbeat-server/internal/store"
+	"healthbeat-server/internal/tlsreload"
 )
 
 type Deps struct {
@@ -32,6 +34,10 @@ type Deps struct {
 
 	// clientIPs, istemci IP'sini TRUSTED_PROXIES'e göre belirler; nil = her zaman TCP eşi (bkz. remoteIP).
 	clientIPs *clientip.Resolver
+
+	// pullScheduler ve tlsCerts yalnızca Sistem Araçları'nda (Cache Durumu) gösterilmek için tutulur; nil olabilir.
+	pullScheduler *pullscheduler.Scheduler
+	tlsCerts      *tlsreload.Reloader
 
 	users         *store.Users
 	organizations *store.Organizations
@@ -101,6 +107,12 @@ type AgentPolicy struct {
 
 // SetAgentPolicy, GET /api/v1/meta'nın döndürdüğü ve ingest yanıtında önerilen sürüm politikasını ayarlar.
 func (d *Deps) SetAgentPolicy(p AgentPolicy) { d.agentPolicy.Store(&p) }
+
+// SetSystemSources, Sistem Araçları'nın (Cache Durumu) API katmanının dışında yaşayan kaynaklarını bağlar: pull
+// zamanlayıcı ve TLS sertifika yükleyici. Verilmeyen (nil) kaynak yanıtta yer almaz.
+func (d *Deps) SetSystemSources(pull *pullscheduler.Scheduler, certs *tlsreload.Reloader) {
+	d.pullScheduler, d.tlsCerts = pull, certs
+}
 
 // SetClientIPResolver, istemci IP'sinin güvenilir proxy'lerin X-Forwarded-For'undan okunmasını açar (bkz. clientip).
 func (d *Deps) SetClientIPResolver(r *clientip.Resolver) { d.clientIPs = r }

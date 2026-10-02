@@ -94,3 +94,40 @@ func TestCacheMatchesTable(t *testing.T) {
 		}
 	}
 }
+
+// Snapshot, önbellekteki rolleri izinleri ve bitiş zamanıyla verir; süresi dolan girdi listelenmez.
+func TestCacheSnapshot(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	now := time.Now()
+	c := NewCache(pool, time.Minute)
+	c.now = func() time.Time { return now }
+
+	if snap := c.Snapshot(); snap.TTLSeconds != 60 || snap.Roles == nil || len(snap.Roles) != 0 {
+		t.Fatalf("empty cache snapshot = %+v", snap)
+	}
+	for _, role := range []string{"super_admin", "operator"} {
+		if _, err := c.Permissions(ctx, role); err != nil {
+			t.Fatal(err)
+		}
+	}
+	snap := c.Snapshot()
+	if len(snap.Roles) != 2 || snap.Roles[0].Role != "operator" || snap.Roles[1].Role != "super_admin" ||
+		!snap.Roles[0].ExpiresAt.Equal(now.Add(time.Minute)) || !slices.Contains(snap.Roles[1].Permissions, "user.create") ||
+		slices.Contains(snap.Roles[0].Permissions, "user.create") {
+		t.Fatalf("snapshot = %+v", snap)
+	}
+	// Dönen dilim önbellekten bağımsızdır.
+	snap.Roles[1].Permissions[0] = "bozuk"
+	if ok, _ := c.HasPermission(ctx, "super_admin", "bozuk"); ok {
+		t.Fatal("changing a snapshot changed the cache")
+	}
+
+	now = now.Add(61 * time.Second)
+	if snap := c.Snapshot(); len(snap.Roles) != 0 {
+		t.Fatalf("expired entries are listed: %+v", snap.Roles)
+	}
+	if snap := NewCache(pool, 0).Snapshot(); snap.TTLSeconds != 0 {
+		t.Fatalf("disabled cache ttl = %d", snap.TTLSeconds)
+	}
+}

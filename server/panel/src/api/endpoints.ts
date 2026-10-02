@@ -10,6 +10,7 @@ import type {
   SMTPConfig,
   AlertNotification,
   AuditLogPage,
+  CacheStatus,
   QueueItemPage,
   QueueSummary,
   AlertStatus,
@@ -213,6 +214,7 @@ export const auditApi = {
 // Sistem Araçları (salt okunur; her araç kendi system.* izniyle).
 export const systemApi = {
   queue: () => apiRequest<QueueSummary>('/api/v1/system/queue'),
+  cache: () => apiRequest<CacheStatus>('/api/v1/system/cache'),
   queueItems: (params: { status?: string; kind?: string; cursor?: string; limit?: number }) =>
     apiRequest<QueueItemPage>('/api/v1/system/queue/items', {
       query: { status: params.status, kind: params.kind, cursor: params.cursor, limit: params.limit?.toString() },

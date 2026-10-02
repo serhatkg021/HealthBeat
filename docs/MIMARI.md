@@ -98,7 +98,9 @@ Kurallar:
 - **Sistem ayarları** (Ayarlar sayfası: çalışma zamanı ayarları, bildirim kanalları, sistem sahipleri) `settings.view` ve
   `settings.manage` izinleriyle korunur; varsayılan olarak yalnızca süper admindedir.
 - **Sistem Araçları** (server'ın iç durumunu salt okunur gösteren sayfa) araç başına ayrı izinle korunur:
-  `system.queue.view` (bildirim kuyruğu), `system.cache.view`, `system.logs.view`; varsayılan olarak yalnızca süper admindedir.
+  `system.queue.view` (bildirim kuyruğu), `system.cache.view` (server sürecinin bellekteki durumu: izin önbelleği, hız
+  sınırlayıcılar, pull zamanlayıcı, güvenilen proxy'ler, TLS sertifikası), `system.logs.view`; varsayılan olarak yalnızca
+  süper admindedir.
 - Bir sunucu oluşturulurken organizasyon seçimi zorunludur (bkz. bölüm 6).
 
 Uygulama: her istek iki denetimden geçer. **İzin** (ne yapabilir) `role_permissions`'tan gelir (`internal/rbac`; rol başına
@@ -186,6 +188,7 @@ GET    /api/v1/settings  PATCH /api/v1/settings  POST /api/v1/settings/reset    
        /api/v1/notification-channels[/:channel][/test]  + GET …/options (notification.view)
        /api/v1/notification-owners[/:id]
 GET    /api/v1/system/queue | /system/queue/items?status=…&kind=…                     (system.queue.view)
+GET    /api/v1/system/cache                                                          (system.cache.view)
 ```
 
 ### Hata yanıtları

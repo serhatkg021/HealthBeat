@@ -21,8 +21,13 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   bekleyenin yaşı, veritabanı bağlantı havuzunun kullanımı (kullanılan / en çok) ve satırların duruma ve türe göre
   süzülebilen listesi (alıcı, konu, deneme sayısı, sonraki deneme, son hata). Salt okunurdur; ileti gövdeleri gösterilmez.
 - `GET /api/v1/system/queue` ve `GET /api/v1/system/queue/items` (`system.queue.view`).
+- **Panel: Sistem Araçları → Cache Durumu** sekmesi: server sürecinin bellekte tuttuğu durum, salt okunur. İzin önbelleği
+  (rol başına izinler ve kalan ömür), beş hız sınırlayıcı (anahtar başına harcanan hak / kapasite: IP, e-posta ya da sunucu),
+  pull zamanlayıcının sunucu başına son sorgulama zamanı, güvenilen proxy'lerin çözülmüş adresleri ve sunulan TLS
+  sertifikası (adlar, bitiş tarihi, kalan gün). Sır içermez; yalnızca isteği karşılayan server sürecini gösterir.
+- `GET /api/v1/system/cache` (`system.cache.view`).
 - Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir
-  (son ikisi sonraki araçlar içindir, henüz bir şeyi açmaz).
+  (`system.logs.view` sonraki araç içindir, henüz bir şeyi açmaz).
 
 ### Değişti
 - Proje MIT lisansıyla yayınlanıyor (`LICENSE`); Docker imajları `org.opencontainers.image.licenses=MIT` etiketini taşıyor.
