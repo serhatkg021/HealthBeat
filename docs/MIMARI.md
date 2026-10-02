@@ -97,6 +97,8 @@ Kurallar:
 - **Organizasyon ağacını yalnızca süper admin değiştirir** (oluşturma, taşıma, silme).
 - **Sistem ayarları** (Ayarlar sayfası: çalışma zamanı ayarları, bildirim kanalları, sistem sahipleri) `settings.view` ve
   `settings.manage` izinleriyle korunur; varsayılan olarak yalnızca süper admindedir.
+- **Sistem Araçları** (server'ın iç durumunu salt okunur gösteren sayfa) araç başına ayrı izinle korunur:
+  `system.queue.view` (bildirim kuyruğu), `system.cache.view`, `system.logs.view`; varsayılan olarak yalnızca süper admindedir.
 - Bir sunucu oluşturulurken organizasyon seçimi zorunludur (bkz. bölüm 6).
 
 Uygulama: her istek iki denetimden geçer. **İzin** (ne yapabilir) `role_permissions`'tan gelir (`internal/rbac`; rol başına
@@ -183,6 +185,7 @@ GET    /api/v1/audit-logs | /dashboard/summary | /dashboard/overview
 GET    /api/v1/settings  PATCH /api/v1/settings  POST /api/v1/settings/reset          (settings.view / settings.manage)
        /api/v1/notification-channels[/:channel][/test]  + GET …/options (notification.view)
        /api/v1/notification-owners[/:id]
+GET    /api/v1/system/queue | /system/queue/items?status=…&kind=…                     (system.queue.view)
 ```
 
 ### Hata yanıtları

@@ -315,3 +315,111 @@ func TestOutboxAlertHistoryIsKeptAndSummarized(t *testing.T) {
 		t.Fatalf("alert history after purge = %+v, want it kept with its bodies", history)
 	}
 }
+
+// Sistem Araçları → Kuyruk Durumu: özet durumlara ve türlere göre sayar; liste en yeni önce, süzülebilir ve gövdesizdir.
+func TestOutboxSummaryAndList(t *testing.T) {
+	ctx := context.Background()
+	pool, o := newOutbox(t)
+
+	if sum, err := o.Summary(ctx); err != nil || sum.Pending+sum.Retrying+sum.Sent+sum.Failed != 0 || sum.OldestActiveAt != nil || len(sum.ByKind) != 0 {
+		t.Fatalf("empty queue summary = %+v err=%v", sum, err)
+	}
+
+	pending := enqueue(t, o, store.OutboxMessage{Subject: "bekleyen"})
+	retrying := enqueue(t, o, store.OutboxMessage{Subject: "yeniden"})
+	sent := enqueue(t, o, store.OutboxMessage{Subject: "giden"})
+	failed := enqueue(t, o, store.OutboxMessage{Subject: "vazgeçilen"})
+	reset := enqueue(t, o, store.OutboxMessage{Kind: store.OutboxKindPasswordReset, Subject: "sıfırlama", Body: "https://panel/reset?token=GİZLİ", Seal: true})
+	// Oluşturulma sırası belirli olsun: en eski "bekleyen".
+	for i, id := range []uuid.UUID{pending, retrying, sent, failed, reset} {
+		if _, err := pool.Exec(ctx, `UPDATE notification_outbox SET created_at = now() - make_interval(mins => $2) WHERE id = $1`, id, 10-i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := o.MarkRetry(ctx, retrying, time.Now().Add(time.Minute), "smtp: bağlanılamadı"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE notification_outbox SET attempts = 3 WHERE id = $1`, retrying); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.MarkSent(ctx, sent); err != nil {
+		t.Fatal(err)
+	}
+	if err := o.MarkFailed(ctx, failed, "giving up"); err != nil {
+		t.Fatal(err)
+	}
+
+	sum, err := o.Summary(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sum.OutboxCounts != (store.OutboxCounts{Pending: 2, Retrying: 1, Sent: 1, Failed: 1}) || sum.OldestActiveAt == nil ||
+		time.Since(*sum.OldestActiveAt) < 9*time.Minute {
+		t.Fatalf("summary = %+v oldest=%v", sum.OutboxCounts, sum.OldestActiveAt)
+	}
+	if len(sum.ByKind) != 2 || sum.ByKind[0].Kind != store.OutboxKindAlert || sum.ByKind[0].OutboxCounts != (store.OutboxCounts{Pending: 1, Retrying: 1, Sent: 1, Failed: 1}) ||
+		sum.ByKind[1].Kind != store.OutboxKindPasswordReset || sum.ByKind[1].Pending != 1 {
+		t.Fatalf("summary by kind = %+v", sum.ByKind)
+	}
+
+	subjects := func(f store.OutboxFilter) string {
+		t.Helper()
+		if f.Limit == 0 {
+			f.Limit = 50
+		}
+		rows, err := o.List(ctx, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, r := range rows {
+			out = append(out, r.Subject+":"+r.Status)
+		}
+		return strings.Join(out, " ")
+	}
+	for name, tc := range map[string]struct {
+		f    store.OutboxFilter
+		want string
+	}{
+		"all, newest first": {store.OutboxFilter{}, "sıfırlama:pending vazgeçilen:failed giden:sent yeniden:retrying bekleyen:pending"},
+		"active":            {store.OutboxFilter{Status: store.OutboxStatusActive}, "sıfırlama:pending yeniden:retrying bekleyen:pending"},
+		"retrying":          {store.OutboxFilter{Status: store.OutboxStatusRetrying}, "yeniden:retrying"},
+		"failed":            {store.OutboxFilter{Status: store.OutboxStatusFailed}, "vazgeçilen:failed"},
+		"kind":              {store.OutboxFilter{Kind: store.OutboxKindPasswordReset}, "sıfırlama:pending"},
+		"kind and status":   {store.OutboxFilter{Kind: store.OutboxKindAlert, Status: store.OutboxStatusSent}, "giden:sent"},
+	} {
+		if got := subjects(tc.f); got != tc.want {
+			t.Errorf("%s: %q, want %q", name, got, tc.want)
+		}
+	}
+
+	// Sayfalama: Limit+1 satır gelir; imleçle devam edilir.
+	page, err := o.List(ctx, store.OutboxFilter{Limit: 2})
+	if err != nil || len(page) != 3 {
+		t.Fatalf("first page: %d rows err=%v, want limit+1", len(page), err)
+	}
+	rest := subjects(store.OutboxFilter{Limit: 2, Before: &store.OutboxCursor{CreatedAt: page[1].CreatedAt, ID: page[1].ID}})
+	if rest != "giden:sent yeniden:retrying bekleyen:pending" {
+		t.Fatalf("second page = %q", rest)
+	}
+
+	// Satır ayrıntıları: bitmemiş satırda sonraki deneme, bitmişte bitiş zamanı; hata ve deneme sayısı.
+	rows, _ := o.List(ctx, store.OutboxFilter{Limit: 50})
+	byID := map[uuid.UUID]store.OutboxRow{}
+	for _, r := range rows {
+		byID[r.ID] = r
+	}
+	if r := byID[retrying]; r.Attempts != 3 || r.LastError != "smtp: bağlanılamadı" || r.NextAttemptAt == nil || r.SentAt != nil ||
+		r.AlertEvent == nil || *r.AlertEvent != store.AlertEventOpened || strings.Join(r.Recipients, ",") != "ops@x.test" {
+		t.Fatalf("retrying row = %+v", r)
+	}
+	if r := byID[sent]; r.SentAt == nil || r.NextAttemptAt != nil || r.LastError != "" {
+		t.Fatalf("sent row = %+v", r)
+	}
+	if r := byID[failed]; r.FailedAt == nil || r.NextAttemptAt != nil || r.LastError != "giving up" {
+		t.Fatalf("failed row = %+v", r)
+	}
+	if r := byID[reset]; r.AlertEvent != nil || r.AlertLevel != nil || r.AlertID != nil {
+		t.Fatalf("password reset row carries alert fields: %+v", r)
+	}
+}

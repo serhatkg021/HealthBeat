@@ -10,6 +10,8 @@ import type {
   SMTPConfig,
   AlertNotification,
   AuditLogPage,
+  QueueItemPage,
+  QueueSummary,
   AlertStatus,
   Host,
   HostMode,
@@ -205,6 +207,15 @@ export const auditApi = {
   list: (params: { action?: string; cursor?: string; limit?: number }) =>
     apiRequest<AuditLogPage>('/api/v1/audit-logs', {
       query: { action: params.action, cursor: params.cursor, limit: params.limit?.toString() },
+    }),
+}
+
+// Sistem Araçları (salt okunur; her araç kendi system.* izniyle).
+export const systemApi = {
+  queue: () => apiRequest<QueueSummary>('/api/v1/system/queue'),
+  queueItems: (params: { status?: string; kind?: string; cursor?: string; limit?: number }) =>
+    apiRequest<QueueItemPage>('/api/v1/system/queue/items', {
+      query: { status: params.status, kind: params.kind, cursor: params.cursor, limit: params.limit?.toString() },
     }),
 }
 

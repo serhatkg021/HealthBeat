@@ -438,3 +438,51 @@ export interface NotificationOwner {
   created_at: string
   updated_at: string
 }
+
+// ---------------------------------------------------------------- Sistem Araçları
+
+// Bildirim kuyruğundaki bir satırın durumu: pending henüz başarısız denemesi olmayan, retrying yeniden denenecek olandır.
+export type QueueStatus = 'pending' | 'retrying' | 'sent' | 'failed'
+export type QueueKind = 'alert' | 'password_reset' | 'password_changed'
+
+export interface QueueCounts {
+  pending: number
+  retrying: number
+  sent: number
+  failed: number
+}
+
+// Kuyruğun özeti ve veritabanı bağlantı havuzu (GET /api/v1/system/queue).
+export interface QueueSummary extends QueueCounts {
+  by_kind: (QueueCounts & { kind: QueueKind })[]
+  // Bitmemiş en eski satırın oluşturulma zamanı; bitmemiş satır yoksa null.
+  oldest_active_at: string | null
+  max_attempts: number
+  retain_finished_days: number
+  db_pool: { acquired: number; idle: number; total: number; max: number }
+}
+
+// Kuyruktaki bir satır (GET /api/v1/system/queue/items). İleti gövdesi hiç gelmez.
+export interface QueueItem {
+  id: string
+  kind: QueueKind
+  channel: string
+  recipients: string[]
+  subject: string
+  status: QueueStatus
+  attempts: number
+  last_error: string
+  alert_id: string | null
+  alert_event: AlertEvent | null
+  alert_level: AlertLevel | null
+  created_at: string
+  next_attempt_at: string | null
+  expires_at: string | null
+  sent_at: string | null
+  failed_at: string | null
+}
+
+export interface QueueItemPage {
+  items: QueueItem[]
+  next_cursor: string | null
+}

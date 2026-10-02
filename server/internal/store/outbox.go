@@ -250,3 +250,143 @@ func (s *Outbox) ListForAlert(ctx context.Context, alertID uuid.UUID) ([]AlertNo
 	}
 	return out, rows.Err()
 }
+
+// Kuyruk satırının durumları (Sistem Araçları → Kuyruk Durumu). Bekleyen bir satırın o an gönderilmekte olup olmadığı
+// tablodan ayırt edilemez (kira ile yeniden deneme bekleyişi aynı görünür); bu yüzden "gönderiliyor" diye bir durum yoktur.
+const (
+	OutboxStatusPending  = "pending"  // henüz başarısız bir denemesi yok: sırada ya da ilk denemesi sürüyor
+	OutboxStatusRetrying = "retrying" // en az bir denemesi başarısız oldu; yeniden denenecek (ya da deneniyor)
+	OutboxStatusSent     = "sent"
+	OutboxStatusFailed   = "failed" // vazgeçildi: deneme sınırı, süre dolması ya da yerini yenisinin alması
+	// OutboxStatusActive bir süzgeçtir: bitmemiş (pending + retrying) satırlar.
+	OutboxStatusActive = "active"
+)
+
+const outboxStatusSQL = `CASE WHEN sent_at IS NOT NULL THEN 'sent' WHEN failed_at IS NOT NULL THEN 'failed'
+	WHEN last_error IS NOT NULL THEN 'retrying' ELSE 'pending' END`
+
+// OutboxCounts, bir satır kümesinin durumlara dağılımıdır.
+type OutboxCounts struct {
+	Pending  int `json:"pending"`
+	Retrying int `json:"retrying"`
+	Sent     int `json:"sent"`
+	Failed   int `json:"failed"`
+}
+
+// OutboxKindCounts, bir türün (alert, password_reset…) dağılımıdır.
+type OutboxKindCounts struct {
+	Kind string `json:"kind"`
+	OutboxCounts
+}
+
+// OutboxSummary, kuyruğun anlık özetidir. Sent ve Failed tabloda hâlâ duran satırları sayar: bitmiş satırlar bir süre
+// sonra silinir (bkz. PurgeFinished), alert bildirimleri alert'leri durdukça kalır.
+type OutboxSummary struct {
+	OutboxCounts
+	ByKind []OutboxKindCounts `json:"by_kind"`
+	// OldestActiveAt, bitmemiş en eski satırın oluşturulma zamanıdır; bitmemiş satır yoksa nil.
+	OldestActiveAt *time.Time `json:"oldest_active_at"`
+}
+
+// Summary, kuyruğun özetini türlere göre döndürür (tür adına göre sıralı).
+func (s *Outbox) Summary(ctx context.Context) (OutboxSummary, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT kind,
+		        count(*) FILTER (WHERE sent_at IS NULL AND failed_at IS NULL AND last_error IS NULL),
+		        count(*) FILTER (WHERE sent_at IS NULL AND failed_at IS NULL AND last_error IS NOT NULL),
+		        count(*) FILTER (WHERE sent_at IS NOT NULL),
+		        count(*) FILTER (WHERE failed_at IS NOT NULL),
+		        min(created_at) FILTER (WHERE sent_at IS NULL AND failed_at IS NULL)
+		 FROM notification_outbox GROUP BY kind ORDER BY kind`)
+	if err != nil {
+		return OutboxSummary{}, err
+	}
+	defer rows.Close()
+	sum := OutboxSummary{ByKind: []OutboxKindCounts{}}
+	for rows.Next() {
+		var k OutboxKindCounts
+		var oldest *time.Time
+		if err := rows.Scan(&k.Kind, &k.Pending, &k.Retrying, &k.Sent, &k.Failed, &oldest); err != nil {
+			return OutboxSummary{}, err
+		}
+		sum.ByKind = append(sum.ByKind, k)
+		sum.Pending += k.Pending
+		sum.Retrying += k.Retrying
+		sum.Sent += k.Sent
+		sum.Failed += k.Failed
+		if oldest != nil && (sum.OldestActiveAt == nil || oldest.Before(*sum.OldestActiveAt)) {
+			sum.OldestActiveAt = oldest
+		}
+	}
+	return sum, rows.Err()
+}
+
+// OutboxRow, kuyruktaki bir satırın görüntülenen hâlidir. Gövde bilerek yoktur: şifre sıfırlama bağlantısı taşıyabilir.
+type OutboxRow struct {
+	ID         uuid.UUID  `json:"id"`
+	Kind       string     `json:"kind"`
+	Channel    string     `json:"channel"`
+	Recipients []string   `json:"recipients"`
+	Subject    string     `json:"subject"`
+	Status     string     `json:"status"` // OutboxStatus*
+	Attempts   int        `json:"attempts"`
+	LastError  string     `json:"last_error"`
+	AlertID    *uuid.UUID `json:"alert_id"`
+	AlertEvent *string    `json:"alert_event"`
+	AlertLevel *string    `json:"alert_level"`
+	CreatedAt  time.Time  `json:"created_at"`
+	// NextAttemptAt yalnızca bitmemiş satırda doludur (alınmış satırda kira bitişi).
+	NextAttemptAt *time.Time `json:"next_attempt_at"`
+	ExpiresAt     *time.Time `json:"expires_at"`
+	SentAt        *time.Time `json:"sent_at"`
+	FailedAt      *time.Time `json:"failed_at"`
+}
+
+// OutboxCursor, (created_at DESC, id DESC) sıralamasında bir keyset konumudur.
+type OutboxCursor = AuditCursor
+
+// OutboxFilter, Outbox.List'i daraltır; boş alanlar "filtre yok" demektir.
+type OutboxFilter struct {
+	Status string // OutboxStatus* (OutboxStatusActive dahil)
+	Kind   string
+	Before *OutboxCursor
+	Limit  int
+}
+
+// List, kuyruk satırlarını en yeniden başlayarak döndürür. Audit.List gibi Limit+1 satır ister; fazla satırı çağıran
+// kırpar ve başka sayfa olduğunu ondan anlar.
+func (s *Outbox) List(ctx context.Context, f OutboxFilter) ([]OutboxRow, error) {
+	var beforeTime *time.Time
+	var beforeID *uuid.UUID
+	if f.Before != nil {
+		beforeTime, beforeID = &f.Before.CreatedAt, &f.Before.ID
+	}
+	rows, err := s.db.Query(ctx,
+		`SELECT id, kind, channel, recipients, subject, status, attempts, COALESCE(last_error, ''), alert_id, alert_event,
+		        alert_level, created_at, next_attempt_at, expires_at, sent_at, failed_at
+		 FROM (SELECT *, `+outboxStatusSQL+` AS status FROM notification_outbox) o
+		 WHERE ($1::text IS NULL OR status = $1 OR ($1 = 'active' AND status IN ('pending', 'retrying')))
+		   AND ($2::text IS NULL OR kind = $2)
+		   AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4::uuid))
+		 ORDER BY created_at DESC, id DESC
+		 LIMIT $5`,
+		nullIfEmpty(f.Status), nullIfEmpty(f.Kind), beforeTime, beforeID, f.Limit+1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []OutboxRow{}
+	for rows.Next() {
+		var r OutboxRow
+		var next time.Time
+		if err := rows.Scan(&r.ID, &r.Kind, &r.Channel, &r.Recipients, &r.Subject, &r.Status, &r.Attempts, &r.LastError,
+			&r.AlertID, &r.AlertEvent, &r.AlertLevel, &r.CreatedAt, &next, &r.ExpiresAt, &r.SentAt, &r.FailedAt); err != nil {
+			return nil, err
+		}
+		if r.SentAt == nil && r.FailedAt == nil {
+			r.NextAttemptAt = &next
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}

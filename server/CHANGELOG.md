@@ -10,6 +10,20 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Güncellemeden önce
+- **Yedek al.** Migration `000006` (Sistem Araçları izinleri) açılışta uygulanır; yalnızca izin satırları ekler. Eski sürüm
+  bu veritabanıyla açılmaz: geri dönüş `000006_system_tools_permissions.down.sql` ile (yalnızca bu izinleri siler) ya da
+  yedekle olur (`docs/DISTRIBUTION.md` §8.3).
+
+### Eklendi
+- **Panel: Sistem Araçları** (sol menüde Ayarlar'ın üstünde; araçlar sayfanın içinde sekmelerle ayrılır). İlk araç **Kuyruk
+  Durumu**: bildirim kuyruğunda teslim bekleyen, yeniden denenecek, gönderilmiş ve vazgeçilmiş satırların sayısı, en eski
+  bekleyenin yaşı, veritabanı bağlantı havuzunun kullanımı (kullanılan / en çok) ve satırların duruma ve türe göre
+  süzülebilen listesi (alıcı, konu, deneme sayısı, sonraki deneme, son hata). Salt okunurdur; ileti gövdeleri gösterilmez.
+- `GET /api/v1/system/queue` ve `GET /api/v1/system/queue/items` (`system.queue.view`).
+- Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir
+  (son ikisi sonraki araçlar içindir, henüz bir şeyi açmaz).
+
 ### Değişti
 - Proje MIT lisansıyla yayınlanıyor (`LICENSE`); Docker imajları `org.opencontainers.image.licenses=MIT` etiketini taşıyor.
 

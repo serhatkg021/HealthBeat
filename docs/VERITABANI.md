@@ -79,6 +79,8 @@ Sabit roller (`super_admin`, `org_admin`, `operator`); yeni rol eklemek için ye
 ### `permissions`
 
 Yetki anahtarları (`host.view`, `alert.acknowledge`, …). Kod izni sabit rolden değil bu tablodan denetler.
+Sistem Araçları'nın her aracı ayrı bir izindir (`000006`): `system.queue.view`, `system.cache.view`, `system.logs.view`;
+üçü de yalnızca `super_admin`'e verilir.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |

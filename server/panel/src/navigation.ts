@@ -1,6 +1,6 @@
-// Sol menünün ve Ayarlar sayfasının yapısı — saf mantık (ikonlar Layout'ta eşlenir). Menü: üstte doğrudan bağlantılar,
-// altında açılır gruplar, en altta sabit Ayarlar. Her öğe yalnızca izni olan kullanıcıya görünür; hiç öğesi kalmayan grup
-// (ve hiç kartı kalmayan Ayarlar) gösterilmez.
+// Sol menünün, Ayarlar sayfasının ve Sistem Araçları sayfasının yapısı — saf mantık (ikonlar Layout'ta eşlenir). Menü:
+// üstte doğrudan bağlantılar, altında açılır gruplar, en altta sabit Sistem Araçları ve Ayarlar. Her öğe yalnızca izni olan
+// kullanıcıya görünür; hiç öğesi kalmayan grup (hiç kartı kalmayan Ayarlar, hiç sekmesi kalmayan Sistem Araçları) gösterilmez.
 import type { Permission } from './auth/permissions.ts'
 
 export type Can = (permission: Permission) => boolean
@@ -23,13 +23,21 @@ export interface SettingsCard extends NavItem {
   description: string
 }
 
+// Sistem Araçları sayfasının bir sekmesi (menüde tek bağlantıdır; araçlar sayfanın içinde sekmelerle ayrılır).
+export interface ToolTab {
+  id: string
+  label: string
+}
+
 export interface Navigation {
   top: NavItem[]
   groups: NavGroup[]
+  tools: ToolTab[]
   settings: SettingsCard[]
 }
 
 export const SETTINGS_PATH = '/settings'
+export const TOOLS_PATH = '/system'
 
 export function navigation(can: Can): Navigation {
   const item = (show: boolean, def: NavItem): NavItem[] => (show ? [def] : [])
@@ -50,6 +58,8 @@ export function navigation(can: Can): Navigation {
       ],
     },
   ].filter((g) => g.items.length > 0)
+  // Her aracın kendi izni vardır (system.*; varsayılan olarak yalnızca süper admin).
+  const tools = [...(can('system.queue.view') ? [{ id: 'kuyruk', label: 'Kuyruk Durumu' }] : [])]
   const settings = [
     ...card(can('threshold.view'), {
       id: 'esikler',
@@ -70,7 +80,7 @@ export function navigation(can: Can): Navigation {
       description: 'Sistem sahipleri, bildirim kanalları, agent sürümleri, saklama, oturum ve loglama.',
     }),
   ]
-  return { top, groups, settings }
+  return { top, groups, tools, settings }
 }
 
 const under = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`)
@@ -78,6 +88,10 @@ const under = (pathname: string, to: string) => pathname === to || pathname.star
 // Ayarlar bağlantısı, Ayarlar sayfasında ve oradan açılan sayfalarda (eşikler, denetim kaydı, sistem ayarları) etkindir.
 export function inSettingsArea(pathname: string): boolean {
   return under(pathname, SETTINGS_PATH) || under(pathname, '/thresholds') || under(pathname, '/audit')
+}
+
+export function inToolsArea(pathname: string): boolean {
+  return under(pathname, TOOLS_PATH)
 }
 
 // Grubun bir sayfası açıksa grup kapatılamaz görünmesin diye açık tutulur.

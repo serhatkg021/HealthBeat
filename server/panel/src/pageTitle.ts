@@ -12,6 +12,7 @@ const TITLES: Record<string, string> = {
   '/audit': 'Denetim Kaydı',
   '/settings': 'Ayarlar',
   '/settings/system': 'Sistem Ayarları',
+  '/system': 'Sistem Araçları',
   '/my-hosts': 'Sunucularım',
   '/profile': 'Profil',
   '/change-password': 'Şifre değiştir',

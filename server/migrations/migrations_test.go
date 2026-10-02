@@ -593,3 +593,69 @@ func TestRuntimeSettingsMigrationRollsBackWithDownFile(t *testing.T) {
 		t.Fatalf("upgrading again: applied=%d err=%v, want 000005 re-applied", len(applied), err)
 	}
 }
+
+// 000006: Sistem Araçları izinleri yalnızca super_admin'e verilir; .down.sql onları kaldırır, eski binary yeniden açılır
+// ve tekrar yükseltilebilir.
+func TestSystemToolsPermissionsMigrationAndRollback(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.NewEmpty(t)
+	runner := func(fsys fs.FS) *migrate.Runner {
+		t.Helper()
+		r, err := migrate.New(pool, fsys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	latest, old := runner(upTo(t, "000006")), runner(upTo(t, "000005"))
+	if _, err := latest.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+	grants := func() string {
+		t.Helper()
+		rows, err := pool.Query(ctx, `SELECT role || ':' || permission_key FROM role_permissions WHERE permission_key LIKE 'system.%' ORDER BY 1`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		var out []string
+		for rows.Next() {
+			var p string
+			if err := rows.Scan(&p); err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, p)
+		}
+		return strings.Join(out, ",")
+	}
+	if got := grants(); got != "super_admin:system.cache.view,super_admin:system.logs.view,super_admin:system.queue.view" {
+		t.Fatalf("system permissions = %q, want the three of them on super_admin only", got)
+	}
+	if err := old.RequireUpToDate(ctx); !errors.Is(err, migrate.ErrDatabaseNewer) {
+		t.Fatalf("old binary on the new schema: err=%v, want ErrDatabaseNewer", err)
+	}
+
+	down, err := fs.ReadFile(migrations.FS, "000006_system_tools_permissions.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM healthbeat_migrations WHERE version = 6`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.RequireUpToDate(ctx); err != nil {
+		t.Fatalf("old binary after the down migration: %v, want it to start", err)
+	}
+	var perms int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM permissions WHERE key LIKE 'system.%'`).Scan(&perms); err != nil {
+		t.Fatal(err)
+	}
+	if perms != 0 || grants() != "" {
+		t.Fatalf("after the down migration: permissions=%d grants=%q, want none", perms, grants())
+	}
+	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 {
+		t.Fatalf("upgrading again: applied=%d err=%v, want 000006 re-applied", len(applied), err)
+	}
+}

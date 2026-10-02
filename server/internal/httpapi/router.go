@@ -98,6 +98,10 @@ func (d *Deps) Router() http.Handler {
 
 	mux.HandleFunc("GET /api/v1/audit-logs", d.requirePermission("audit.view", handle(d.handleListAuditLogs)))
 
+	// Sistem Araçları: bkz. system_handlers.go.
+	mux.HandleFunc("GET /api/v1/system/queue", d.requirePermission("system.queue.view", handle(d.handleQueueStatus)))
+	mux.HandleFunc("GET /api/v1/system/queue/items", d.requirePermission("system.queue.view", handle(d.handleQueueItems)))
+
 	mux.HandleFunc("GET /api/v1/dashboard/summary", d.requirePermission("dashboard.view", handle(d.handleDashboardSummary)))
 	mux.HandleFunc("GET /api/v1/dashboard/overview", d.requirePermission("dashboard.view", handle(d.handleDashboardOverview)))
 

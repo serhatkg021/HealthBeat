@@ -15,6 +15,7 @@ import { UsersPage } from './pages/UsersPage'
 import { AuditPage } from './pages/AuditPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { SettingsHubPage } from './pages/SettingsHubPage'
+import { SystemToolsPage } from './pages/SystemToolsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -107,6 +108,7 @@ export default function App() {
             />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsHubPage />} />
+            <Route path="/system" element={<SystemToolsPage />} />
             <Route
               path="/settings/system"
               element={

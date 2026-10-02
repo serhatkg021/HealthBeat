@@ -4,10 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-02 — Proje MIT lisansıyla yayınlanıyor (`LICENSE`): agent paketlerinin lisans alanı ve içeriği,
-Docker imaj etiketi ve panel `package.json` güncellendi; bir sonraki agent ve server sürümleriyle dağıtıma girer. Yayınlanmış
-agent 1.0.0 paketleri `Proprietary` etiketli kalır. Server + panel **2.0.0** yayında (2026-10-01); çözülemeyen SMTP şifresi
-düzeltmesi "Yayınlanmamış"ta.
+**Son güncelleme:** 2026-10-02 — Panele **Sistem Araçları** sayfası ve ilk aracı **Kuyruk Durumu** eklendi (bildirim
+kuyruğunun özeti, satırları ve veritabanı bağlantı havuzu; salt okunur). Migration `000006` üç izin ekler
+(`system.queue.view`, `system.cache.view`, `system.logs.view`; yalnızca süper admin). Cache Durumu ve Log Analiz sekmeleri
+sıradaki işlerdir. Server + panel **2.0.0** yayında (2026-10-01); bu ve önceki düzeltmeler "Yayınlanmamış"ta.
 
 ## Durum
 
@@ -62,4 +62,6 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Sıradaki işler
 
-1. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
+1. Sistem Araçları'nın kalan sekmeleri: Cache Durumu (server'ın bellekteki durumu), Log Analiz (log dosyalarını panelden
+   tarih bazında inceleme). Kuyruk Durumu şimdilik salt okunur; "yeniden dene / iptal" ileride ele alınabilir.
+2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
