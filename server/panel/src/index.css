@@ -578,63 +578,6 @@ code, .mono {
   }
 }
 
-/* Ayarlar girişindeki kartlar. */
-.hub-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 14px;
-}
-
-.card.hub-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0;
-  color: var(--text-primary);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.card.hub-card:hover {
-  text-decoration: none;
-  border-color: var(--accent);
-  box-shadow: var(--shadow-md);
-}
-
-.hub-card-icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  flex-shrink: 0;
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
-.hub-card-text {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.hub-card-title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.hub-card-description {
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.hub-card-arrow {
-  flex-shrink: 0;
-  color: var(--text-muted);
-}
-
 .scrim {
   display: none;
 }
@@ -1966,6 +1909,8 @@ input[type='checkbox'], input[type='radio'] {
   margin: 0 0 20px;
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
+  /* Sekmeler alt çizgileri kenarlığın üstüne binsin diye 1px taşar (margin-bottom: -1px); yalnızca yana kayılır. */
+  overflow-y: hidden;
   scrollbar-width: none;
 }
 

@@ -37,6 +37,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir.
 
 ### Değişti
+- Panel: Ayarlar sekmeli tek sayfa oldu (Sistem Araçları gibi): kartlı giriş sayfası yerine Sistem Eşikleri, Denetim Kaydı
+  ve Sistem Ayarları sekmeleri. Eski adresler (`/thresholds`, `/audit`, `/settings/system`) ilgili sekmeye yönlenir.
 - Proje MIT lisansıyla yayınlanıyor (`LICENSE`); Docker imajları `org.opencontainers.image.licenses=MIT` etiketini taşıyor.
 
 ### Düzeltildi
@@ -46,6 +48,7 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   sıfırlama kapanıyor) ve durum loga yazılıyor. Şifre panelden yeniden girilince ya da silinince kanal çalışıyor.
   Kanal yanıtına `secret_unreadable` alanı eklendi.
 - Panel: şifresi çözülemeyen e-posta kanalı alt çubuktaki uyarı şeridinde ve Ayarlar'daki kanal kartında gösteriliyor.
+- Panel: fareli cihazlarda sekme çubuklarının sağ ucunda görünen gereksiz dikey kaydırma çubuğu kaldırıldı.
 
 ## [2.0.0] - 2026-10-01
 

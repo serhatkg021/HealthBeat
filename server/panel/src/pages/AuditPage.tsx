@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { auditApi } from '../api/endpoints'
 import type { AuditLogEntry } from '../types/api'
-import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { ScrollText } from 'lucide-react'
 
@@ -56,7 +55,6 @@ export function AuditPage() {
 
   return (
     <div>
-      <PageHeader back={{ to: '/settings', label: 'Ayarlar' }} title="Denetim Kaydı" subtitle="Panelde ve API'de yapılan yönetim işlemleri" />
       {error && <div className="error-banner">{error}</div>}
 
       <div className="toolbar">

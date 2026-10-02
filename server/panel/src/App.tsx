@@ -3,6 +3,7 @@ import { Navigate, Route, BrowserRouter, Routes, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import type { Permission } from './auth/permissions'
 import { Layout } from './components/Layout'
+import { LEGACY_SETTINGS_ROUTES, SETTINGS_PATH } from './navigation'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
@@ -10,10 +11,7 @@ import { OrganizationHostsPage } from './pages/OrganizationHostsPage'
 import { MyHostsPage } from './pages/MyHostsPage'
 import { HostDetailPage } from './pages/HostDetailPage'
 import { AlertsPage } from './pages/AlertsPage'
-import { ThresholdsPage } from './pages/ThresholdsPage'
 import { UsersPage } from './pages/UsersPage'
-import { AuditPage } from './pages/AuditPage'
-import { SettingsPage } from './pages/SettingsPage'
 import { SettingsHubPage } from './pages/SettingsHubPage'
 import { SystemToolsPage } from './pages/SystemToolsPage'
 import { ProfilePage } from './pages/ProfilePage'
@@ -37,6 +35,14 @@ function RequirePermission({ permission, children }: { permission: Permission; c
   const { user, can } = useAuth()
   if (!user || !can(permission)) return <Navigate to="/" replace />
   return children
+}
+
+// Eski ayrı sayfa adresleri (ör. /settings/system?bolum=kanallar) Ayarlar'ın ilgili sekmesine yönlenir; adresteki diğer
+// parametreler (bölüm) korunur.
+function LegacySettingsRedirect({ tab }: { tab: string }) {
+  const params = new URLSearchParams(useLocation().search)
+  params.set('sekme', tab)
+  return <Navigate to={`${SETTINGS_PATH}?${params}`} replace />
 }
 
 export default function App() {
@@ -83,14 +89,6 @@ export default function App() {
             <Route path="/hosts/:id" element={<HostDetailPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route
-              path="/thresholds"
-              element={
-                <RequirePermission permission="threshold.view">
-                  <ThresholdsPage />
-                </RequirePermission>
-              }
-            />
-            <Route
               path="/users"
               element={
                 <RequirePermission permission="user.view">
@@ -98,25 +96,12 @@ export default function App() {
                 </RequirePermission>
               }
             />
-            <Route
-              path="/audit"
-              element={
-                <RequirePermission permission="audit.view">
-                  <AuditPage />
-                </RequirePermission>
-              }
-            />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsHubPage />} />
+            {Object.entries(LEGACY_SETTINGS_ROUTES).map(([path, tab]) => (
+              <Route key={path} path={path} element={<LegacySettingsRedirect tab={tab} />} />
+            ))}
             <Route path="/system" element={<SystemToolsPage />} />
-            <Route
-              path="/settings/system"
-              element={
-                <RequirePermission permission="settings.view">
-                  <SettingsPage />
-                </RequirePermission>
-              }
-            />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

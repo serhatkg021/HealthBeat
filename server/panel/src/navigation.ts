@@ -1,6 +1,7 @@
 // Sol menünün, Ayarlar sayfasının ve Sistem Araçları sayfasının yapısı — saf mantık (ikonlar Layout'ta eşlenir). Menü:
-// üstte doğrudan bağlantılar, altında açılır gruplar, en altta sabit Sistem Araçları ve Ayarlar. Her öğe yalnızca izni olan
-// kullanıcıya görünür; hiç öğesi kalmayan grup (hiç kartı kalmayan Ayarlar, hiç sekmesi kalmayan Sistem Araçları) gösterilmez.
+// üstte doğrudan bağlantılar, altında açılır gruplar, en altta sabit Sistem Araçları ve Ayarlar. Bu ikisi menüde tek
+// bağlantıdır; içerikleri sayfanın içinde sekmelerle ayrılır. Her öğe yalnızca izni olan kullanıcıya görünür; hiç öğesi
+// kalmayan grup (ve hiç sekmesi kalmayan Ayarlar ya da Sistem Araçları) gösterilmez.
 import type { Permission } from './auth/permissions.ts'
 
 export type Can = (permission: Permission) => boolean
@@ -19,21 +20,24 @@ export interface NavGroup {
   items: NavItem[]
 }
 
-export interface SettingsCard extends NavItem {
-  description: string
-}
-
-// Sistem Araçları sayfasının bir sekmesi (menüde tek bağlantıdır; araçlar sayfanın içinde sekmelerle ayrılır).
-export interface ToolTab {
+// Ayarlar ya da Sistem Araçları sayfasının bir sekmesi.
+export interface PageTab {
   id: string
   label: string
 }
+
+// Ayarlar sekmesi: description sekmenin altında tek satırlık açıklama olarak gösterilir.
+export interface SettingsTab extends PageTab {
+  description: string
+}
+
+export type ToolTab = PageTab
 
 export interface Navigation {
   top: NavItem[]
   groups: NavGroup[]
   tools: ToolTab[]
-  settings: SettingsCard[]
+  settings: SettingsTab[]
 }
 
 export const SETTINGS_PATH = '/settings'
@@ -41,7 +45,7 @@ export const TOOLS_PATH = '/system'
 
 export function navigation(can: Can): Navigation {
   const item = (show: boolean, def: NavItem): NavItem[] => (show ? [def] : [])
-  const card = (show: boolean, def: SettingsCard): SettingsCard[] => (show ? [def] : [])
+  const tab = (show: boolean, def: SettingsTab): SettingsTab[] => (show ? [def] : [])
   // Organizasyonları göremeyen (operatör) kendisine atanmış sunucuları "Sunucularım"da görür.
   const top = [
     { id: 'ozet', to: '/', label: 'Özet', end: true },
@@ -65,21 +69,18 @@ export function navigation(can: Can): Navigation {
     ...(can('system.logs.view') ? [{ id: 'log', label: 'Log Analiz' }] : []),
   ]
   const settings = [
-    ...card(can('threshold.view'), {
+    ...tab(can('threshold.view'), {
       id: 'esikler',
-      to: '/thresholds',
       label: 'Sistem Eşikleri',
       description: 'Kendi değeri olmayan tüm sunucuların kullandığı varsayılan alert eşikleri.',
     }),
-    ...card(can('audit.view'), {
+    ...tab(can('audit.view'), {
       id: 'denetim',
-      to: '/audit',
       label: 'Denetim Kaydı',
       description: 'Panelde ve API’de yapılan yönetim işlemlerinin geçmişi.',
     }),
-    ...card(can('settings.view'), {
+    ...tab(can('settings.view'), {
       id: 'sistem',
-      to: '/settings/system',
       label: 'Sistem Ayarları',
       description: 'Sistem sahipleri, bildirim kanalları, agent sürümleri, saklama, oturum ve loglama.',
     }),
@@ -89,9 +90,18 @@ export function navigation(can: Can): Navigation {
 
 const under = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`)
 
-// Ayarlar bağlantısı, Ayarlar sayfasında ve oradan açılan sayfalarda (eşikler, denetim kaydı, sistem ayarları) etkindir.
+// settingsTabPath, Ayarlar sayfasının bir sekmesinin adresidir (bağlantılar ve eski adreslerin yönlendirmesi için).
+export const settingsTabPath = (id: string): string => `${SETTINGS_PATH}?sekme=${id}`
+
+// Eski ayrı sayfaların adresleri (yer imleri, eski bağlantılar) artık Ayarlar'ın sekmeleridir.
+export const LEGACY_SETTINGS_ROUTES: Record<string, string> = {
+  '/thresholds': 'esikler',
+  '/audit': 'denetim',
+  '/settings/system': 'sistem',
+}
+
 export function inSettingsArea(pathname: string): boolean {
-  return under(pathname, SETTINGS_PATH) || under(pathname, '/thresholds') || under(pathname, '/audit')
+  return under(pathname, SETTINGS_PATH)
 }
 
 export function inToolsArea(pathname: string): boolean {
