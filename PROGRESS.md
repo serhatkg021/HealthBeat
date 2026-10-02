@@ -4,10 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-02 — Sistem Araçları'na **Cache Durumu** sekmesi eklendi: izin önbelleği, hız sınırlayıcılar
-(anahtar başına harcanan hak / kapasite), pull zamanlayıcı, güvenilen proxy'ler ve TLS sertifikası; salt okunur, yalnızca
-isteği karşılayan server sürecini gösterir (`system.cache.view`). Kuyruk Durumu sekmesi önceki işte eklendi; Log Analiz
-sıradadır. Server + panel **2.0.0** yayında (2026-10-01); bunlar "Yayınlanmamış"ta.
+**Son güncelleme:** 2026-10-02 — Sistem Araçları'na **Log Analiz** sekmesi eklendi: kalıcı log dosyaları panelden gün gün
+incelenir (seviye, metin, istek kimliği ve saat süzgeçleri; en yeni üstte sayfalama; satır ayrıntısı; günün indirilmesi),
+`system.logs.view` izniyle; görüntüleme ve indirme denetim kaydına yazılır. Böylece Sistem Araçları'nın üç sekmesi (Kuyruk
+Durumu, Cache Durumu, Log Analiz) tamam. Server + panel **2.0.0** yayında (2026-10-01); bunlar "Yayınlanmamış"ta.
 
 ## Durum
 
@@ -62,6 +62,6 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Sıradaki işler
 
-1. Sistem Araçları'nın kalan sekmesi: Log Analiz (log dosyalarını panelden tarih bazında inceleme). Kuyruk ve Cache
-   Durumu şimdilik salt okunur; kuyrukta "yeniden dene / iptal", cache'te "önbelleği boşalt" ileride ele alınabilir.
+1. Sistem Araçları şimdilik salt okunur; kuyrukta "yeniden dene / iptal", cache'te "önbelleği boşalt" ileride ele alınabilir.
+   Log Analiz bir günü baştan sona tarar: çok büyük günlerde (yüzlerce MB) yavaşlar, 15 sn'de zaman aşımına uğrar.
 2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.

@@ -147,6 +147,7 @@ func main() {
 	}
 
 	deps.SetSystemSources(scheduler, certs)
+	deps.SetLogFiles(logFile)
 
 	srv := httpapi.NewServer(cfg.HTTPAddr, httpapi.WithCORS(deps.Router(), cfg.CORSAllowedOrigins), certs.TLSConfig())
 

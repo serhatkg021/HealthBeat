@@ -1,6 +1,8 @@
 package httpapi
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -11,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"healthbeat-server/internal/clientip"
+	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/outbox"
 	"healthbeat-server/internal/ratelimit"
 	"healthbeat-server/internal/rbac"
@@ -243,5 +246,138 @@ func (d *Deps) handleCacheStatus(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	writeJSON(w, http.StatusOK, resp)
+	return nil
+}
+
+// ---------------------------------------------------------------- log analiz
+
+const (
+	defaultLogPageSize = 200
+	maxLogPageSize     = 500
+	maxLogQueryLen     = 200
+	// logScanTimeout, bir günün taranmasına verilen süredir (bir gün yüzlerce MB olabilir).
+	logScanTimeout = 15 * time.Second
+)
+
+type logFilesResponse struct {
+	// Enabled false ise server dosyaya loglamıyor (LOG_FILE boş ya da dosya açılamadı): gösterilecek bir şey yoktur.
+	Enabled bool               `json:"enabled"`
+	Days    []logging.DayFiles `json:"days"`
+	// TotalBytes diskteki toplam boyut, MaxTotalBytes ve MaxAgeDays saklama sınırlarıdır (Ayarlar → Loglama).
+	TotalBytes    int64 `json:"total_bytes"`
+	MaxTotalBytes int64 `json:"max_total_bytes"`
+	MaxAgeDays    int   `json:"max_age_days"`
+}
+
+// handleLogFiles, GET /api/v1/system/logs: log dosyası olan günler (en yeni önce), boyutları ve saklama sınırları.
+func (d *Deps) handleLogFiles(w http.ResponseWriter, r *http.Request) error {
+	resp := logFilesResponse{Days: []logging.DayFiles{}}
+	if d.logFiles != nil {
+		resp.Enabled = true
+		resp.Days = d.logFiles.Days()
+		for _, day := range resp.Days {
+			resp.TotalBytes += day.Bytes
+		}
+		resp.MaxAgeDays, resp.MaxTotalBytes, _ = d.logFiles.Limits()
+	}
+	writeJSON(w, http.StatusOK, resp)
+	return nil
+}
+
+// logReadError, okuyucunun hatasını yanıta çevirir.
+func logReadError(err error, op string) error {
+	switch {
+	case errors.Is(err, logging.ErrBadDay):
+		return badRequest("day YYYY-AA-GG biçiminde olmalı")
+	case errors.Is(err, logging.ErrNoSuchDay):
+		return notFound("o güne ait log dosyası yok")
+	case errors.Is(err, context.DeadlineExceeded):
+		return newError(http.StatusServiceUnavailable, "log taraması zaman aşımına uğradı: o günün logu çok büyük; günün dosyasını indirip inceleyin")
+	}
+	return serverErr("log okunamadı", op, err)
+}
+
+// handleLogEntries, GET /api/v1/system/logs/entries: bir günün satırları, en yeni önce. ?day= zorunludur; ?level= (en
+// düşük seviye), ?q= (metin), ?request_id=, ?from= ve ?to= (RFC3339) ile süzülür; ?before= bir önceki sayfanın
+// next_before değeridir. Bir günün ilk sayfasının açılması denetim kaydına yazılır.
+func (d *Deps) handleLogEntries(w http.ResponseWriter, r *http.Request) error {
+	if d.logFiles == nil {
+		return notFound("server dosyaya loglamıyor (LOG_FILE boş)")
+	}
+	p := r.URL.Query()
+	q := logging.Query{Day: p.Get("day"), MinLevel: p.Get("level"), Text: p.Get("q"), RequestID: p.Get("request_id"), Limit: defaultLogPageSize}
+	if q.MinLevel != "" {
+		if _, err := logging.ParseLevel(q.MinLevel); err != nil {
+			return badRequest("level debug, info, warn ya da error olmalı")
+		}
+	}
+	if len(q.Text) > maxLogQueryLen || len(q.RequestID) > maxLogQueryLen {
+		return badRequest(fmt.Sprintf("q ve request_id en çok %d karakter olabilir", maxLogQueryLen))
+	}
+	if v := p.Get("limit"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 || n > maxLogPageSize {
+			return badRequest(fmt.Sprintf("limit 1 ile %d arasında olmalı", maxLogPageSize))
+		}
+		q.Limit = n
+	}
+	if v := p.Get("before"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			return badRequest("geçersiz before")
+		}
+		q.Before = n
+	}
+	for name, dst := range map[string]**time.Time{"from": &q.From, "to": &q.To} {
+		if v := p.Get(name); v != "" {
+			t, err := time.Parse(time.RFC3339, v)
+			if err != nil {
+				return badRequest(name + " RFC3339 biçiminde olmalı")
+			}
+			*dst = &t
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), logScanTimeout)
+	defer cancel()
+	res, err := d.logFiles.Read(ctx, q)
+	if err != nil {
+		return logReadError(err, "log entries: read")
+	}
+	if q.Before == 0 {
+		details := map[string]any{}
+		for k, v := range map[string]string{"level": q.MinLevel, "q": q.Text, "request_id": q.RequestID, "from": p.Get("from"), "to": p.Get("to")} {
+			if v != "" {
+				details[k] = v
+			}
+		}
+		d.logAudit(r, "system.logs.view", "log", &q.Day, details)
+	}
+	writeJSON(w, http.StatusOK, res)
+	return nil
+}
+
+// handleLogDownload, GET /api/v1/system/logs/download?day=: günün logu düz metin olarak (parçalar birleştirilmiş, gzip
+// açılmış). Denetim kaydına yazılır.
+func (d *Deps) handleLogDownload(w http.ResponseWriter, r *http.Request) error {
+	if d.logFiles == nil {
+		return notFound("server dosyaya loglamıyor (LOG_FILE boş)")
+	}
+	day := r.URL.Query().Get("day")
+	// Başlıklar yazılmadan önce günün var olduğu doğrulanır: gövde başladıktan sonra hata yanıtı verilemez.
+	if err := d.logFiles.HasDay(day); err != nil {
+		return logReadError(err, "log download")
+	}
+	d.logAudit(r, "system.logs.download", "log", &day, nil)
+
+	// Büyük bir günün gönderimi server'ın olağan yazma süresini aşabilir.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(10 * time.Minute))
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="healthbeat-server-%s.log"`, day))
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	if err := d.logFiles.WriteDay(r.Context(), day, w); err != nil && r.Context().Err() == nil {
+		slog.ErrorContext(r.Context(), "log download: interrupted", "day", day, "err", err)
+	}
 	return nil
 }

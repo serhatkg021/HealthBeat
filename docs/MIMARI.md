@@ -99,8 +99,8 @@ Kurallar:
   `settings.manage` izinleriyle korunur; varsayılan olarak yalnızca süper admindedir.
 - **Sistem Araçları** (server'ın iç durumunu salt okunur gösteren sayfa) araç başına ayrı izinle korunur:
   `system.queue.view` (bildirim kuyruğu), `system.cache.view` (server sürecinin bellekteki durumu: izin önbelleği, hız
-  sınırlayıcılar, pull zamanlayıcı, güvenilen proxy'ler, TLS sertifikası), `system.logs.view`; varsayılan olarak yalnızca
-  süper admindedir.
+  sınırlayıcılar, pull zamanlayıcı, güvenilen proxy'ler, TLS sertifikası), `system.logs.view` (kalıcı log dosyalarının gün
+  gün okunması ve indirilmesi; denetim kaydına yazılır); varsayılan olarak yalnızca süper admindedir.
 - Bir sunucu oluşturulurken organizasyon seçimi zorunludur (bkz. bölüm 6).
 
 Uygulama: her istek iki denetimden geçer. **İzin** (ne yapabilir) `role_permissions`'tan gelir (`internal/rbac`; rol başına
@@ -189,6 +189,7 @@ GET    /api/v1/settings  PATCH /api/v1/settings  POST /api/v1/settings/reset    
        /api/v1/notification-owners[/:id]
 GET    /api/v1/system/queue | /system/queue/items?status=…&kind=…                     (system.queue.view)
 GET    /api/v1/system/cache                                                          (system.cache.view)
+GET    /api/v1/system/logs | /system/logs/entries?day=…&level=…&q=… | /system/logs/download?day=…   (system.logs.view)
 ```
 
 ### Hata yanıtları

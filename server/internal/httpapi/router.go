@@ -102,6 +102,9 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/system/queue", d.requirePermission("system.queue.view", handle(d.handleQueueStatus)))
 	mux.HandleFunc("GET /api/v1/system/queue/items", d.requirePermission("system.queue.view", handle(d.handleQueueItems)))
 	mux.HandleFunc("GET /api/v1/system/cache", d.requirePermission("system.cache.view", handle(d.handleCacheStatus)))
+	mux.HandleFunc("GET /api/v1/system/logs", d.requirePermission("system.logs.view", handle(d.handleLogFiles)))
+	mux.HandleFunc("GET /api/v1/system/logs/entries", d.requirePermission("system.logs.view", handle(d.handleLogEntries)))
+	mux.HandleFunc("GET /api/v1/system/logs/download", d.requirePermission("system.logs.view", handle(d.handleLogDownload)))
 
 	mux.HandleFunc("GET /api/v1/dashboard/summary", d.requirePermission("dashboard.view", handle(d.handleDashboardSummary)))
 	mux.HandleFunc("GET /api/v1/dashboard/overview", d.requirePermission("dashboard.view", handle(d.handleDashboardOverview)))

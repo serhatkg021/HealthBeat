@@ -26,8 +26,15 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   pull zamanlayıcının sunucu başına son sorgulama zamanı, güvenilen proxy'lerin çözülmüş adresleri ve sunulan TLS
   sertifikası (adlar, bitiş tarihi, kalan gün). Sır içermez; yalnızca isteği karşılayan server sürecini gösterir.
 - `GET /api/v1/system/cache` (`system.cache.view`).
-- Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir
-  (`system.logs.view` sonraki araç içindir, henüz bir şeyi açmaz).
+- **Panel: Sistem Araçları → Log Analiz** sekmesi: server'ın kalıcı log dosyaları (`LOG_FILE`) sunucuya girmeden, gün gün
+  incelenir. Gün seçilir; satırlar en düşük seviyeye, metne, istek kimliğine (`request_id`) ve saat aralığına göre süzülür,
+  en yeni üstte sayfalanır; satır açılınca bütün alanları (hata gövdeleri okunur biçimde) görünür ve aynı isteğin bütün
+  satırlarına tek tıkla geçilir. Günün logu düz metin olarak indirilebilir. Üstte log dosyalarının kapladığı alan / sınır
+  gösterilir. Bölünmüş ve gzip'li parçalar, `text` ve `json` biçimleri okunur. `LOG_FILE` boşsa sekme bunu söyler.
+- `GET /api/v1/system/logs`, `GET /api/v1/system/logs/entries` ve `GET /api/v1/system/logs/download` (`system.logs.view`).
+  İstemci yalnızca gün verir, dosya yolu veremez. Bir günün açılması (`system.logs.view`) ve indirilmesi
+  (`system.logs.download`) denetim kaydına yazılır.
+- Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir.
 
 ### Değişti
 - Proje MIT lisansıyla yayınlanıyor (`LICENSE`); Docker imajları `org.opencontainers.image.licenses=MIT` etiketini taşıyor.

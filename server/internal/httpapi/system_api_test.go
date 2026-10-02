@@ -3,11 +3,16 @@ package httpapi_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http/httptest"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"healthbeat-server/internal/httpapi"
+	"healthbeat-server/internal/logging"
 )
 
 type queueStatusView struct {
@@ -220,4 +225,137 @@ func TestCacheStatusAPI(t *testing.T) {
 			t.Fatalf("cache status contains %q: %s", leak, raw)
 		}
 	}
+}
+
+type logFilesView struct {
+	Enabled bool `json:"enabled"`
+	Days    []struct {
+		Day   string `json:"day"`
+		Parts int    `json:"parts"`
+		Bytes int64  `json:"bytes"`
+	} `json:"days"`
+	TotalBytes    int64 `json:"total_bytes"`
+	MaxTotalBytes int64 `json:"max_total_bytes"`
+	MaxAgeDays    int   `json:"max_age_days"`
+}
+
+type logEntriesView struct {
+	Entries []struct {
+		Line    int     `json:"line"`
+		Time    *string `json:"time"`
+		Level   string  `json:"level"`
+		Message string  `json:"message"`
+		Attrs   []struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		} `json:"attrs"`
+	} `json:"entries"`
+	NextBefore int `json:"next_before"`
+	Scanned    int `json:"scanned"`
+}
+
+// LOG_FILE boşken Log Analiz "kapalı" görünür; satır ve indirme istekleri 404 olur.
+func TestLogAnalysisIsOffWithoutALogFile(t *testing.T) {
+	a := newAPI(t)
+	root, _ := a.login("root@x.test", "super_admin")
+	var files logFilesView
+	a.expect(200, "GET", "/api/v1/system/logs", root, nil, &files)
+	if files.Enabled || files.Days == nil || len(files.Days) != 0 {
+		t.Fatalf("log files without a log file = %+v", files)
+	}
+	a.expect(404, "GET", "/api/v1/system/logs/entries?day=2026-10-02", root, nil, nil)
+	a.expect(404, "GET", "/api/v1/system/logs/download?day=2026-10-02", root, nil, nil)
+}
+
+func TestLogAnalysisAPI(t *testing.T) {
+	a := newAPI(t)
+	root, _ := a.login("root@x.test", "super_admin")
+	orgAdmin, _ := a.login("oa@x.test", "org_admin")
+
+	dir := t.TempDir()
+	fw, err := logging.OpenFile(logging.FileOptions{Path: filepath.Join(dir, "server.log"), MaxAgeDays: 14, MaxTotalBytes: 64 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { fw.Close() })
+	a.deps.SetLogFiles(fw)
+	day := time.Now().Format(time.DateOnly)
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, l := range []string{
+		`time=` + now + ` level=INFO msg=request method=GET path=/api/v1/meta status=200 request_id=r1 ip=10.0.0.1`,
+		`time=` + now + ` level=WARN msg="request failed" method=POST path=/api/v1/auth/login status=401 request_id=r2 ip=10.0.0.2`,
+		`time=` + now + ` level=ERROR msg="notification delivery failed; giving up" request_id=r2 err="smtp auth: 535"`,
+	} {
+		if _, err := fw.Write([]byte(l + "\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, path := range []string{"/api/v1/system/logs", "/api/v1/system/logs/entries?day=" + day, "/api/v1/system/logs/download?day=" + day} {
+		a.expect(403, "GET", path, orgAdmin, nil, nil)
+		a.expect(401, "GET", path, "", nil, nil)
+	}
+
+	var files logFilesView
+	a.expect(200, "GET", "/api/v1/system/logs", root, nil, &files)
+	if !files.Enabled || len(files.Days) != 1 || files.Days[0].Day != day || files.Days[0].Parts != 1 || files.TotalBytes != files.Days[0].Bytes ||
+		files.TotalBytes == 0 || files.MaxTotalBytes != 64<<20 || files.MaxAgeDays != 14 {
+		t.Fatalf("log files = %+v", files)
+	}
+
+	var res logEntriesView
+	a.expect(200, "GET", "/api/v1/system/logs/entries?day="+day, root, nil, &res)
+	if len(res.Entries) != 3 || res.Entries[0].Level != "ERROR" || res.Entries[2].Message != "request" || res.NextBefore != 0 || res.Scanned != 3 ||
+		res.Entries[0].Time == nil || res.Entries[0].Attrs[1].Key != "err" || res.Entries[0].Attrs[1].Value != "smtp auth: 535" {
+		t.Fatalf("entries = %+v", res)
+	}
+	a.expect(200, "GET", "/api/v1/system/logs/entries?day="+day+"&level=warn&request_id=r2&q=LOGIN", root, nil, &res)
+	if len(res.Entries) != 1 || res.Entries[0].Message != "request failed" {
+		t.Fatalf("filtered entries = %+v", res)
+	}
+	a.expect(200, "GET", "/api/v1/system/logs/entries?day="+day+"&limit=2", root, nil, &res)
+	if len(res.Entries) != 2 || res.NextBefore != 2 {
+		t.Fatalf("first page = %+v", res)
+	}
+	a.expect(200, "GET", fmt.Sprintf("/api/v1/system/logs/entries?day=%s&limit=2&before=%d", day, res.NextBefore), root, nil, &res)
+	if len(res.Entries) != 1 || res.Entries[0].Line != 1 || res.NextBefore != 0 {
+		t.Fatalf("second page = %+v", res)
+	}
+	a.expect(200, "GET", "/api/v1/system/logs/entries?day="+day+"&to=2000-01-01T00:00:00Z", root, nil, &res)
+	if len(res.Entries) != 0 || res.Entries == nil {
+		t.Fatalf("entries before 2000 = %+v", res)
+	}
+
+	// Bir günün açılması (ilk sayfa) süzgeçleriyle denetim kaydına yazılır; sayfa çevirmek yazılmaz.
+	if n := a.auditCount("system.logs.view"); n != 4 {
+		t.Fatalf("system.logs.view audit entries = %d, want 4 (first pages only)", n)
+	}
+	var details string
+	if err := a.pool.QueryRow(context.Background(), `SELECT target_id || ' ' || details::text FROM audit_logs WHERE action = 'system.logs.view' AND details::text LIKE '%r2%'`).Scan(&details); err != nil ||
+		!strings.HasPrefix(details, day+" ") || !strings.Contains(details, `"level": "warn"`) || !strings.Contains(details, `"q": "LOGIN"`) {
+		t.Fatalf("audit details = %q err=%v", details, err)
+	}
+
+	// İndirme: günün düz metni, ek olarak; denetim kaydına yazılır.
+	req := httptest.NewRequest("GET", "/api/v1/system/logs/download?day="+day, nil)
+	req.Header.Set("Authorization", "Bearer "+root)
+	rec := httptest.NewRecorder()
+	a.handler.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/plain") ||
+		!strings.Contains(rec.Header().Get("Content-Disposition"), "healthbeat-server-"+day+".log") ||
+		strings.Count(rec.Body.String(), "\n") < 3 || !strings.Contains(rec.Body.String(), `msg="request failed"`) {
+		t.Fatalf("download = %d %v\n%s", rec.Code, rec.Header(), rec.Body.String())
+	}
+	if n := a.auditCount("system.logs.download"); n != 1 {
+		t.Fatalf("system.logs.download audit entries = %d, want 1", n)
+	}
+
+	// Geçersiz istekler: gün yerine yol verilemez; olmayan gün 404.
+	for _, bad := range []string{"", "?day=../../etc/passwd", "?day=2026-10-2", "?day=" + day + "&level=trace", "?day=" + day + "&limit=501",
+		"?day=" + day + "&before=0", "?day=" + day + "&from=dün", "?day=" + day + "&q=" + strings.Repeat("x", 201)} {
+		a.expect(400, "GET", "/api/v1/system/logs/entries"+bad, root, nil, nil)
+	}
+	a.expect(404, "GET", "/api/v1/system/logs/entries?day=1999-01-01", root, nil, nil)
+	a.expect(400, "GET", "/api/v1/system/logs/download?day=..%2F..%2Fetc%2Fpasswd", root, nil, nil)
+	a.expect(404, "GET", "/api/v1/system/logs/download?day=1999-01-01", root, nil, nil)
 }

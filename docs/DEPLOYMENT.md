@@ -157,6 +157,10 @@ satırları birlikte — o dizindeki günlük dosyalara da yazılır:
   `./logs:/var/log/healthbeat` yap ve klasörü server kullanıcısına ver: `mkdir -p logs && sudo chown 10001:10001 logs`.
 - Dosyaya yazılamazsa (disk dolu, izin) server durmaz: log stdout'ta devam eder, sorun bir kez stderr'e yazılır.
 - Bare-metal'de `LOG_FILE` boş varsayılandır; systemd servisi olarak çalışan server'ın logu zaten journal'dadır.
+- **Panelden okuma:** bu dosyalar panelde **Sistem Araçları → Log Analiz** sekmesinde gün gün incelenir (seviye, metin,
+  `request_id` ve saat süzgeçleri; günün düz metin olarak indirilmesi). İzin `system.logs.view` (varsayılan olarak yalnızca
+  süper admin); bir günün açılması ve indirilmesi denetim kaydına yazılır. `LOG_FILE` boşsa sekme kapalıdır: bare-metal'de
+  panelden log okumak için `LOG_FILE`'ı ayarla. Günler server'ın tarihine göre ayrılır.
 
 ### Hız sınırları ve istemci IP'si
 
