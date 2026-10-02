@@ -1,4 +1,4 @@
-import { apiRequest, apiRequestPage } from './client'
+import { apiDownload, apiRequest, apiRequestPage } from './client'
 import type {
   Alert,
   ChannelInfo,
@@ -11,6 +11,8 @@ import type {
   AlertNotification,
   AuditLogPage,
   CacheStatus,
+  LogFiles,
+  LogPage,
   QueueItemPage,
   QueueSummary,
   AlertStatus,
@@ -215,6 +217,21 @@ export const auditApi = {
 export const systemApi = {
   queue: () => apiRequest<QueueSummary>('/api/v1/system/queue'),
   cache: () => apiRequest<CacheStatus>('/api/v1/system/cache'),
+  logFiles: () => apiRequest<LogFiles>('/api/v1/system/logs'),
+  logEntries: (params: { day: string; level?: string; q?: string; request_id?: string; from?: string; to?: string; before?: number; limit?: number }) =>
+    apiRequest<LogPage>('/api/v1/system/logs/entries', {
+      query: {
+        day: params.day,
+        level: params.level,
+        q: params.q,
+        request_id: params.request_id,
+        from: params.from,
+        to: params.to,
+        before: params.before?.toString(),
+        limit: params.limit?.toString(),
+      },
+    }),
+  downloadLog: (day: string) => apiDownload('/api/v1/system/logs/download', { day }, `healthbeat-server-${day}.log`),
   queueItems: (params: { status?: string; kind?: string; cursor?: string; limit?: number }) =>
     apiRequest<QueueItemPage>('/api/v1/system/queue/items', {
       query: { status: params.status, kind: params.kind, cursor: params.cursor, limit: params.limit?.toString() },

@@ -11,6 +11,7 @@ import (
 	"healthbeat-server/internal/authsvc"
 	"healthbeat-server/internal/clientip"
 	"healthbeat-server/internal/ingest"
+	"healthbeat-server/internal/logging"
 	"healthbeat-server/internal/outbox"
 	"healthbeat-server/internal/pullscheduler"
 	"healthbeat-server/internal/ratelimit"
@@ -38,6 +39,8 @@ type Deps struct {
 	// pullScheduler ve tlsCerts yalnızca Sistem Araçları'nda (Cache Durumu) gösterilmek için tutulur; nil olabilir.
 	pullScheduler *pullscheduler.Scheduler
 	tlsCerts      *tlsreload.Reloader
+	// logFiles, kalıcı log dosyalarının yazıcısıdır (Sistem Araçları → Log Analiz okur); LOG_FILE boşsa nil.
+	logFiles *logging.FileWriter
 
 	users         *store.Users
 	organizations *store.Organizations
@@ -113,6 +116,10 @@ func (d *Deps) SetAgentPolicy(p AgentPolicy) { d.agentPolicy.Store(&p) }
 func (d *Deps) SetSystemSources(pull *pullscheduler.Scheduler, certs *tlsreload.Reloader) {
 	d.pullScheduler, d.tlsCerts = pull, certs
 }
+
+// SetLogFiles, Sistem Araçları'nın (Log Analiz) okuyacağı log dosyası yazıcısını bağlar; nil (LOG_FILE boş) ise
+// özellik "kapalı" görünür.
+func (d *Deps) SetLogFiles(w *logging.FileWriter) { d.logFiles = w }
 
 // SetClientIPResolver, istemci IP'sinin güvenilir proxy'lerin X-Forwarded-For'undan okunmasını açar (bkz. clientip).
 func (d *Deps) SetClientIPResolver(r *clientip.Resolver) { d.clientIPs = r }

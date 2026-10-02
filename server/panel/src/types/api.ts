@@ -536,3 +536,39 @@ export interface CacheStatus {
     file_modified_at: string
   } | null
 }
+
+// Bir günün log dosyaları: parts dosya sayısı, bytes diskteki boyut, compressed hepsinin gzip'li olduğu.
+export interface LogDay {
+  day: string
+  parts: number
+  bytes: number
+  compressed: boolean
+}
+
+// Log dosyası olan günler (en yeni önce) ve saklama sınırları (GET /api/v1/system/logs). enabled false ise server
+// dosyaya loglamıyor.
+export interface LogFiles {
+  enabled: boolean
+  days: LogDay[]
+  total_bytes: number
+  max_total_bytes: number
+  max_age_days: number
+}
+
+// Ayrıştırılmış bir log satırı. Ayrıştırılamayan satırda time null, level boş ve message satırın ham hâlidir.
+export interface LogEntry {
+  // Satırın o gün içindeki sıra numarası.
+  line: number
+  time: string | null
+  level: string
+  message: string
+  attrs: { key: string; value: string }[]
+  truncated?: boolean
+}
+
+// Bir günün satırlarının bir sayfası, en yeni önce (GET /api/v1/system/logs/entries). next_before 0 ise daha eski satır yok.
+export interface LogPage {
+  entries: LogEntry[]
+  next_before: number
+  scanned: number
+}

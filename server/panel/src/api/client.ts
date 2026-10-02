@@ -176,6 +176,31 @@ async function rawRequest(path: string, opts: RequestOptions, retry: boolean): P
   return { data, headers: resp.headers }
 }
 
+// apiDownload, kimlik doğrulamalı bir GET yanıtını dosya olarak kaydettirir (ör. bir günün logu). Token başlıkta
+// taşındığı için düz bir bağlantı kullanılamaz: yanıt belleğe alınır ve tarayıcının indirme penceresine verilir.
+export async function apiDownload(path: string, query: Record<string, string | undefined>, filename: string, retry = true): Promise<void> {
+  const url = new URL(apiUrl(path), window.location.origin)
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined) url.searchParams.set(key, value)
+  }
+  const token = getAccessToken()
+  const resp = await fetch(url.href, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  if (resp.status === 401 && retry && (await refreshAccessToken())) return apiDownload(path, query, filename, false)
+  if (!resp.ok) {
+    const data: unknown = (resp.headers.get('content-type') ?? '').includes('application/json') ? await resp.json() : undefined
+    const message = data && typeof data === 'object' && 'error' in data ? String((data as { error: unknown }).error) : resp.statusText
+    throw new ApiError(resp.status, message)
+  }
+  const href = URL.createObjectURL(await resp.blob())
+  const a = document.createElement('a')
+  a.href = href
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(href)
+}
+
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { data } = await rawRequest(path, opts, true)
   return data as T

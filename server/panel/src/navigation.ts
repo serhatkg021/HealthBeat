@@ -62,6 +62,7 @@ export function navigation(can: Can): Navigation {
   const tools = [
     ...(can('system.queue.view') ? [{ id: 'kuyruk', label: 'Kuyruk Durumu' }] : []),
     ...(can('system.cache.view') ? [{ id: 'cache', label: 'Cache Durumu' }] : []),
+    ...(can('system.logs.view') ? [{ id: 'log', label: 'Log Analiz' }] : []),
   ]
   const settings = [
     ...card(can('threshold.view'), {
