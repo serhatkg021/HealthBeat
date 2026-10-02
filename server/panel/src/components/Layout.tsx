@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Activity, Bell, Building2, ChevronDown, LayoutDashboard, Menu, Server, Settings, Users, X, type LucideIcon } from 'lucide-react'
+import { Activity, Bell, Building2, ChevronDown, LayoutDashboard, Menu, Server, Settings, Users, Wrench, X, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
-import { SETTINGS_PATH, groupHasActive, inSettingsArea, navigation, type NavGroup, type NavItem } from '../navigation'
+import { SETTINGS_PATH, TOOLS_PATH, groupHasActive, inSettingsArea, inToolsArea, navigation, type NavGroup, type NavItem } from '../navigation'
 import { pageTitle } from '../pageTitle'
 import { versionInfo } from '../versionInfo'
 import { AlertCounters } from './AlertCounters'
@@ -135,12 +135,20 @@ export function Layout() {
           <SideGroup key={group.id} group={group} collapsed={collapsed.includes(group.id)} onToggle={() => toggleGroup(group.id)} />
         ))}
 
-        {nav.settings.length > 0 && (
+        {(nav.tools.length > 0 || nav.settings.length > 0) && (
           <div className="sidebar-footer">
-            <NavLink to={SETTINGS_PATH} className={`sidebar-link${inSettingsArea(pathname) ? ' active' : ''}`}>
-              <Settings size={16} strokeWidth={1.75} />
-              Ayarlar
-            </NavLink>
+            {nav.tools.length > 0 && (
+              <NavLink to={TOOLS_PATH} className={`sidebar-link${inToolsArea(pathname) ? ' active' : ''}`}>
+                <Wrench size={16} strokeWidth={1.75} />
+                Sistem Araçları
+              </NavLink>
+            )}
+            {nav.settings.length > 0 && (
+              <NavLink to={SETTINGS_PATH} className={`sidebar-link${inSettingsArea(pathname) ? ' active' : ''}`}>
+                <Settings size={16} strokeWidth={1.75} />
+                Ayarlar
+              </NavLink>
+            )}
           </div>
         )}
       </nav>

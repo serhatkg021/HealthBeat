@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Permission } from './auth/permissions.ts'
-import { groupHasActive, inSettingsArea, navigation } from './navigation.ts'
+import { groupHasActive, inSettingsArea, inToolsArea, navigation } from './navigation.ts'
 
 const canOnly = (...allowed: Permission[]) => (p: Permission) => allowed.includes(p)
 const ids = (items: { id: string }[]) => items.map((i) => i.id)
@@ -12,6 +12,21 @@ test('a super admin sees the summary, alerts, the management group and all three
   assert.deepEqual(ids(nav.groups), ['yonetim'])
   assert.deepEqual(ids(nav.groups[0].items), ['organizasyonlar', 'kullanicilar'])
   assert.deepEqual(ids(nav.settings), ['esikler', 'denetim', 'sistem'])
+  assert.deepEqual(ids(nav.tools), ['kuyruk'])
+})
+
+test('system tools show only the tabs the user has a permission for; with none the menu entry disappears', () => {
+  assert.deepEqual(ids(navigation(canOnly('system.queue.view')).tools), ['kuyruk'])
+  // Ayarları görebilmek Sistem Araçları'nı açmaz; her aracın kendi izni vardır.
+  assert.deepEqual(navigation(canOnly('settings.view', 'settings.manage', 'audit.view')).tools, [])
+  assert.deepEqual(navigation(() => false).tools, [])
+})
+
+test('the system tools area is its own page, not part of settings', () => {
+  assert.equal(inToolsArea('/system'), true)
+  assert.equal(inToolsArea('/systems'), false)
+  assert.equal(inSettingsArea('/system'), false)
+  assert.equal(inToolsArea('/settings/system'), false)
 })
 
 test('an operator gets "my hosts" instead of organizations; an empty group disappears', () => {
