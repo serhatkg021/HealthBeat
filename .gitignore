@@ -14,5 +14,8 @@
 /logs/
 /server/logs/
 
+# Veritabanı yedekleri (docs/DISTRIBUTION.md §8.2)
+/backups/
+
 # Sürüm artifact'ları (scripts/release.sh)
 /dist/

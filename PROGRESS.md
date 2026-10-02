@@ -4,10 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-01 — Server + panel **2.0.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
-"Güncellemeden önce" notları): çalışma zamanı ayarları ve bildirim kanalları panelde, bildirimler sistem sahiplerine ve
-toplanan ek alıcılara gidiyor, panel gezinmesi yenilendi (sabit üst ve alt çubuk, açılır menü, kartlı Ayarlar), profil
-sayfası eklendi. Birleşince `main`'den `server/v2.0.0` etiketi atılacak.
+**Son güncelleme:** 2026-10-02 — Belgelerdeki veritabanı yedeği komutları dosyayı repo köküne değil gitignore'daki
+`backups/` dizinine yazıyor (`docs/DISTRIBUTION.md` §8.2–8.3, `docs/DEPLOYMENT.md`). Server + panel **2.0.0** yayınlandı
+(2026-10-01, `server/v2.0.0`).
 
 ## Durum
 
@@ -62,5 +61,4 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Sıradaki işler
 
-1. Server + panel 2.0.0 sürüm PR'ı.
-2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
+1. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
