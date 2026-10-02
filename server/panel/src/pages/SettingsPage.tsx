@@ -347,6 +347,13 @@ function EmailChannelCard({
       <p className="card-desc">
         Alert bildirimleri ve “Şifremi unuttum” e-postaları bu sunucu üzerinden gönderilir. Kaydettikten sonra “Deneme gönder” ile ayarı doğrulayın.
       </p>
+      {channel.secret_unreadable && (
+        <div className="notice">
+          Kayıtlı şifre çözülemiyor: server’ın şifreleme anahtarı (SECRETS_ENCRYPTION_KEY) şifre kaydedildikten sonra değişmiş. Şifre yeniden
+          girilene kadar e-posta gönderilemez; bildirimler kuyrukta yeniden denenir. Şifreyi girip kaydedin (SMTP sunucunuz şifre istemiyorsa
+          “Kayıtlı şifreyi sil”i işaretleyin).
+        </div>
+      )}
       {channel.rule_count > 0 && !channel.enabled && (
         <div className="notice">Bu kanalı kullanan {channel.rule_count} bildirim kuralı var; kanal kapalıyken çalışmıyorlar.</div>
       )}
@@ -389,10 +396,10 @@ function EmailChannelCard({
             value={secret}
             autoComplete="new-password"
             disabled={clearSecret}
-            placeholder={channel.secret_set ? '•••• kayıtlı (değiştirmek için yazın)' : ''}
+            placeholder={channel.secret_set ? '•••• kayıtlı (değiştirmek için yazın)' : channel.secret_unreadable ? 'çözülemiyor — yeniden girin' : ''}
             onChange={(e) => setSecret(e.target.value)}
           />
-          {channel.secret_set && (
+          {(channel.secret_set || channel.secret_unreadable) && (
             <label className="check-row">
               <input type="checkbox" checked={clearSecret} onChange={(e) => setClearSecret(e.target.checked)} />
               Kayıtlı şifreyi sil

@@ -14,6 +14,7 @@ import (
 
 // NotificationChannels, sistem düzeyindeki bildirim kanallarının (notification_channels) SQL katmanıdır. Kanalın şifresi ya
 // da token'ı secretbox ile şifreli saklanır ve kanal adına bağlanır: başka bir satıra kopyalanan değer çözülemez.
+// Çözülemeyen şifreyle okunan kanal SecretUnreadable işaretiyle döner.
 type NotificationChannels struct {
 	pool *pgxpool.Pool
 	box  *secretbox.Box
@@ -39,11 +40,13 @@ func (s *NotificationChannels) scan(row interface{ Scan(...any) error }) (model.
 	}
 	c.Config = json.RawMessage(config)
 	if sealed != nil {
-		secret, err := s.box.Open(*sealed, channelSecretAAD(c.Channel))
-		if err != nil {
-			return c, fmt.Errorf("notification channel %s: %w", c.Channel, err)
+		// Çözülemeyen şifre hata değildir: kanal işaretlenir ve panelden yeniden girilebilir. Hata olsaydı anahtarı
+		// değişen bir server hiç açılamaz, şifre de panelden düzeltilemezdi.
+		if secret, err := s.box.Open(*sealed, channelSecretAAD(c.Channel)); err != nil {
+			c.SecretUnreadable = true
+		} else {
+			c.Secret, c.SecretSet = secret, true
 		}
-		c.Secret, c.SecretSet = secret, true
 	}
 	return c, nil
 }

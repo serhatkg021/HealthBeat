@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"healthbeat-server/internal/model"
+	"healthbeat-server/internal/secretbox"
 	"healthbeat-server/internal/store"
 	"healthbeat-server/internal/testdb"
 )
@@ -87,10 +89,62 @@ func TestNotificationChannelSecretIsBoundToItsChannel(t *testing.T) {
 		SELECT 'sms', 'test', secret_enc FROM notification_channels WHERE channel = 'email'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Get(ctx, "sms"); err == nil {
-		t.Fatal("a secret copied from another channel was decrypted")
+	if sms, err := s.Get(ctx, "sms"); err != nil || !sms.SecretUnreadable || sms.SecretSet || sms.Secret != "" {
+		t.Fatalf("a secret copied from another channel: %+v err=%v, want it unreadable", sms, err)
 	}
 	if got, err := s.Get(ctx, "email"); err != nil || got.Secret != "gizli" {
 		t.Fatalf("email after the copy: %+v err=%v", got, err)
+	}
+}
+
+// Anahtar değişince kayıtlı şifre çözülemez: kanal yine okunur (server açılabilsin), işaretlenir ve yeni şifre
+// kaydedilince ya da şifre silinince işaret kalkar.
+func TestNotificationChannelWithAnUnreadableSecretIsStillReadable(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	str := func(v string) *string { return &v }
+
+	old := store.NewNotificationChannels(pool, testdb.SecretBox(t))
+	email, _ := old.Get(ctx, "email")
+	email.Config = json.RawMessage(`{"host": "smtp.x.test", "port": 587, "from": "hb@x.test", "username": "hb"}`)
+	if _, err := old.Save(ctx, nil, email, str("eski-anahtarla")); err != nil {
+		t.Fatal(err)
+	}
+
+	box, err := secretbox.New([]byte("ffffffffffffffffffffffffffffffff"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := store.NewNotificationChannels(pool, box)
+	list, err := s.List(ctx)
+	if err != nil {
+		t.Fatalf("list with a changed key: %v", err)
+	}
+	var got *model.NotificationChannel
+	for i := range list {
+		if list[i].Channel == "email" {
+			got = &list[i]
+		}
+	}
+	if got == nil || !got.SecretUnreadable || got.SecretSet || got.Secret != "" {
+		t.Fatalf("email with a changed key = %+v, want it flagged and without a secret", got)
+	}
+
+	// Şifreye dokunmayan kayıt çalışır ve işaret kalır.
+	got.OwnerMinLevel = "critical"
+	saved, err := s.Save(ctx, nil, *got, nil)
+	if err != nil || !saved.SecretUnreadable || saved.OwnerMinLevel != "critical" {
+		t.Fatalf("saving without touching the secret: %+v err=%v", saved, err)
+	}
+	if saved, err = s.Save(ctx, nil, saved, str("yeni-anahtarla")); err != nil || saved.SecretUnreadable || saved.Secret != "yeni-anahtarla" {
+		t.Fatalf("entering the secret again: %+v err=%v", saved, err)
+	}
+
+	// Silmek de işareti kaldırır.
+	if _, err := old.Save(ctx, nil, saved, str("yine-eski")); err != nil {
+		t.Fatal(err)
+	}
+	if saved, err = s.Save(ctx, nil, saved, str("")); err != nil || saved.SecretUnreadable || saved.SecretSet {
+		t.Fatalf("clearing an unreadable secret: %+v err=%v", saved, err)
 	}
 }

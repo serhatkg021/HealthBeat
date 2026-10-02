@@ -305,7 +305,7 @@ func logPasswordReset(emailEnabled bool, panelBaseURL string) {
 	case emailEnabled:
 		slog.Info("password reset by e-mail: disabled — the e-mail channel is on but the panel address is not set (Settings)")
 	case panelBaseURL != "":
-		slog.Info("password reset by e-mail: disabled — the panel address is set but the e-mail channel is off (Settings)")
+		slog.Info("password reset by e-mail: disabled — the panel address is set but the e-mail channel is off or cannot send (Settings)")
 	default:
 		slog.Info("password reset by e-mail: disabled (turn on the e-mail channel and set the panel address in Settings)")
 	}

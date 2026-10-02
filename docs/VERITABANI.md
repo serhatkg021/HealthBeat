@@ -567,7 +567,8 @@ Panelden (Ayarlar) değişen çalışma zamanı ayarları (`000005`): **tek sat�
 
 Sistem düzeyindeki bildirim kanalları (`000005`): server'ın desteklediği her kanal için bir satır (şimdilik `email`,
 `provider = smtp`, başlangıçta kapalı). `config` sır olmayan ayardır (biçimini kanalın göndericisi doğrular); `secret_enc`
-şifre ya da token'dır, `SECRETS_ENCRYPTION_KEY` ile şifreli ve kanal adına bağlıdır, API'den asla okunmaz.
+şifre ya da token'dır, `SECRETS_ENCRYPTION_KEY` ile şifreli ve kanal adına bağlıdır, API'den asla okunmaz; anahtar
+değiştiği için çözülemiyorsa kanal gönderemez ve API'de `secret_unreadable` olarak görünür (şifre yeniden girilir).
 `owner_min_level` sistem sahiplerine hangi seviyeden itibaren gönderileceğidir; `verified_at` son başarılı deneme
 gönderimidir ve ayar ya da şifre değişince sıfırlanır.
 

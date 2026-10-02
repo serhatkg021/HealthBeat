@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"net"
 	"strings"
 	"testing"
@@ -87,6 +88,28 @@ func TestSendAuthenticatesWhenCredentialsConfigured(t *testing.T) {
 func TestSendWithoutSMTPHostIsLogOnly(t *testing.T) {
 	if err := New(Config{}).Send(context.Background(), []string{"a@example.com"}, "subject", "body"); err != nil {
 		t.Fatalf("log-only Send returned an error: %v", err)
+	}
+}
+
+// Engellenmiş ayar (ör. şifre çözülemiyor) sunucuya bağlanmadan hata verir; "yalnızca log" gibi sessizce geçmez.
+func TestSendWithBlockedConfigFailsWithoutConnecting(t *testing.T) {
+	srv := testsmtp.Start(t)
+	blocked := errors.New("blocked")
+	m := mailer(srv, "")
+	cfg := *m.cfg.Load()
+	cfg.Blocked = blocked
+	m.SetConfig(cfg)
+	if m.Enabled() {
+		t.Fatal("a blocked mailer reports itself enabled")
+	}
+	if err := m.Send(context.Background(), []string{"a@example.com"}, "subject", "body"); !errors.Is(err, blocked) {
+		t.Fatalf("blocked Send: err=%v", err)
+	}
+	if err := m.SendWith(context.Background(), cfg, []string{"a@example.com"}, "subject", "body"); !errors.Is(err, blocked) {
+		t.Fatalf("blocked SendWith: err=%v", err)
+	}
+	if n := len(srv.Messages()); n != 0 {
+		t.Fatalf("%d message(s) sent with a blocked config", n)
 	}
 }
 

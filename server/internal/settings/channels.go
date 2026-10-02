@@ -62,6 +62,10 @@ func NewChannels(ctx context.Context, st *store.NotificationChannels, mailer *no
 	c := &Channels{store: st, mailer: mailer}
 	all := make(map[string]model.NotificationChannel, len(list))
 	for _, ch := range list {
+		if ch.SecretUnreadable {
+			slog.ErrorContext(ctx, "notification channel: the stored secret cannot be decrypted (has SECRETS_ENCRYPTION_KEY changed?); the channel cannot send until the secret is entered again in Settings",
+				"channel", ch.Channel)
+		}
 		all[ch.Channel] = ch
 	}
 	c.cur.Store(&all)
@@ -124,7 +128,7 @@ func (c *Channels) Update(ctx context.Context, actor *uuid.UUID, channel string,
 		if strings.ContainsAny(*p.Secret, "\r\n") {
 			return nil, &FieldError{"secret", "satır sonu içeremez"}
 		}
-		next.Secret, next.SecretSet = *p.Secret, *p.Secret != ""
+		next.Secret, next.SecretSet, next.SecretUnreadable = *p.Secret, *p.Secret != "", false
 	}
 	config, err := mergeConfig(old.Config, p.Config)
 	if err != nil {
@@ -199,12 +203,21 @@ func (c *Channels) Test(ctx context.Context, channel, to string) error {
 	return nil
 }
 
+// ErrSecretUnreadable, kayıtlı şifresi çözülemeyen bir kanalla gönderim denendiğinde döner.
+var ErrSecretUnreadable = errors.New("the channel's stored secret cannot be decrypted; enter it again in Settings")
+
 // MailerConfig, e-posta kanalının göndericiye verilecek ayarıdır: kanal kapalıysa boş (gönderim yalnızca loglanır).
+// Şifresi çözülemeyen açık kanal gönderimi engeller (SMTP sunucusuna şifresiz bağlanılmaz); kuyruktaki bildirimler
+// şifre yeniden girilene kadar yeniden denenir.
 func MailerConfig(ch model.NotificationChannel) notify.Config {
 	if !ch.Enabled {
 		return notify.Config{}
 	}
-	return smtpNotifyConfig(ch)
+	cfg := smtpNotifyConfig(ch)
+	if ch.SecretUnreadable {
+		cfg.Blocked = ErrSecretUnreadable
+	}
+	return cfg
 }
 
 func smtpNotifyConfig(ch model.NotificationChannel) notify.Config {
@@ -289,6 +302,9 @@ func DisplayConfig(ch model.NotificationChannel) json.RawMessage {
 
 // readyToSend, açık bir kanalın gönderim için gereken ayarlarının dolu olup olmadığını denetler.
 func readyToSend(ch model.NotificationChannel) error {
+	if ch.SecretUnreadable {
+		return &FieldError{"secret", "kayıtlı şifre çözülemiyor (SECRETS_ENCRYPTION_KEY değişmiş): şifre yeniden girilmeli"}
+	}
 	if ch.Provider == "smtp" {
 		var cfg SMTPConfig
 		_ = json.Unmarshal(ch.Config, &cfg)
@@ -317,8 +333,9 @@ func channelChanges(old, next model.NotificationChannel, secretGiven bool) Chang
 			changes[Field("config."+k)] = Change{Old: before[k], New: v}
 		}
 	}
-	if secretGiven && (old.Secret != next.Secret || old.SecretSet != next.SecretSet) {
-		changes["secret"] = Change{Old: old.SecretSet, New: next.SecretSet}
+	// Çözülemeyen şifre de kayıtlı bir şifredir: silinmesi ya da yenisinin girilmesi bir değişikliktir.
+	if secretGiven && (old.Secret != next.Secret || old.SecretSet != next.SecretSet || old.SecretUnreadable) {
+		changes["secret"] = Change{Old: old.SecretSet || old.SecretUnreadable, New: next.SecretSet}
 	}
 	return changes
 }

@@ -32,6 +32,9 @@ type Config struct {
 	Username string
 	Password string
 	From     string
+	// Blocked nil değilse gönderim SMTP sunucusuna bağlanmadan bu hatayla başarısız olur (ör. kayıtlı şifre
+	// çözülemiyor): kuyruktaki bildirimler kaybolmaz, yeniden denenir.
+	Blocked error
 }
 
 // Mailer, Host boşsa etkisizdir (yalnızca log): SMTP yapılandırılmamış ya da mail kanalı kapalı bir kurulum bir alert'te
@@ -57,8 +60,12 @@ func New(cfg Config) *Mailer {
 // SetConfig, bundan sonraki gönderimlerin SMTP ayarını değiştirir; Host boş ise gönderim kapanır (yalnızca log).
 func (m *Mailer) SetConfig(cfg Config) { m.cfg.Store(&cfg) }
 
-// Enabled, gerçek bir SMTP sunucusu yapılandırılıp yapılandırılmadığını söyler (false = yalnızca log).
-func (m *Mailer) Enabled() bool { return m.cfg.Load().Host != "" }
+// Enabled, şu an gerçekten e-posta gönderilip gönderilemediğini söyler: SMTP sunucusu yapılandırılmış ve gönderim
+// engellenmemiş (Config.Blocked) olmalı.
+func (m *Mailer) Enabled() bool {
+	cfg := m.cfg.Load()
+	return cfg.Host != "" && cfg.Blocked == nil
+}
 
 func (m *Mailer) tlsCfg(cfg Config) *tls.Config {
 	if m.tlsConfig != nil {
@@ -92,6 +99,9 @@ func (m *Mailer) SendWith(ctx context.Context, cfg Config, to []string, subject,
 func (m *Mailer) send(ctx context.Context, cfg Config, to []string, subject, body string) error {
 	if len(to) == 0 {
 		return nil
+	}
+	if cfg.Blocked != nil {
+		return cfg.Blocked
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, sessionTimeout)

@@ -45,16 +45,19 @@ type AppSettings struct {
 // NotificationChannel, sistem düzeyindeki bir bildirim kanalıdır (notification_channels satırı). Secret çözülmüş şifre ya da
 // token'dır: yalnızca server içinde kullanılır, API'ye asla verilmez.
 type NotificationChannel struct {
-	Channel       string
-	Provider      string // kanalın gerçekleştirimi (email → smtp)
-	Enabled       bool
-	Config        json.RawMessage // sır olmayan ayarlar; biçimini provider belirler
-	Secret        string
-	SecretSet     bool
-	OwnerMinLevel string // sistem sahiplerine bu seviye ve üzeri gönderilir
-	VerifiedAt    *time.Time
-	UpdatedAt     time.Time
-	UpdatedBy     *uuid.UUID
+	Channel   string
+	Provider  string // kanalın gerçekleştirimi (email → smtp)
+	Enabled   bool
+	Config    json.RawMessage // sır olmayan ayarlar; biçimini provider belirler
+	Secret    string
+	SecretSet bool
+	// SecretUnreadable, kayıtlı şifrenin bu server'ın anahtarıyla çözülemediğini söyler (SECRETS_ENCRYPTION_KEY değişmiş);
+	// şifre yeniden girilene ya da silinene kadar kanal gönderemez.
+	SecretUnreadable bool
+	OwnerMinLevel    string // sistem sahiplerine bu seviye ve üzeri gönderilir
+	VerifiedAt       *time.Time
+	UpdatedAt        time.Time
+	UpdatedBy        *uuid.UUID
 }
 
 // NotificationOwner, her alert'in bildirimini alan bir sistem sahibidir (panel kullanıcısı olması gerekmez). E-postası
