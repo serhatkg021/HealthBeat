@@ -34,6 +34,7 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - `GET /api/v1/system/logs`, `GET /api/v1/system/logs/entries` ve `GET /api/v1/system/logs/download` (`system.logs.view`).
   İstemci yalnızca gün verir, dosya yolu veremez. Bir günün açılması (`system.logs.view`) ve indirilmesi
   (`system.logs.download`) denetim kaydına yazılır.
+- Panel: Denetim Kaydı'nın kategori süzgecine "Sistem araçları" eklendi (log görüntüleme ve indirme kayıtları).
 - Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir.
 
 ### Değişti

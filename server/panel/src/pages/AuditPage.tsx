@@ -15,6 +15,7 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: 'alert.', label: 'Alert' },
   { value: 'notification', label: 'Bildirim' }, // kurallar, kanallar ve sistem sahipleri
   { value: 'settings.', label: 'Ayarlar' },
+  { value: 'system.', label: 'Sistem araçları' }, // log görüntüleme ve indirme
 ]
 
 const PAGE_SIZE = 50
