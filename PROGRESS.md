@@ -4,10 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-02 — Sistem Araçları'na **Log Analiz** sekmesi eklendi: kalıcı log dosyaları panelden gün gün
-incelenir (seviye, metin, istek kimliği ve saat süzgeçleri; en yeni üstte sayfalama; satır ayrıntısı; günün indirilmesi),
-`system.logs.view` izniyle; görüntüleme ve indirme denetim kaydına yazılır. Böylece Sistem Araçları'nın üç sekmesi (Kuyruk
-Durumu, Cache Durumu, Log Analiz) tamam. Server + panel **2.0.0** yayında (2026-10-01); bunlar "Yayınlanmamış"ta.
+**Son güncelleme:** 2026-10-03 — Panelde Ayarlar, Sistem Araçları gibi sekmeli tek sayfa oldu (Sistem Eşikleri, Denetim
+Kaydı, Sistem Ayarları; eski adresler sekmeye yönlenir) ve sekme çubuklarının sağ ucunda fareli cihazlarda görünen gereksiz
+dikey kaydırma çubuğu kaldırıldı. Sistem Araçları'nın üç sekmesi (Kuyruk Durumu, Cache Durumu, Log Analiz) tamam.
+Server + panel **2.0.0** yayında (2026-10-01); bunlar "Yayınlanmamış"ta.
 
 ## Durum
 

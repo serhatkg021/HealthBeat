@@ -1,8 +1,13 @@
-import { Link, Navigate } from 'react-router-dom'
-import { ChevronRight, ScrollText, Settings, SlidersHorizontal, type LucideIcon } from 'lucide-react'
+import { Navigate } from 'react-router-dom'
+import { ScrollText, Settings, SlidersHorizontal, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/PageHeader'
+import { TabPanel, Tabs } from '../components/Tabs'
+import { useTab } from '../components/useTab'
 import { navigation } from '../navigation'
+import { AuditPage } from './AuditPage'
+import { SettingsPage } from './SettingsPage'
+import { ThresholdsPage } from './ThresholdsPage'
 
 const ICONS: Record<string, LucideIcon> = {
   esikler: SlidersHorizontal,
@@ -10,30 +15,28 @@ const ICONS: Record<string, LucideIcon> = {
   sistem: Settings,
 }
 
-// Ayarlar girişi: kurulum geneli sayfalara (eşikler, denetim kaydı, sistem ayarları) götüren kartlar. Her kart yalnızca
-// izni olana görünür; hiçbirini göremeyen buraya gelemez.
+// Ayarlar: kurulum geneli sayfalar (eşikler, denetim kaydı, sistem ayarları) tek sayfada sekmelerle ayrılır. Her sekme
+// yalnızca izni olana görünür; hiçbirini göremeyen buraya gelemez.
 export function SettingsHubPage() {
   const { can } = useAuth()
-  const cards = navigation(can).settings
-  if (cards.length === 0) return <Navigate to="/" replace />
+  const tabs = navigation(can).settings
+  const ids = tabs.map((t) => t.id)
+  const [active, setActive] = useTab(ids, ids[0] ?? '')
+  if (tabs.length === 0) return <Navigate to="/" replace />
+  const description = tabs.find((t) => t.id === active)?.description
   return (
     <div>
-      <PageHeader title="Ayarlar" subtitle="Kurulum genelindeki ayarlar ve kayıtlar" />
-      <div className="hub-grid">
-        {cards.map((card) => {
-          const Icon = ICONS[card.id]
-          return (
-            <Link key={card.id} to={card.to} className="card hub-card">
-              <span className="hub-card-icon">{Icon && <Icon size={20} strokeWidth={1.75} />}</span>
-              <span className="hub-card-text">
-                <span className="hub-card-title">{card.label}</span>
-                <span className="hub-card-description">{card.description}</span>
-              </span>
-              <ChevronRight size={18} strokeWidth={1.75} className="hub-card-arrow" aria-hidden="true" />
-            </Link>
-          )
-        })}
-      </div>
+      <PageHeader title="Ayarlar" subtitle={description} />
+      <Tabs items={tabs.map((t) => ({ id: t.id, label: t.label, icon: ICONS[t.id] }))} active={active} onChange={setActive} label="Ayarlar" />
+      <TabPanel id="esikler" active={active}>
+        <ThresholdsPage />
+      </TabPanel>
+      <TabPanel id="denetim" active={active}>
+        <AuditPage />
+      </TabPanel>
+      <TabPanel id="sistem" active={active}>
+        <SettingsPage />
+      </TabPanel>
     </div>
   )
 }

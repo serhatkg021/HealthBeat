@@ -5,10 +5,8 @@ import { fullTitle, pageTitle } from './pageTitle.ts'
 test('static routes have a title; trailing slashes are ignored', () => {
   assert.equal(pageTitle('/'), 'Özet')
   assert.equal(pageTitle('/alerts'), 'Alert’ler')
-  assert.equal(pageTitle('/audit/'), 'Denetim Kaydı')
-  assert.equal(pageTitle('/settings'), 'Ayarlar')
-  assert.equal(pageTitle('/settings/system'), 'Sistem Ayarları')
-  assert.equal(pageTitle('/thresholds'), 'Sistem Eşikleri')
+  assert.equal(pageTitle('/settings/'), 'Ayarlar')
+  assert.equal(pageTitle('/system'), 'Sistem Araçları')
   assert.equal(pageTitle('/profile'), 'Profil')
   assert.equal(pageTitle('/login'), 'Giriş')
   assert.equal(pageTitle('/forgot-password'), 'Şifremi unuttum')

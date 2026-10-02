@@ -3,7 +3,6 @@ import { thresholdsApi } from '../api/endpoints'
 import type { MetricType, ThresholdConfig } from '../types/api'
 import { useAuth } from '../auth/AuthContext'
 import { METRICS, validateDraft } from './thresholds'
-import { PageHeader } from '../components/PageHeader'
 import { Info } from 'lucide-react'
 
 interface RowDraft {
@@ -92,11 +91,6 @@ export function ThresholdsPage() {
 
   return (
     <div className="page-readable">
-      <PageHeader
-        back={{ to: '/settings', label: 'Ayarlar' }}
-        title="Sistem Eşikleri"
-        subtitle="Kendi değeri olmayan tüm sunucuların kullandığı varsayılan alert eşikleri"
-      />
       <div className="notice notice-info">
         <div className="notice-title">
           <Info size={16} strokeWidth={1.9} />

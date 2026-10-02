@@ -5,7 +5,6 @@ import { channelsApi, ownersApi, settingsApi, type OwnerInput } from '../api/end
 import { useAuth } from '../auth/AuthContext'
 import { EmptyState } from '../components/EmptyState'
 import { Modal } from '../components/Modal'
-import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
 import { useTab } from '../components/useTab'
 import { alertLevelLabel } from '../labels'
@@ -55,11 +54,6 @@ export function SettingsPage() {
 
   return (
     <div>
-      <PageHeader
-        back={{ to: '/settings', label: 'Ayarlar' }}
-        title="Sistem Ayarları"
-        subtitle="Kurulum genelindeki ayarlar; değişiklikler yeniden başlatmadan uygulanır"
-      />
       {error && <div className="error-banner">{error}</div>}
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Ayar bölümleri">

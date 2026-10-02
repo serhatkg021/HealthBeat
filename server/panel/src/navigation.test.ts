@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Permission } from './auth/permissions.ts'
-import { groupHasActive, inSettingsArea, inToolsArea, navigation } from './navigation.ts'
+import { LEGACY_SETTINGS_ROUTES, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
 
 const canOnly = (...allowed: Permission[]) => (p: Permission) => allowed.includes(p)
 const ids = (items: { id: string }[]) => items.map((i) => i.id)
 
-test('a super admin sees the summary, alerts, the management group and all three settings cards', () => {
+test('a super admin sees the summary, alerts, the management group and all three settings tabs', () => {
   const nav = navigation(() => true)
   assert.deepEqual(ids(nav.top), ['ozet', 'alertler'])
   assert.deepEqual(ids(nav.groups), ['yonetim'])
@@ -49,9 +49,15 @@ test('a group keeps only the items the user may see', () => {
   assert.deepEqual(ids(nav.groups[0].items), ['organizasyonlar'])
 })
 
-test('the settings area covers the hub and the pages opened from it', () => {
-  for (const p of ['/settings', '/settings/system', '/thresholds', '/audit']) assert.equal(inSettingsArea(p), true, p)
+test('the settings area is the settings page', () => {
+  assert.equal(inSettingsArea('/settings'), true)
   for (const p of ['/', '/alerts', '/users', '/settingsx', '/auditor']) assert.equal(inSettingsArea(p), false, p)
+})
+
+test('the old separate pages map to settings tabs that exist', () => {
+  const tabs = ids(navigation(() => true).settings)
+  for (const [path, tab] of Object.entries(LEGACY_SETTINGS_ROUTES)) assert.ok(tabs.includes(tab), `${path} -> ${tab}`)
+  assert.equal(settingsTabPath('sistem'), '/settings?sekme=sistem')
 })
 
 test('a group is active on its pages and their detail pages', () => {
