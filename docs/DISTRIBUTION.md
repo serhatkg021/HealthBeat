@@ -215,7 +215,9 @@ docker compose pull && docker compose up -d
 
 ```sh
 # 1) VERİTABANI YEDEĞİ (migration'lar ileri doğrudur; geri dönüş yedekten yapılır)
-docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' > backup-$(date +%F)-oncesi.sql
+#    backups/ gitignore'dadır; yedek parola özetleri içerir, bu yüzden yalnızca sahibi okuyabilir (700/600)
+mkdir -p -m 700 backups
+(umask 077; docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' > backups/backup-$(date +%F-%H%M).sql)
 # 2) yeni sürüm: .env içindeki HB_VERSION satırını X.Y.Z yap, sonra
 docker compose pull && docker compose up -d
 # 3) doğrula
@@ -247,7 +249,7 @@ migrations this binary does not know"; `docs/COMPATIBILITY.md` kural 6). İki yo
    ```
    `000003`'ün geri alınması bekleyen (henüz gönderilmemiş) bildirimleri de siler.
 2. **Yedekten:** güncelleme öncesi aldığın yedeği geri yükle (güncellemeden sonraki veri kaybolur):
-   `docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup-….sql`.
+   `docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backups/backup-….sql`.
 
 ## 9. Bilerek yapmadıklarımız
 

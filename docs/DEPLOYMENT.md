@@ -441,8 +441,8 @@ DNS/IP; tarayıcının VE agent'ların bağlanacağı gerçek domain'i buraya ek
 `HB_TLS_HOSTS=healthbeat.xxx.com`). Yenilemede aynı iki dosyayı değiştirirsin; server bunu kendiliğinden
 algılar, panel (nginx) container'ının yeniden başlatılması gerekir.
 
-**Yedekleme:** `docker compose exec db pg_dump -U healthbeat healthbeat > backup.sql` (veya
-volume'ü doğrudan yedekle). `.env`'deki `JWT_*`, `SECRETS_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`'ü
+**Yedekleme:** `mkdir -p -m 700 backups && (umask 077; docker compose exec -T db pg_dump -U healthbeat healthbeat > backups/backup.sql)`
+(`backups/` gitignore'dadır; veya volume'ü doğrudan yedekle). `.env`'deki `JWT_*`, `SECRETS_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`'ü
 de ayrıca güvenli bir yerde tut.
 
 **Güncelleme:** `git pull && docker compose up -d --build` — server açılışta bekleyen
