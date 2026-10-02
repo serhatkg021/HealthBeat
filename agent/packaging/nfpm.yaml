@@ -13,7 +13,7 @@ description: |
   It makes no decisions: thresholds and alerts live on the server.
   After installing, configure and start it with: sudo healthbeat-agent-setup
 homepage: ${HOMEPAGE}
-license: Proprietary
+license: MIT
 
 # Statik binary'dir (CGO yok): dağıtıma özgü kütüphane bağımlılığı yoktur.
 # Sıkıştırma bilerek gzip: eski dağıtımların (Ubuntu 18.04, Debian 10, RHEL 8.0) paket yöneticileri
@@ -66,6 +66,9 @@ contents:
     file_info: {mode: 0644}
   - src: docs/DISTRIBUTION.md
     dst: /usr/share/doc/healthbeat/DISTRIBUTION.md
+    file_info: {mode: 0644}
+  - src: LICENSE
+    dst: /usr/share/doc/healthbeat/LICENSE
     file_info: {mode: 0644}
 
   # Yapılandırma dizini: servis grubu okuyabilir (kimlik bilgisi tutar). Grubu preinstall oluşturur.

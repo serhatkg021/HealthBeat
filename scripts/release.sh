@@ -124,7 +124,7 @@ for arch in $ARCHES; do
   install -m 0755 "$bin" "$stage/healthbeat-agent"
   install -m 0755 agent/deploy/install.sh "$stage/install.sh"
   install -m 0644 agent/deploy/healthbeat-agent.service "$stage/healthbeat-agent.service"
-  install -m 0644 docs/AGENT.md docs/COMPATIBILITY.md docs/DISTRIBUTION.md "$stage/"
+  install -m 0644 docs/AGENT.md docs/COMPATIBILITY.md docs/DISTRIBUTION.md LICENSE "$stage/"
   printf '%s\n' "$VERSION" >"$stage/VERSION"
   tar --sort=name --mtime="@$SOURCE_DATE_EPOCH" --owner=0 --group=0 --numeric-owner \
       -C "$DIST/.build" -cf - "$name" | gzip -n -9 >"$DIST/$name.tar.gz"

@@ -83,5 +83,10 @@ siler; mevcut tablolara dokunmaz. Yine de bunu **asla üretim veritabanına yön
 
 ## Durum
 
-Sürüm **1.0.0**: monitoring, alert ve panelin tamamı çalışır durumda. Açık işler ve bilinen sınırlamalar için
-[`PROGRESS.md`](PROGRESS.md).
+Monitoring, alert ve panelin tamamı çalışır durumda. Server + panel ve agent ayrı sürüm hatlarıyla yayınlanır; güncel
+sürümler ve değişiklikler [`server/CHANGELOG.md`](server/CHANGELOG.md) ile [`agent/CHANGELOG.md`](agent/CHANGELOG.md)'dedir.
+Açık işler ve bilinen sınırlamalar için [`PROGRESS.md`](PROGRESS.md).
+
+## Lisans
+
+[MIT](LICENSE) © 2026 Serhat Kadir Gürleyen

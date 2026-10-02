@@ -54,7 +54,7 @@ Bir **agent** sürümünde (`agent/vX.Y.Z`) şunlar yayınlanır:
 | --- | --- |
 | `healthbeat-agent_X.Y.Z_amd64.deb`, `_arm64.deb` | Ubuntu / Debian |
 | `healthbeat-agent-X.Y.Z-1.x86_64.rpm`, `.aarch64.rpm` | RHEL / Rocky / Alma / Amazon Linux |
-| `healthbeat-agent_X.Y.Z_linux_amd64.tar.gz`, `_arm64.tar.gz` | tarball: binary + `install.sh` + unit + belgeler |
+| `healthbeat-agent_X.Y.Z_linux_amd64.tar.gz`, `_arm64.tar.gz` | tarball: binary + `install.sh` + unit + belgeler + `LICENSE` |
 | `healthbeat-agent_X.Y.Z_linux_amd64`, `_arm64` | ham binary |
 | `SHA256SUMS`, `SHA256SUMS.asc` | özet listesi ve GPG imzası |
 | `RELEASE_NOTES.md` | `agent/CHANGELOG.md`'den çıkarılan sürüm notları |
