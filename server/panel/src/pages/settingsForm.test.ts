@@ -65,15 +65,20 @@ test('defaultText names the unit and an empty default', () => {
 })
 
 test('channelStatus', () => {
-  assert.deepEqual(channelStatus({ enabled: false, ready: false }), { label: 'Ayar gerekli', tone: 'warning' })
-  assert.deepEqual(channelStatus({ enabled: false, ready: true }), { label: 'Kapalı', tone: 'neutral' })
-  assert.deepEqual(channelStatus({ enabled: true, ready: true }), { label: 'Açık', tone: 'good' })
+  assert.deepEqual(channelStatus({ enabled: false, ready: false, secret_unreadable: false }), { label: 'Ayar gerekli', tone: 'warning' })
+  assert.deepEqual(channelStatus({ enabled: false, ready: true, secret_unreadable: false }), { label: 'Kapalı', tone: 'neutral' })
+  assert.deepEqual(channelStatus({ enabled: true, ready: true, secret_unreadable: false }), { label: 'Açık', tone: 'good' })
+  // Çözülemeyen şifre açık kanalda da öne geçer (server ready=false verir).
+  assert.deepEqual(channelStatus({ enabled: true, ready: false, secret_unreadable: true }), { label: 'Şifre yeniden girilmeli', tone: 'warning' })
 })
 
 test('notificationGap: nobody is notified without an open e-mail channel and an owner who takes e-mail', () => {
-  const on = [{ channel: 'email' as const, enabled: true }]
+  const on = [{ channel: 'email' as const, enabled: true, secret_unreadable: false }]
   const owner = { email: 'noc@x.test', email_enabled: true }
-  assert.match(notificationGap([{ channel: 'email', enabled: false }], [owner]) ?? '', /kanalı kapalı/)
+  assert.match(notificationGap([{ channel: 'email', enabled: false, secret_unreadable: false }], [owner]) ?? '', /kanalı kapalı/)
+  assert.match(notificationGap([{ channel: 'email', enabled: true, secret_unreadable: true }], [owner]) ?? '', /şifresi çözülemiyor/)
+  // Kapalı kanalda çözülemeyen şifre ayrıca uyarılmaz: zaten kimseye gitmiyor.
+  assert.match(notificationGap([{ channel: 'email', enabled: false, secret_unreadable: true }], [owner]) ?? '', /kanalı kapalı/)
   assert.match(notificationGap(on, []) ?? '', /sistem sahibi yok/)
   assert.match(notificationGap(on, [{ email: 'noc@x.test', email_enabled: false }, { email: null, email_enabled: true }]) ?? '', /sistem sahibi yok/)
   assert.equal(notificationGap(on, [owner]), null)

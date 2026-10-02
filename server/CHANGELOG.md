@@ -10,6 +10,14 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Düzeltildi
+- `SECRETS_ENCRYPTION_KEY` değiştiğinde (ya da veritabanı başka bir anahtarla geri yüklendiğinde) kayıtlı SMTP şifresi
+  çözülemediği için server açılmıyordu. Artık açılıyor: e-posta kanalı "şifre yeniden girilmeli" durumuna geçiyor, e-posta
+  gönderimi SMTP sunucusuna bağlanmadan başarısız oluyor (bildirimler kuyrukta yeniden deneniyor, e-posta ile şifre
+  sıfırlama kapanıyor) ve durum loga yazılıyor. Şifre panelden yeniden girilince ya da silinince kanal çalışıyor.
+  Kanal yanıtına `secret_unreadable` alanı eklendi.
+- Panel: şifresi çözülemeyen e-posta kanalı alt çubuktaki uyarı şeridinde ve Ayarlar'daki kanal kartında gösteriliyor.
+
 ## [2.0.0] - 2026-10-01
 
 Ayarların ve bildirim kanallarının panele taşındığı, panel gezinmesinin yenilendiği sürüm. Agent sürümü değişmedi: 1.0.0

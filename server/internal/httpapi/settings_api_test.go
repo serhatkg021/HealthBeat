@@ -193,6 +193,10 @@ func TestNotificationChannelsAPI(t *testing.T) {
 		if strings.Contains(string(raw), secret) {
 			t.Fatalf("%s leaks the secret: %s", path, raw)
 		}
+		// Şifresi çözülebilen kanal işaretsizdir (çözülemeyen durumu settings testleri kapsar).
+		if !strings.Contains(string(raw), `"secret_unreadable":false`) {
+			t.Fatalf("%s does not report secret_unreadable: %s", path, raw)
+		}
 	}
 	var dump string
 	if err := a.pool.QueryRow(context.Background(), `SELECT coalesce(string_agg(details::text, ' '), '') FROM audit_logs`).Scan(&dump); err != nil {

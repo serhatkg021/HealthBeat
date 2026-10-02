@@ -139,15 +139,17 @@ func (d *Deps) handleResetSettings(w http.ResponseWriter, r *http.Request) error
 // ---------------------------------------------------------------- bildirim kanalları
 
 type channelResponse struct {
-	Channel       string          `json:"channel"`
-	Provider      string          `json:"provider"`
-	Enabled       bool            `json:"enabled"`
-	Config        json.RawMessage `json:"config"`
-	SecretSet     bool            `json:"secret_set"` // şifrenin kendisi asla verilmez
-	OwnerMinLevel string          `json:"owner_min_level"`
-	VerifiedAt    *time.Time      `json:"verified_at"`
-	UpdatedAt     time.Time       `json:"updated_at"`
-	UpdatedBy     *userRef        `json:"updated_by"`
+	Channel   string          `json:"channel"`
+	Provider  string          `json:"provider"`
+	Enabled   bool            `json:"enabled"`
+	Config    json.RawMessage `json:"config"`
+	SecretSet bool            `json:"secret_set"` // şifrenin kendisi asla verilmez
+	// SecretUnreadable: kayıtlı şifre bu server'ın anahtarıyla çözülemiyor, yeniden girilmeli (Ready de false olur).
+	SecretUnreadable bool       `json:"secret_unreadable"`
+	OwnerMinLevel    string     `json:"owner_min_level"`
+	VerifiedAt       *time.Time `json:"verified_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	UpdatedBy        *userRef   `json:"updated_by"`
 	// Ready, ayarın gönderim için yeterli olduğunu; Implemented, server'ın bu kanalla gönderebildiğini; Personal,
 	// kanalın kişiye gittiğini (yalnızca bunlar organizasyon/sunucu kurallarında seçilebilir) söyler.
 	Ready       bool `json:"ready"`
@@ -160,7 +162,7 @@ func (d *Deps) channelView(r *http.Request, ch model.NotificationChannel, ruleCo
 	personal, implemented := d.alertEngine.Notifier(ch.Channel)
 	return channelResponse{
 		Channel: ch.Channel, Provider: ch.Provider, Enabled: ch.Enabled, Config: settings.DisplayConfig(ch),
-		SecretSet: ch.SecretSet, OwnerMinLevel: ch.OwnerMinLevel, VerifiedAt: ch.VerifiedAt,
+		SecretSet: ch.SecretSet, SecretUnreadable: ch.SecretUnreadable, OwnerMinLevel: ch.OwnerMinLevel, VerifiedAt: ch.VerifiedAt,
 		UpdatedAt: ch.UpdatedAt, UpdatedBy: d.userRefOf(r, ch.UpdatedBy),
 		Ready: settings.Ready(ch), Implemented: implemented, Personal: personal, RuleCount: ruleCount,
 	}

@@ -162,17 +162,22 @@ export function defaultText(def: FieldDef, value: string | number): string {
 }
 
 // channelStatus, bir kanalın durum rozetidir.
-export function channelStatus(ch: Pick<ChannelInfo, 'enabled' | 'ready'>): { label: string; tone: 'good' | 'warning' | 'neutral' } {
+export function channelStatus(ch: Pick<ChannelInfo, 'enabled' | 'ready' | 'secret_unreadable'>): { label: string; tone: 'good' | 'warning' | 'neutral' } {
+  if (ch.secret_unreadable) return { label: 'Şifre yeniden girilmeli', tone: 'warning' }
   if (!ch.ready) return { label: 'Ayar gerekli', tone: 'warning' }
   if (!ch.enabled) return { label: 'Kapalı', tone: 'neutral' }
   return { label: 'Açık', tone: 'good' }
 }
 
 // notificationGap, alert bildirimlerinin sistem sahiplerine hiç gitmediği durumu anlatır (alt çubuktaki uyarı şeridi); sorun yoksa null.
-// Şimdilik tek kanal e-postadır: kanal kapalıysa ya da e-posta alan bir sahip yoksa kimse bilgilendirilmez.
-export function notificationGap(channels: Pick<ChannelInfo, 'channel' | 'enabled'>[], owners: Pick<NotificationOwner, 'email' | 'email_enabled'>[]): string | null {
+// Şimdilik tek kanal e-postadır: kanal kapalıysa, şifresi çözülemiyorsa ya da e-posta alan bir sahip yoksa kimse bilgilendirilmez.
+export function notificationGap(
+  channels: Pick<ChannelInfo, 'channel' | 'enabled' | 'secret_unreadable'>[],
+  owners: Pick<NotificationOwner, 'email' | 'email_enabled'>[],
+): string | null {
   const email = channels.find((c) => c.channel === 'email')
   if (!email?.enabled) return 'E-posta kanalı kapalı: alert bildirimleri kimseye gitmiyor.'
+  if (email.secret_unreadable) return 'E-posta kanalının kayıtlı şifresi çözülemiyor: e-posta gönderilemiyor. Ayarlar’dan şifreyi yeniden girin.'
   if (!owners.some((o) => o.email && o.email_enabled)) return 'E-posta alan bir sistem sahibi yok: alert bildirimleri kimseye gitmiyor.'
   return null
 }

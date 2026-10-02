@@ -406,6 +406,8 @@ export interface ChannelInfo {
   enabled: boolean
   config: SMTPConfig
   secret_set: boolean
+  // Kayıtlı şifre server'ın anahtarıyla çözülemiyor (SECRETS_ENCRYPTION_KEY değişmiş): yeniden girilene kadar kanal gönderemez.
+  secret_unreadable: boolean
   owner_min_level: AlertLevel
   verified_at: string | null
   updated_at: string

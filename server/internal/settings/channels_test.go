@@ -13,6 +13,7 @@ import (
 
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/notify"
+	"healthbeat-server/internal/secretbox"
 	"healthbeat-server/internal/store"
 	"healthbeat-server/internal/testdb"
 	"healthbeat-server/internal/testsmtp"
@@ -183,5 +184,100 @@ func TestChannelTestSendsAndMarksVerified(t *testing.T) {
 	}
 	if email, _ := c.Get("email"); email.VerifiedAt != nil {
 		t.Fatal("a failed test left the channel verified")
+	}
+}
+
+// Anahtarı değişmiş bir server açılır: şifresi çözülemeyen kanal yüklenir, gönderimi engeller (SMTP'ye bağlanmadan) ve
+// şifre yeniden girilince çalışır.
+func TestChannelWithAnUnreadableSecretLoadsAndBlocksSending(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	admin := testdb.User(t, pool, "admin@x.test", "super_admin", "pw")
+	srv := testsmtp.Start(t)
+	port := 0
+	fmt.Sscan(srv.Port, &port)
+
+	before, err := NewChannels(ctx, store.NewNotificationChannels(pool, testdb.SecretBox(t)), notify.New(notify.Config{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := before.Update(ctx, &admin, "email", ChannelPatch{
+		Enabled: ptr(true), Secret: ptr("eski-anahtarla"),
+		Config: json.RawMessage(fmt.Sprintf(`{"host": %q, "port": %d, "from": "hb@x.test"}`, srv.Host, port)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	box, err := secretbox.New([]byte("ffffffffffffffffffffffffffffffff"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mailer := notify.New(notify.Config{})
+	c, err := NewChannels(ctx, store.NewNotificationChannels(pool, box), mailer)
+	if err != nil {
+		t.Fatalf("loading the channels with a changed key: %v", err)
+	}
+	c.OnChange(func(_, upd model.NotificationChannel) { mailer.SetConfig(MailerConfig(upd)) })
+	email, _ := c.Get("email")
+	if !email.Enabled || !email.SecretUnreadable || Ready(email) {
+		t.Fatalf("email with a changed key: enabled=%v unreadable=%v ready=%v", email.Enabled, email.SecretUnreadable, Ready(email))
+	}
+
+	// Gönderim sunucuya bağlanmadan başarısız olur (kuyruk yeniden dener) ve şifre sıfırlama kapanır.
+	mailer.SetConfig(MailerConfig(email))
+	if mailer.Enabled() {
+		t.Fatal("the mailer is enabled with an unreadable secret")
+	}
+	if err := mailer.Send(ctx, []string{"a@x.test"}, "konu", "gövde"); !errors.Is(err, ErrSecretUnreadable) {
+		t.Fatalf("send with an unreadable secret: err=%v", err)
+	}
+	var fe *FieldError
+	if err := c.Test(ctx, "email", "a@x.test"); !errors.As(err, &fe) || fe.Field != "secret" {
+		t.Fatalf("test with an unreadable secret: err=%v", err)
+	}
+	if _, err := c.Update(ctx, &admin, "email", ChannelPatch{OwnerMinLevel: ptr("critical")}); !errors.As(err, &fe) || fe.Field != "secret" {
+		t.Fatalf("changing an open channel without entering the secret: err=%v", err)
+	}
+	if n := len(srv.Messages()); n != 0 {
+		t.Fatalf("%d message(s) reached the server with an unreadable secret", n)
+	}
+
+	// Şifre yeniden girilir: işaret kalkar, gönderim açılır.
+	changes, err := c.Update(ctx, &admin, "email", ChannelPatch{Secret: ptr("yeni-anahtarla")})
+	if err != nil || changes["secret"] != (Change{Old: true, New: true}) {
+		t.Fatalf("entering the secret again: changes=%v err=%v", changes, err)
+	}
+	if email, _ = c.Get("email"); email.SecretUnreadable || !Ready(email) || !mailer.Enabled() {
+		t.Fatalf("after entering the secret: unreadable=%v ready=%v mailer=%v", email.SecretUnreadable, Ready(email), mailer.Enabled())
+	}
+	if err := c.Test(ctx, "email", "a@x.test"); err != nil {
+		t.Fatalf("test after entering the secret: %v", err)
+	}
+}
+
+// Çözülemeyen şifre silinebilir de (kimlik doğrulamasız SMTP): boş şifre vermek bir değişikliktir.
+func TestChannelUnreadableSecretCanBeCleared(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	admin := testdb.User(t, pool, "admin@x.test", "super_admin", "pw")
+	st := store.NewNotificationChannels(pool, testdb.SecretBox(t))
+	email, _ := st.Get(ctx, "email")
+	if _, err := st.Save(ctx, nil, email, ptr("eski-anahtarla")); err != nil {
+		t.Fatal(err)
+	}
+	box, err := secretbox.New([]byte("ffffffffffffffffffffffffffffffff"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewChannels(ctx, store.NewNotificationChannels(pool, box), notify.New(notify.Config{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	changes, err := c.Update(ctx, &admin, "email", ChannelPatch{Secret: ptr("")})
+	if err != nil || changes["secret"] != (Change{Old: true, New: false}) {
+		t.Fatalf("clearing an unreadable secret: changes=%v err=%v", changes, err)
+	}
+	if email, _ = c.Get("email"); email.SecretUnreadable || email.SecretSet {
+		t.Fatalf("after clearing: %+v", email)
 	}
 }
