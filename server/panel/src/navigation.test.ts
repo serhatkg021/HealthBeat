@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Permission } from './auth/permissions.ts'
-import { LEGACY_SETTINGS_ROUTES, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
+import { LEGACY_SETTINGS_ROUTES, alertRulesPath, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
 
 const canOnly = (...allowed: Permission[]) => (p: Permission) => allowed.includes(p)
 const ids = (items: { id: string }[]) => items.map((i) => i.id)
@@ -13,7 +13,7 @@ test('a super admin sees the monitoring, alert management and management groups 
   assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucular', 'alertler'])
   assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['kurallar', 'bakim', 'bildirim'])
   assert.deepEqual(ids(group(nav, 'yonetim')!.items), ['organizasyonlar', 'kullanicilar'])
-  assert.deepEqual(ids(nav.settings), ['esikler', 'denetim', 'sistem'])
+  assert.deepEqual(ids(nav.settings), ['denetim', 'sistem'])
   assert.deepEqual(ids(nav.tools), ['kuyruk', 'cache', 'log'])
 })
 
@@ -38,14 +38,15 @@ test('an operator gets "my hosts" instead of organizations and read-only alert m
   assert.deepEqual(ids(nav.groups), ['izleme', 'alert-yonetimi'])
   assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucularim', 'alertler'])
   assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['kurallar', 'bakim', 'bildirim'])
-  assert.deepEqual(ids(nav.settings), ['esikler'])
+  // Eşikler artık Ayarlar'da değil, Alert kuralları sayfasında: operatörün Ayarlar girişi yok.
+  assert.deepEqual(nav.settings, [])
 })
 
 test('an organization admin sees the host list and notifications but no users or settings', () => {
   const nav = navigation(canOnly('organization.view', 'host.view', 'threshold.view', 'alert.view', 'notification.view', 'contact.view'))
   assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucular', 'alertler'])
   assert.deepEqual(ids(group(nav, 'yonetim')!.items), ['organizasyonlar'])
-  assert.deepEqual(ids(nav.settings), ['esikler'])
+  assert.deepEqual(nav.settings, [])
 })
 
 test('notifications are reachable with either notification or settings permission', () => {
@@ -91,4 +92,12 @@ test('a group is active on its pages and their detail pages', () => {
   assert.equal(groupHasActive(izleme, '/hosts'), true)
   assert.equal(groupHasActive(izleme, '/hosts/4c047b76'), true)
   assert.equal(groupHasActive(izleme, '/organizations'), false)
+})
+
+test('the alert rules address carries the scope; the system scope is the bare page', () => {
+  assert.equal(alertRulesPath(), '/alert-rules')
+  assert.equal(alertRulesPath({ kind: 'sistem' }), '/alert-rules')
+  assert.equal(alertRulesPath({ kind: 'org', id: 'o1' }), '/alert-rules?kapsam=org&id=o1')
+  assert.equal(alertRulesPath({ kind: 'sunucu', id: 'h1' }), '/alert-rules?kapsam=sunucu&id=h1')
+  assert.equal(alertRulesPath({ kind: 'sunucu' }), '/alert-rules?kapsam=sunucu')
 })

@@ -2,8 +2,8 @@ import type { ReactNode } from 'react'
 import { SubjectThresholdFields } from './SubjectThresholdFields'
 import { formatLevels, METRICS, serverLevels, validateDraft, withMode, type Defaults, type Drafts, type Draft, type Mode, type MountDrafts } from './thresholds'
 
-// Metrik başına bir blok: "Varsayılan" (Eşikler sayfasında tanımlı değeri izle) ya da "Özel
-// değer" (bu sunucunun kendi uyarı/kritik değeri). Sunucu ekleme sihirbazı ve sunucu sayfası paylaşır.
+// Metrik başına bir blok: "Varsayılan" (Alert kurallarında tanımlı değeri izle) ya da "Özel
+// değer" (bu sunucunun kendi uyarı/kritik değeri). Sunucu ekleme sihirbazı ve Alert kuralları (sunucu kapsamı) paylaşır.
 export function ThresholdFields({
   idPrefix,
   drafts,

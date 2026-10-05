@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { BellRing, HardDrive, KeyRound, Plug, RotateCw, Save, SlidersHorizontal, Trash2, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { BellRing, KeyRound, Plug, RotateCw, Save, SlidersHorizontal, Trash2, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { hostsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import type { Permission } from '../auth/permissions'
@@ -8,8 +8,8 @@ import { Modal } from '../components/Modal'
 import { SecretNotice } from '../components/SecretNotice'
 import { useTab } from '../components/useTab'
 import type { Host } from '../types/api'
-import { HostThresholdSettings } from './HostThresholdSettings'
-import { DiskAlertSettings } from './DiskAlertSettings'
+import { alertRulesPath } from '../navigation'
+import { HostEffectiveRules } from './HostEffectiveRules'
 import { NotificationRules } from './NotificationRules'
 
 const SECTION_PARAM = 'bolum'
@@ -24,32 +24,29 @@ interface Section {
 
 const SECTIONS: Section[] = [
   { id: 'baglanti', label: 'Bağlantı ve kimlik', icon: Plug, requires: 'host.update' },
-  { id: 'esikler', label: 'Eşikler', icon: SlidersHorizontal },
-  { id: 'disk', label: 'Disk alert’leri', icon: HardDrive },
+  { id: 'kurallar', label: 'Geçerli alert kuralları', icon: SlidersHorizontal, requires: 'threshold.view' },
   { id: 'bildirim', label: 'Bildirim kuralları', icon: BellRing },
   { id: 'tehlike', label: 'Tehlikeli bölge', icon: TriangleAlert, requires: 'host.delete' },
 ]
 
-// Sunucu sayfasının "Ayarlar" sekmesi: kaydedilebilen her ayar burada, bölümlere ayrılmış bir iç menüyle.
-// Bölümler açıkken de bağlı kalır (keepMounted); böylece yarım kalmış bir düzenleme bölüm değişince
-// kaybolmaz. Eşikler, disk seçimi ve bildirim kuralları izni olmayana salt okunur görünür; bağlantı/kimlik ve silme
-// bölümleri hiç görünmez.
+// Sunucu sayfasının "Ayarlar" sekmesi: bu sunucunun ayarları, bölümlere ayrılmış bir iç menüyle. Alert kuralları
+// (eşikler, disk seçimi) burada salt okunur özetlenir ve Alert kuralları sayfasında düzenlenir. Bildirim kuralları izni
+// olmayana salt okunur görünür; bağlantı/kimlik ve silme bölümleri hiç görünmez.
 export function HostSettings({
   host,
   onChanged,
   onError,
-  onThresholdsSaved,
 }: {
   host: Host
   onChanged: () => void
   onError: (message: string) => void
-  onThresholdsSaved: () => void
 }) {
   const navigate = useNavigate()
   const { can } = useAuth()
   const visible = SECTIONS.filter((s) => !s.requires || can(s.requires))
   const ids = visible.map((s) => s.id)
   const [section, setSection] = useTab(ids, ids[0], SECTION_PARAM)
+  const [params] = useSearchParams()
 
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null)
   // Yenileme eski kimlik bilgisini hemen geçersiz kıldığı için önce onay penceresi açılır.
@@ -80,6 +77,10 @@ export function HostSettings({
       onError(err instanceof Error ? err.message : 'sunucu silinemedi')
     }
   }
+
+  // Eski "Eşikler" ve "Disk alert'leri" bölümleri artık Alert kuralları sayfasında bu sunucunun kapsamıdır.
+  const legacy = params.get(SECTION_PARAM)
+  if (legacy === 'esikler' || legacy === 'disk') return <Navigate to={alertRulesPath({ kind: 'sunucu', id: host.id })} replace />
 
   const panel = (id: string, children: ReactNode) => (
     <div id={`settings-${id}`} hidden={section !== id} className="settings-panel">
@@ -149,8 +150,7 @@ export function HostSettings({
             </div>,
           )}
 
-        {panel('esikler', <HostThresholdSettings hostId={host.id} canEdit={can('threshold.edit')} onSaved={onThresholdsSaved} />)}
-        {panel('disk', <DiskAlertSettings hostId={host.id} canEdit={can('host.update')} />)}
+        {can('threshold.view') && panel('kurallar', <HostEffectiveRules hostId={host.id} />)}
         {panel('bildirim', <NotificationRules scope={{ hostId: host.id }} canEdit={can('notification.edit')} />)}
 
         {can('host.delete') &&

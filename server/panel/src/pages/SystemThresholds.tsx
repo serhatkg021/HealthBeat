@@ -12,9 +12,9 @@ interface RowDraft {
 
 const toDraft = (t?: ThresholdConfig): RowDraft => ({ warning: t ? String(t.warning_level) : '', critical: t ? String(t.critical_level) : '' })
 
-// Varsayılan eşikler: metrik başına tam bir satır; kendi değeri olmayan her sunucu tarafından
-// kullanılır. Bir sunucunun kendi değerleri onun sayfasında (ya da eklenirken) ayarlanır.
-export function ThresholdsPage() {
+// Alert kuralları sayfasının "Sistem varsayılanı" kapsamı: metrik başına tam bir satır; kendi değeri olmayan her
+// organizasyon ve sunucu tarafından kullanılır.
+export function SystemThresholds() {
   const { user, can } = useAuth()
   // İzin yetmez, kapsam da gerekir: org_admin'in threshold.edit'i yalnızca kendi organizasyonları içindir; genel
   // (organizasyonsuz) eşikleri server yalnızca super_admin'e yazdırır.
@@ -35,8 +35,8 @@ export function ThresholdsPage() {
       .list()
       .then((list) => {
         const next: Partial<Record<MetricType, ThresholdConfig>> = {}
-        // Yalnızca global satırlar burada gösterilir; organizasyon varsayılanları organizasyonun sayfasında,
-        // sunucuya özel eşikler sunucunun sayfasında yönetilir.
+        // Yalnızca global satırlar burada gösterilir; organizasyon varsayılanları ve sunucuya özel eşikler aynı sayfanın
+        // kendi kapsamlarında yönetilir.
         for (const t of list) if (!t.organization_id) next[t.metric_type] = t
         setDefaults(next)
         setDrafts({
@@ -96,9 +96,9 @@ export function ThresholdsPage() {
           <Info size={16} strokeWidth={1.9} />
           Nasıl çalışır?
         </div>
-        Bunlar genel varsayılanlardır: bir organizasyon kendi değerini tanımlamadıkça (organizasyon sayfası › Eşikler) ya da bir
-        sunucu kendi değerini seçmedikçe (sunucu sayfası › Ayarlar › Eşikler) herkes bunu kullanır. Organizasyon değerleri alt
-        organizasyonlara miras kalır. Varsayılanı olmayan bir metrik, özel değeri olmayan sunucularda alert üretmez.
+        Bunlar genel varsayılanlardır: bir organizasyon kendi değerini tanımlamadıkça (Kapsam › Organizasyon) ya da bir sunucu
+        kendi değerini seçmedikçe (Kapsam › Sunucu) herkes bunu kullanır. Organizasyon değerleri alt organizasyonlara miras
+        kalır. Varsayılanı olmayan bir metrik, özel değeri olmayan sunucularda alert üretmez.
       </div>
       {error && <div className="error-banner">{error}</div>}
 

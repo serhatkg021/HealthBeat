@@ -58,11 +58,6 @@ export function HostDetailPage() {
     hostsApi.thresholds(id).then(setThresholds).catch(() => undefined)
   }
 
-  function reloadThresholds() {
-    if (!id) return
-    hostsApi.thresholds(id).then(setThresholds).catch(() => undefined)
-  }
-
   useEffect(reload, [id])
 
   const [tab, setTab] = useTab(TAB_IDS, 'genel', undefined, TAB_ALIASES)
@@ -129,7 +124,7 @@ export function HostDetailPage() {
 
       {host && (
         <TabPanel id="ayarlar" active={tab} keepMounted>
-          <HostSettings host={host} onChanged={reload} onError={setError} onThresholdsSaved={reloadThresholds} />
+          <HostSettings host={host} onChanged={reload} onError={setError} />
         </TabPanel>
       )}
     </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { hostsApi, organizationsApi } from '../api/endpoints'
 import { usePagedQuery } from '../api/usePagedQuery'
 import type { Host, Organization } from '../types/api'
@@ -16,13 +16,13 @@ import { Pagination } from '../components/Pagination'
 import { AgentBadge } from '../components/AgentBadge'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import { osLabel } from './inventory'
-import { BellRing, Contact, Plus, Server, Settings, SlidersHorizontal } from 'lucide-react'
+import { BellRing, Contact, Plus, Server, Settings } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { OrganizationContacts } from './OrganizationContacts'
 import { NotificationRules } from './NotificationRules'
-import { OrganizationThresholds } from './OrganizationThresholds'
 import { OrganizationSettings } from './OrganizationSettings'
 import { useDocumentTitle } from '../components/useDocumentTitle'
+import { alertRulesPath } from '../navigation'
 
 const PAGE_SIZE = 20
 
@@ -65,14 +65,14 @@ export function OrganizationHostsPage() {
   }
   useEffect(loadOrg, [id])
 
-  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler', 'bildirimler', 'esikler', ...(canSeeSettings ? ['ayarlar'] : [])]
+  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler', 'bildirimler', ...(canSeeSettings ? ['ayarlar'] : [])]
+  const [params] = useSearchParams()
   const [tab, setTab] = useTab(tabIds, 'sunucular')
   const tabItems: TabItem[] = [
     { id: 'sunucular', label: 'Sunucular', badge: total, icon: Server },
     ...(canAddHost ? [{ id: 'ekle', label: 'Sunucu ekle', icon: Plus }] : []),
     { id: 'kisiler', label: 'İletişim kişileri', icon: Contact },
     { id: 'bildirimler', label: 'Bildirim kuralları', icon: BellRing },
-    { id: 'esikler', label: 'Eşikler', icon: SlidersHorizontal },
     ...(canSeeSettings ? [{ id: 'ayarlar', label: 'Ayarlar', icon: Settings }] : []),
   ]
   // Üst zincir: bu organizasyonun üst şirketleri (adları bilgi olarak görünür).
@@ -83,6 +83,9 @@ export function OrganizationHostsPage() {
     ancestors.unshift(parent)
     cur = parent.parent_organization_id
   }
+
+  // Eski "Eşikler" sekmesi artık Alert kuralları sayfasında bu organizasyonun kapsamıdır.
+  if (id && params.get('sekme') === 'esikler') return <Navigate to={alertRulesPath({ kind: 'org', id })} replace />
 
   return (
     <div>
@@ -173,12 +176,6 @@ export function OrganizationHostsPage() {
           <div className="page-readable">
             <NotificationRules scope={{ organizationId: id }} canEdit={can('notification.edit')} />
           </div>
-        </TabPanel>
-      )}
-
-      {org && (
-        <TabPanel id="esikler" active={tab}>
-          <OrganizationThresholds organization={org} orgs={allOrgs} canEdit={can('threshold.edit')} />
         </TabPanel>
       )}
 

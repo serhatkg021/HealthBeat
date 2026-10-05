@@ -109,7 +109,7 @@ export function AddHostWizard({
         <div>
           <p className="form-hint" style={{ margin: '0 0 14px' }}>
             Varsayılan değerler seçili gelir; bir metriği yalnızca bu sunucu için değiştirmek istiyorsanız “Özel değer”i
-            seçin. Varsayılanlar Eşikler sayfasında yönetilir.
+            seçin. Varsayılanlar Alert kuralları sayfasında yönetilir.
           </p>
           <ThresholdFields
             idPrefix="wizard"

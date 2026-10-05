@@ -15,6 +15,7 @@ import { UsersPage } from './pages/UsersPage'
 import { SettingsHubPage } from './pages/SettingsHubPage'
 import { SystemToolsPage } from './pages/SystemToolsPage'
 import { PendingPage } from './pages/PendingPage'
+import { AlertRulesPage } from './pages/AlertRulesPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -107,14 +108,12 @@ export default function App() {
               path={ALERT_RULES_PATH}
               element={
                 <RequirePermission permission="threshold.view">
-                  <PendingPage
-                    title="Alert kuralları"
-                    subtitle="Sistem, organizasyon ve sunucu eşikleri tek yerde"
-                    items={['Ayarlar → Sistem Eşikleri', 'Organizasyon → Eşikler', 'Sunucu → Ayarlar → Eşikler ve Disk alert’leri']}
-                  />
+                  <AlertRulesPage />
                 </RequirePermission>
               }
             />
+            {/* Eski Eşikler sayfası (yer imleri) artık Alert kurallarının sistem kapsamıdır. */}
+            <Route path="/thresholds" element={<Navigate to={ALERT_RULES_PATH} replace />} />
             <Route
               path={MAINTENANCE_PATH}
               element={

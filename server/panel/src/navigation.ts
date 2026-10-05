@@ -88,11 +88,6 @@ export function navigation(can: Can): Navigation {
     ...(can('system.logs.view') ? [{ id: 'log', label: 'Log Analiz' }] : []),
   ]
   const settings = [
-    ...tab(can('threshold.view'), {
-      id: 'esikler',
-      label: 'Sistem Eşikleri',
-      description: 'Kendi değeri olmayan tüm sunucuların kullandığı varsayılan alert eşikleri.',
-    }),
     ...tab(can('audit.view'), {
       id: 'denetim',
       label: 'Denetim Kaydı',
@@ -114,9 +109,20 @@ export const settingsTabPath = (id: string): string => `${SETTINGS_PATH}?sekme=$
 
 // Eski ayrı sayfaların adresleri (yer imleri, eski bağlantılar) artık Ayarlar'ın sekmeleridir.
 export const LEGACY_SETTINGS_ROUTES: Record<string, string> = {
-  '/thresholds': 'esikler',
   '/audit': 'denetim',
   '/settings/system': 'sistem',
+}
+
+// Alert kurallarının kapsamı: sistem varsayılanı, bir organizasyon ya da bir sunucu (id yoksa seçilmemiş).
+export type RuleScope = { kind: 'sistem' } | { kind: 'org'; id?: string } | { kind: 'sunucu'; id?: string }
+
+// alertRulesPath, kurallar sayfasının o kapsam seçili adresidir (organizasyon/sunucu sayfalarından ve eski eşik
+// adreslerinden gelen bağlantılar için).
+export function alertRulesPath(scope: RuleScope = { kind: 'sistem' }): string {
+  if (scope.kind === 'sistem') return ALERT_RULES_PATH
+  const params = new URLSearchParams({ kapsam: scope.kind })
+  if (scope.id) params.set('id', scope.id)
+  return `${ALERT_RULES_PATH}?${params}`
 }
 
 export function inSettingsArea(pathname: string): boolean {
