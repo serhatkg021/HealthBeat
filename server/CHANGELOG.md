@@ -50,6 +50,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   Kanal yanıtına `secret_unreadable` alanı eklendi.
 - Panel: şifresi çözülemeyen e-posta kanalı alt çubuktaki uyarı şeridinde ve Ayarlar'daki kanal kartında gösteriliyor.
 - Panel: fareli cihazlarda sekme çubuklarının sağ ucunda görünen gereksiz dikey kaydırma çubuğu kaldırıldı.
+- Panel: sunucu ayarlarındaki "Kimlik bilgisini yenile" düğmesi onay sormadan eski token/secret'ı geçersiz kılıyordu;
+  artık sonucunu (agent'ın `agent.json` güncellenip yeniden başlatılana kadar bağlanamayacağını) anlatan bir onay
+  penceresi açılıyor.
 
 ## [2.0.0] - 2026-10-01
 

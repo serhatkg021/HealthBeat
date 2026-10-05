@@ -2727,6 +2727,19 @@ body.scroll-lock {
   animation: modal-in 0.15s ease-out;
 }
 
+.modal-sm {
+  width: min(460px, 94vw);
+}
+
+.confirm-text {
+  margin: 0 0 12px;
+  line-height: 1.55;
+}
+
+.confirm-text + .form-actions {
+  margin-top: 18px;
+}
+
 .modal-head {
   display: flex;
   align-items: center;
@@ -2916,6 +2929,17 @@ body.scroll-lock {
     max-height: 100vh;
     border-radius: 0;
     animation: fade-in 0.15s ease-out;
+  }
+
+  /* Kısa onay pencereleri dar ekranda da ortada, içerik kadar yüksek kalır. */
+  .modal.modal-sm {
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: calc(100vw - 32px);
+    height: auto;
+    max-height: 88vh;
+    border-radius: var(--radius-lg);
   }
 
   .btn-label {
