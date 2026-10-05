@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Permission } from './auth/permissions.ts'
-import { AUDIT_PATH, LEGACY_SETTINGS_ROUTES, alertRulesPath, notificationsPath, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
+import { AUDIT_PATH, LEGACY_SETTINGS_ROUTES, addHostPath, alertRulesPath, notificationsPath, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
 
 const canOnly = (...allowed: Permission[]) => (p: Permission) => allowed.includes(p)
 const ids = (items: { id: string }[]) => items.map((i) => i.id)
@@ -36,10 +36,10 @@ test('the system tools area is its own page, not part of settings', () => {
   assert.equal(inToolsArea('/settings/system'), false)
 })
 
-test('an operator gets "my hosts" instead of organizations and read-only alert management; an empty group disappears', () => {
+test('an operator gets the same host list (scoped by the server) and read-only alert management; an empty group disappears', () => {
   const nav = navigation(canOnly('host.view', 'alert.view', 'threshold.view', 'notification.view'))
   assert.deepEqual(ids(nav.groups), ['izleme', 'alert-yonetimi'])
-  assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucularim', 'alertler'])
+  assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucular', 'alertler'])
   assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['kurallar', 'bakim', 'bildirim'])
   // Eşikler artık Ayarlar'da değil, Alert kuralları sayfasında: operatörün Ayarlar girişi yok.
   assert.deepEqual(nav.settings, [])
@@ -57,10 +57,10 @@ test('notifications are reachable with either notification or settings permissio
   assert.ok(!ids(group(navigation(() => false), 'alert-yonetimi')!.items).includes('bildirim'))
 })
 
-test('with no permissions only the summary, "my hosts" and maintenance remain and there is no settings entry', () => {
+test('with no permissions only the summary and maintenance remain and there is no settings entry', () => {
   const nav = navigation(() => false)
   assert.deepEqual(ids(nav.groups), ['izleme', 'alert-yonetimi'])
-  assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucularim'])
+  assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet'])
   assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['bakim'])
   assert.deepEqual(nav.settings, [])
 })
@@ -122,4 +122,9 @@ test('the notifications address carries the tab and, for rules, the scope', () =
 
 test('the audit log lives under system tools', () => {
   assert.equal(AUDIT_PATH, '/system?sekme=denetim')
+})
+
+test('the add-host address opens the wizard tab, optionally for an organization', () => {
+  assert.equal(addHostPath(), '/hosts?sekme=ekle')
+  assert.equal(addHostPath('o1'), '/hosts?sekme=ekle&hedef=o1')
 })

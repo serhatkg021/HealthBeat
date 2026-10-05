@@ -2,15 +2,13 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { hostsApi, organizationsApi } from '../api/endpoints'
 import { usePagedQuery } from '../api/usePagedQuery'
-import type { Host, Organization } from '../types/api'
+import type { Organization } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
 import { useTab } from '../components/useTab'
-import { AddHostWizard } from './AddHostWizard'
 import { hostStatusLabel } from '../labels'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
-import { SecretNotice } from '../components/SecretNotice'
 import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
 import { AgentBadge } from '../components/AgentBadge'
@@ -21,7 +19,7 @@ import { useAuth } from '../auth/AuthContext'
 import { OrganizationContacts } from './OrganizationContacts'
 import { OrganizationSettingsModal } from './OrganizationSettings'
 import { useDocumentTitle } from '../components/useDocumentTitle'
-import { alertRulesPath, notificationsPath } from '../navigation'
+import { addHostPath, alertRulesPath, notificationsPath } from '../navigation'
 
 const PAGE_SIZE = 20
 
@@ -34,8 +32,6 @@ export function OrganizationHostsPage() {
   const [org, setOrg] = useState<Organization | null>(null)
   const [allOrgs, setAllOrgs] = useState<Organization[]>([]) // üst zincir ve üst şirket seçimi için
   useDocumentTitle(org?.name)
-  const [wizardKey, setWizardKey] = useState(0) // sihirbazı sıfırlar (vazgeç / eklendi)
-  const [revealedHost, setRevealedHost] = useState<Host | null>(null)
 
   const {
     items: hosts,
@@ -47,7 +43,6 @@ export function OrganizationHostsPage() {
     q,
     setSearch,
     error,
-    reload,
   } = usePagedQuery(
     (p) => {
       if (!id) return Promise.resolve({ items: [], total: 0 })
@@ -64,7 +59,7 @@ export function OrganizationHostsPage() {
   }
   useEffect(loadOrg, [id])
 
-  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler']
+  const tabIds = ['sunucular', 'kisiler']
   const [params] = useSearchParams()
   const navigate = useNavigate()
   // Ayarlar pencere olarak açılır; eski "Ayarlar" sekmesinin adresi (?sekme=ayarlar) pencereyi açık getirir.
@@ -72,7 +67,6 @@ export function OrganizationHostsPage() {
   const [tab, setTab] = useTab(tabIds, 'sunucular')
   const tabItems: TabItem[] = [
     { id: 'sunucular', label: 'Sunucular', badge: total, icon: Server },
-    ...(canAddHost ? [{ id: 'ekle', label: 'Sunucu ekle', icon: Plus }] : []),
     { id: 'kisiler', label: 'İletişim kişileri', icon: Contact },
   ]
   // Üst zincir: bu organizasyonun üst şirketleri (adları bilgi olarak görünür).
@@ -88,6 +82,8 @@ export function OrganizationHostsPage() {
   if (id && params.get('sekme') === 'esikler') return <Navigate to={alertRulesPath({ kind: 'org', id })} replace />
   // Eski "Bildirim kuralları" sekmesi artık Bildirim sayfasında bu organizasyonun kapsamıdır.
   if (id && params.get('sekme') === 'bildirimler') return <Navigate to={notificationsPath('kurallar', { kind: 'org', id })} replace />
+  // Eski "Sunucu ekle" sekmesi artık Sunucular sayfasında, bu organizasyon seçili.
+  if (id && params.get('sekme') === 'ekle') return <Navigate to={addHostPath(id)} replace />
 
   return (
     <div>
@@ -106,6 +102,12 @@ export function OrganizationHostsPage() {
         actions={
           id && (
             <>
+              {canAddHost && (
+                <Link className="btn btn-sm" to={addHostPath(id)}>
+                  <Plus size={15} strokeWidth={1.9} />
+                  Sunucu ekle
+                </Link>
+              )}
               {can('threshold.view') && (
                 <Link className="btn btn-sm" to={alertRulesPath({ kind: 'org', id })}>
                   Alert kuralları →
@@ -138,17 +140,6 @@ export function OrganizationHostsPage() {
       <Tabs items={tabItems} active={tab} onChange={setTab} label="Organizasyon sunucu bölümleri" />
 
       <TabPanel id="sunucular" active={tab}>
-        {revealedHost && (
-          <SecretNotice
-            title={`${revealedHost.title} oluşturuldu — bu kimlik bilgisi bir daha gösterilmeyecek; host config dosyasına şimdi kopyalayın`}
-            text={
-              revealedHost.api_token
-                ? `host_id: ${revealedHost.id}\napi_token: ${revealedHost.api_token}`
-                : `host_id: ${revealedHost.id}\npull_secret: ${revealedHost.pull_secret}`
-            }
-            onClose={() => setRevealedHost(null)}
-          />
-        )}
         <div className="toolbar">
           <SearchInput value={q} onChange={setSearch} placeholder="Sunucu adı ya da IP ara…" />
         </div>
@@ -202,24 +193,6 @@ export function OrganizationHostsPage() {
         </TabPanel>
       )}
 
-      {id && canAddHost && (
-        <TabPanel id="ekle" active={tab} keepMounted>
-          <AddHostWizard
-            key={wizardKey}
-            organizationId={id}
-            onCancel={() => {
-              setWizardKey((k) => k + 1)
-              setTab('sunucular')
-            }}
-            onCreated={(created) => {
-              setRevealedHost(created)
-              setWizardKey((k) => k + 1)
-              setTab('sunucular')
-              reload()
-            }}
-          />
-        </TabPanel>
-      )}
     </div>
   )
 }

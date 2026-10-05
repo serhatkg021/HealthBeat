@@ -7,7 +7,9 @@ import {
   alertFiltersActive,
   applyFilters,
   emptyFilters,
+  filtersHref,
   parseFilters,
+  problemRows,
   pruneOrgs,
   writeFilters,
   type DashboardFilters,
@@ -277,4 +279,26 @@ test('the agent filter round-trips through the address bar, counts as a group, a
   assert.deepEqual(chips.map((c) => c.label), ["Yalnızca agent'ı güncellenmesi gerekenler"])
   assert.deepEqual(chips[0].without, emptyFilters())
   assert.equal(writeFilters(url, emptyFilters()).toString(), '')
+})
+
+test('problem hosts: offline or with open alerts, the most severe first, capped', () => {
+  const rows = [
+    { host: host('ok'), critical: 0, warning: 0 },
+    { host: host('uyari'), critical: 0, warning: 2 },
+    { host: host('kapali', { status: 'offline' }), critical: 0, warning: 0 },
+    { host: host('kritik'), critical: 1, warning: 0 },
+    { host: host('kritik-kapali', { status: 'offline' }), critical: 1, warning: 0 },
+  ]
+  assert.deepEqual(
+    problemRows(rows, 10).map((r) => r.host.id),
+    ['kritik-kapali', 'kritik', 'kapali', 'uyari'],
+  )
+  assert.equal(problemRows(rows, 2).length, 2)
+})
+
+test('a filters link carries the filters in the address; no filters means the bare path', () => {
+  assert.equal(filtersHref('/hosts', emptyFilters()), '/hosts')
+  const href = filtersHref('/hosts', { ...emptyFilters(), status: 'offline' })
+  assert.ok(href.startsWith('/hosts?'))
+  assert.equal(parseFilters(new URLSearchParams(href.split('?')[1])).status, 'offline')
 })

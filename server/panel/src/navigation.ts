@@ -62,16 +62,14 @@ export function navigation(can: Can): Navigation {
     ...(can('notification.view') ? [{ id: 'kurallar' as const, label: 'Bildirim kuralları' }] : []),
     ...(can('contact.view') ? [{ id: 'kisiler' as const, label: 'İletişim kişileri' }] : []),
   ]
-  // Organizasyonları göremeyen (operatör) kendisine atanmış sunucuları "Sunucularım"da görür. Sunucular sayfası
-  // içeriği taşınınca ikisi tek sayfada birleşir.
+  // Sunucular herkese tek sayfadır; liste yetkiye göre süzülü gelir (operatöre yalnızca atanmış sunucular).
   const groups = [
     {
       id: 'izleme',
       label: 'İzleme',
       items: [
         { id: 'ozet', to: '/', label: 'Özet', end: true },
-        ...item(can('host.view') && can('organization.view'), { id: 'sunucular', to: HOSTS_PATH, label: 'Sunucular' }),
-        ...item(!can('organization.view'), { id: 'sunucularim', to: '/my-hosts', label: 'Sunucularım' }),
+        ...item(can('host.view'), { id: 'sunucular', to: HOSTS_PATH, label: 'Sunucular' }),
         ...item(can('alert.view'), { id: 'alertler', to: '/alerts', label: 'Alert’ler' }),
       ],
     },
@@ -157,4 +155,15 @@ export function notificationsPath(tab: NotificationTabId, scope?: { kind: 'org' 
     if (scope.id) params.set('id', scope.id)
   }
   return `${NOTIFICATIONS_PATH}?${params}`
+}
+
+// ADD_HOST_ORG_PARAM, sihirbazın organizasyonunu taşıyan parametredir. Liste süzgecinin "org" parametresinden ayrıdır:
+// ikisi aynı adreste bulunabilir ve karışmamalıdır.
+export const ADD_HOST_ORG_PARAM = 'hedef'
+
+// addHostPath, Sunucular sayfasının "Sunucu ekle" sekmesidir; organizasyon verilirse sihirbaz onunla açılır.
+export function addHostPath(organizationId?: string): string {
+  const params = new URLSearchParams({ sekme: 'ekle' })
+  if (organizationId) params.set(ADD_HOST_ORG_PARAM, organizationId)
+  return `${HOSTS_PATH}?${params}`
 }

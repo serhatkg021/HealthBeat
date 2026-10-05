@@ -10,7 +10,6 @@ const TITLES: Record<string, string> = {
   '/users': 'Kullanıcılar',
   '/settings': 'Ayarlar',
   '/system': 'Sistem Araçları',
-  '/my-hosts': 'Sunucularım',
   '/hosts': 'Sunucular',
   '/alert-rules': 'Alert kuralları',
   '/maintenance': 'Bakım pencereleri',

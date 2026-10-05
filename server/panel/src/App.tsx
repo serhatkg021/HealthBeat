@@ -8,13 +8,13 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
 import { OrganizationHostsPage } from './pages/OrganizationHostsPage'
-import { MyHostsPage } from './pages/MyHostsPage'
 import { HostDetailPage } from './pages/HostDetailPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { UsersPage } from './pages/UsersPage'
 import { SettingsHubPage } from './pages/SettingsHubPage'
 import { SystemToolsPage } from './pages/SystemToolsPage'
 import { PendingPage } from './pages/PendingPage'
+import { HostsPage } from './pages/HostsPage'
 import { AlertRulesPage } from './pages/AlertRulesPage'
 import { NotificationsPage } from './pages/NotificationsPage'
 import { ProfilePage } from './pages/ProfilePage'
@@ -94,15 +94,12 @@ export default function App() {
               path={HOSTS_PATH}
               element={
                 <RequirePermission permission="host.view">
-                  <PendingPage
-                    title="Sunucular"
-                    subtitle="Tüm sunucuların süzülebilir listesi"
-                    items={['Özet’teki sunucu tablosu ve süzgeçleri', 'Operatörün “Sunucularım” sayfası', 'Sunucu ekleme sihirbazı']}
-                  />
+                  <HostsPage />
                 </RequirePermission>
               }
             />
-            <Route path="/my-hosts" element={<MyHostsPage />} />
+            {/* Operatörün eski "Sunucularım" sayfası artık herkesin Sunucular sayfasıdır. */}
+            <Route path="/my-hosts" element={<Navigate to={HOSTS_PATH} replace />} />
             <Route path="/hosts/:id" element={<HostDetailPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
             <Route
