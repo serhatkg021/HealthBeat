@@ -4,7 +4,8 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-03 — Denetim Kaydı'nın kategori süzgecine "Sistem araçları" eklendi (log görüntüleme ve indirme
+**Son güncelleme:** 2026-10-05 — Sunucu ayarlarındaki "Kimlik bilgisini yenile" artık onay penceresi açıyor (yanlışlıkla
+tıklama agent'ı koparıyordu; dar ekranda bakılmadı). Denetim Kaydı'nın kategori süzgecine "Sistem araçları" eklendi (log görüntüleme ve indirme
 kayıtları). Ayarlar ve Sistem Araçları sekmeli tek sayfalardır; Sistem Araçları'nın üç sekmesi (Kuyruk Durumu, Cache Durumu,
 Log Analiz) tamam. Server + panel **2.0.0** yayında (2026-10-01); bunlar "Yayınlanmamış"ta.
 

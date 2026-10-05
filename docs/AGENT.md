@@ -327,10 +327,22 @@ elinde yoksa) tekrar vermen gerekir — tek bir adres düzeltmek için gereksiz.
 
 ### c) Token/secret unutuldu, yanlış girildi, ya da log'da `401` görüyorsun
 
-1. Panelde ilgili sunucunun **detay sayfasına** git → **"Kimlik bilgisini yenile"**. Bu, eski
-   token/secret'ı **anında geçersiz kılar** ve yenisini bir kez gösterir.
-2. Yeni değeri `agent.json`'da `api_token` (push) ya da `pull_secret` (pull) alanına yaz.
-3. `sudo systemctl restart healthbeat-agent`.
+1. Panelde ilgili sunucunun **detay sayfasına** git → **Ayarlar → Bağlantı ve kimlik → "Kimlik
+   bilgisini yenile"** ve açılan pencerede onayla. Bu, eski token/secret'ı **anında geçersiz
+   kılar** ve yenisini bir kez gösterir (pencereyi kapatmadan kopyala).
+2. Agent'ın sunucusunda config'i yedekle, yalnızca `api_token` (push) ya da `pull_secret` (pull)
+   alanını yeni değerle değiştir:
+
+   ```sh
+   sudo cp -a /etc/healthbeat/agent.json /etc/healthbeat/agent.json.bak.$(date +%Y%m%d%H%M%S)
+   sudo nano /etc/healthbeat/agent.json
+   ```
+3. Restart et ve logda `401` kalmadığını gör:
+
+   ```sh
+   sudo systemctl restart healthbeat-agent
+   sudo journalctl -u healthbeat-agent -n 20 --no-pager
+   ```
 
 `install.sh`'ı yeniden çalıştırmana gerek yok — token/secret yalnızca bir JSON alanıdır. (Diğer
 `401` nedeni: token doğru ama agent'ın kayıtlı host id'siyle uyuşmuyor — ikisini panelden

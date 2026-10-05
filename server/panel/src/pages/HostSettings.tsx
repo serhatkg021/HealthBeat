@@ -4,6 +4,7 @@ import { BellRing, HardDrive, KeyRound, Plug, RotateCw, Save, SlidersHorizontal,
 import { hostsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import type { Permission } from '../auth/permissions'
+import { Modal } from '../components/Modal'
 import { SecretNotice } from '../components/SecretNotice'
 import { useTab } from '../components/useTab'
 import type { Host } from '../types/api'
@@ -51,13 +52,22 @@ export function HostSettings({
   const [section, setSection] = useTab(ids, ids[0], SECTION_PARAM)
 
   const [revealedSecret, setRevealedSecret] = useState<string | null>(null)
+  // Yenileme eski kimlik bilgisini hemen geçersiz kıldığı için önce onay penceresi açılır.
+  const [confirmRotate, setConfirmRotate] = useState(false)
+  const [rotating, setRotating] = useState(false)
+  const credentialName = host.mode === 'pull' ? 'pull secret' : 'API token'
+  const credentialField = host.mode === 'pull' ? 'pull_secret' : 'api_token'
 
   async function handleRotate() {
+    setRotating(true)
     try {
       const updated = await hostsApi.rotateCredentials(host.id)
       setRevealedSecret(updated.api_token ?? updated.pull_secret ?? null)
     } catch (err) {
       onError(err instanceof Error ? err.message : 'kimlik bilgisi yenilenemedi')
+    } finally {
+      setRotating(false)
+      setConfirmRotate(false)
     }
   }
 
@@ -113,11 +123,29 @@ export function HostSettings({
                 {revealedSecret && (
                   <SecretNotice title="Yeni kimlik bilgisi (bir daha gösterilmeyecek)" text={revealedSecret} onClose={() => setRevealedSecret(null)} />
                 )}
-                <button className="btn" type="button" onClick={handleRotate}>
+                <button className="btn" type="button" onClick={() => setConfirmRotate(true)}>
                   <RotateCw size={15} strokeWidth={1.9} />
                   Kimlik bilgisini yenile
                 </button>
               </div>
+
+              <Modal open={confirmRotate} size="sm" title="Kimlik bilgisi yenilensin mi?" onClose={() => !rotating && setConfirmRotate(false)}>
+                <p className="confirm-text">
+                  <strong>{host.title}</strong> sunucusunun şu anki {credentialName} değeri hemen geçersiz olur. Agent, yeni değer{' '}
+                  <code>/etc/healthbeat/agent.json</code> dosyasındaki <code>{credentialField}</code> alanına yazılıp servis yeniden
+                  başlatılana kadar {host.mode === 'pull' ? 'sorgulanamaz' : 'rapor gönderemez'}.
+                </p>
+                <p className="confirm-text">Yeni değer yalnızca bir kez gösterilir.</p>
+                <div className="form-actions">
+                  <button className="btn btn-danger" type="button" disabled={rotating} onClick={handleRotate}>
+                    <RotateCw size={15} strokeWidth={1.9} />
+                    Yenile
+                  </button>
+                  <button className="btn" type="button" disabled={rotating} onClick={() => setConfirmRotate(false)}>
+                    Vazgeç
+                  </button>
+                </div>
+              </Modal>
             </div>,
           )}
 

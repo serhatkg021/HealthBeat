@@ -6,15 +6,18 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 // Ortalanmış diyalog (bir kartın "Detay" işlevi gibi ikincil, geniş içerik için — ör. bir
 // grafiğin tam geçmişi). Klavye erişimi Drawer ile aynı: açılınca odak panele geçer, Tab
 // panelin içinde döner, Esc kapatır ve odak açan öğeye geri verilir; sayfa kaydırması kilitlenir.
+// size="sm" kısa onay soruları içindir (dar pencere).
 export function Modal({
   open,
   title,
   onClose,
+  size,
   children,
 }: {
   open: boolean
   title: string
   onClose: () => void
+  size?: 'sm'
   children: ReactNode
 }) {
   const panel = useRef<HTMLDivElement>(null)
@@ -57,7 +60,7 @@ export function Modal({
       <div className="modal-scrim" onClick={onClose} aria-hidden="true" />
       <div
         ref={panel}
-        className="modal"
+        className={size === 'sm' ? 'modal modal-sm' : 'modal'}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
