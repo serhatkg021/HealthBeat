@@ -93,18 +93,14 @@ export function navigation(can: Can): Navigation {
       ],
     },
   ].filter((g) => g.items.length > 0)
-  // Her aracın kendi izni vardır (system.*; varsayılan olarak yalnızca süper admin).
+  // Her aracın kendi izni vardır (system.*, denetim kaydı için audit.view; varsayılan olarak yalnızca süper admin).
   const tools = [
     ...(can('system.queue.view') ? [{ id: 'kuyruk', label: 'Kuyruk Durumu' }] : []),
     ...(can('system.cache.view') ? [{ id: 'cache', label: 'Cache Durumu' }] : []),
     ...(can('system.logs.view') ? [{ id: 'log', label: 'Log Analiz' }] : []),
+    ...(can('audit.view') ? [{ id: 'denetim', label: 'Denetim Kaydı' }] : []),
   ]
   const settings = [
-    ...tab(can('audit.view'), {
-      id: 'denetim',
-      label: 'Denetim Kaydı',
-      description: 'Panelde ve API’de yapılan yönetim işlemlerinin geçmişi.',
-    }),
     ...tab(can('settings.view'), {
       id: 'sistem',
       label: 'Sistem Ayarları',
@@ -121,9 +117,11 @@ export const settingsTabPath = (id: string): string => `${SETTINGS_PATH}?sekme=$
 
 // Eski ayrı sayfaların adresleri (yer imleri, eski bağlantılar) artık Ayarlar'ın sekmeleridir.
 export const LEGACY_SETTINGS_ROUTES: Record<string, string> = {
-  '/audit': 'denetim',
   '/settings/system': 'sistem',
 }
+
+// Denetim Kaydı Sistem Araçları'nın bir sekmesidir (eski /audit ve /settings?sekme=denetim adresleri buraya yönlenir).
+export const AUDIT_PATH = `${TOOLS_PATH}?sekme=denetim`
 
 // Alert kurallarının kapsamı: sistem varsayılanı, bir organizasyon ya da bir sunucu (id yoksa seçilmemiş).
 export type RuleScope = { kind: 'sistem' } | { kind: 'org'; id?: string } | { kind: 'sunucu'; id?: string }

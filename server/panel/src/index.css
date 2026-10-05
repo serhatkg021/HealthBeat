@@ -3641,3 +3641,49 @@ textarea {
   color: var(--text-muted);
   font-size: 13px;
 }
+
+/* ---------- Pencere içi tehlikeli bölge ---------- */
+.danger-zone {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--status-critical) 35%, var(--border));
+}
+
+.danger-zone-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--status-critical-text);
+}
+
+/* Pencere içindeki aranabilir seçim kutusu alanın tamamını kaplar. */
+.modal .search-select {
+  width: 100%;
+}
+
+/* ---------- Ayar çarkı (kart ve liste satırlarında) ---------- */
+.entity-card {
+  position: relative;
+}
+
+/* Kartın tamamı bağlantıdır; çark onun üstünde ayrı bir düğmedir (bağlantının içine düğme konamaz). */
+.entity-card-link {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.entity-card-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.entity-card-gear {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+}

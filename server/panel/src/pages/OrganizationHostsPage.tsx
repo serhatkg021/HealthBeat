@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { hostsApi, organizationsApi } from '../api/endpoints'
 import { usePagedQuery } from '../api/usePagedQuery'
 import type { Host, Organization } from '../types/api'
@@ -19,7 +19,7 @@ import { osLabel } from './inventory'
 import { Contact, Plus, Server, Settings } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { OrganizationContacts } from './OrganizationContacts'
-import { OrganizationSettings } from './OrganizationSettings'
+import { OrganizationSettingsModal } from './OrganizationSettings'
 import { useDocumentTitle } from '../components/useDocumentTitle'
 import { alertRulesPath, notificationsPath } from '../navigation'
 
@@ -64,14 +64,16 @@ export function OrganizationHostsPage() {
   }
   useEffect(loadOrg, [id])
 
-  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler', ...(canSeeSettings ? ['ayarlar'] : [])]
+  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler']
   const [params] = useSearchParams()
+  const navigate = useNavigate()
+  // Ayarlar pencere olarak açılır; eski "Ayarlar" sekmesinin adresi (?sekme=ayarlar) pencereyi açık getirir.
+  const [settingsOpen, setSettingsOpen] = useState(() => canSeeSettings && params.get('sekme') === 'ayarlar')
   const [tab, setTab] = useTab(tabIds, 'sunucular')
   const tabItems: TabItem[] = [
     { id: 'sunucular', label: 'Sunucular', badge: total, icon: Server },
     ...(canAddHost ? [{ id: 'ekle', label: 'Sunucu ekle', icon: Plus }] : []),
     { id: 'kisiler', label: 'İletişim kişileri', icon: Contact },
-    ...(canSeeSettings ? [{ id: 'ayarlar', label: 'Ayarlar', icon: Settings }] : []),
   ]
   // Üst zincir: bu organizasyonun üst şirketleri (adları bilgi olarak görünür).
   const ancestors: Organization[] = []
@@ -101,6 +103,35 @@ export function OrganizationHostsPage() {
             </>
           ) : undefined
         }
+        actions={
+          id && (
+            <>
+              {can('threshold.view') && (
+                <Link className="btn btn-sm" to={alertRulesPath({ kind: 'org', id })}>
+                  Alert kuralları →
+                </Link>
+              )}
+              {can('notification.view') && (
+                <Link className="btn btn-sm" to={notificationsPath('kurallar', { kind: 'org', id })}>
+                  Bildirim kuralları →
+                </Link>
+              )}
+              {canSeeSettings && org && (
+                <button type="button" className="btn btn-sm" onClick={() => setSettingsOpen(true)}>
+                  <Settings size={15} strokeWidth={1.75} />
+                  Ayarlar
+                </button>
+              )}
+            </>
+          )
+        }
+      />
+      <OrganizationSettingsModal
+        organization={settingsOpen ? org : null}
+        orgs={allOrgs}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={loadOrg}
+        onDeleted={() => navigate('/organizations')}
       />
       {error && <div className="error-banner">{error}</div>}
 
@@ -168,12 +199,6 @@ export function OrganizationHostsPage() {
       {id && (
         <TabPanel id="kisiler" active={tab}>
           <OrganizationContacts organizationId={id} canEdit={can('contact.edit')} />
-        </TabPanel>
-      )}
-
-      {org && canSeeSettings && (
-        <TabPanel id="ayarlar" active={tab}>
-          <OrganizationSettings key={org.id + org.name + (org.parent_organization_id ?? '')} organization={org} orgs={allOrgs} onChanged={loadOrg} />
         </TabPanel>
       )}
 

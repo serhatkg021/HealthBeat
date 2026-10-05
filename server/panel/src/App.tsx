@@ -3,7 +3,7 @@ import { Navigate, Route, BrowserRouter, Routes, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import type { Permission } from './auth/permissions'
 import { Layout } from './components/Layout'
-import { ALERT_RULES_PATH, HOSTS_PATH, LEGACY_SETTINGS_ROUTES, MAINTENANCE_PATH, NOTIFICATIONS_PATH, SETTINGS_PATH } from './navigation'
+import { ALERT_RULES_PATH, AUDIT_PATH, HOSTS_PATH, LEGACY_SETTINGS_ROUTES, MAINTENANCE_PATH, NOTIFICATIONS_PATH, SETTINGS_PATH } from './navigation'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
@@ -115,6 +115,7 @@ export default function App() {
             />
             {/* Eski Eşikler sayfası (yer imleri) artık Alert kurallarının sistem kapsamıdır. */}
             <Route path="/thresholds" element={<Navigate to={ALERT_RULES_PATH} replace />} />
+            <Route path="/audit" element={<Navigate to={AUDIT_PATH} replace />} />
             <Route
               path={MAINTENANCE_PATH}
               element={

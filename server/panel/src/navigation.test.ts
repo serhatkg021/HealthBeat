@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Permission } from './auth/permissions.ts'
-import { LEGACY_SETTINGS_ROUTES, alertRulesPath, notificationsPath, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
+import { AUDIT_PATH, LEGACY_SETTINGS_ROUTES, alertRulesPath, notificationsPath, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
 
 const canOnly = (...allowed: Permission[]) => (p: Permission) => allowed.includes(p)
 const ids = (items: { id: string }[]) => items.map((i) => i.id)
@@ -13,16 +13,19 @@ test('a super admin sees the monitoring, alert management and management groups 
   assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucular', 'alertler'])
   assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['kurallar', 'bakim', 'bildirim'])
   assert.deepEqual(ids(group(nav, 'yonetim')!.items), ['organizasyonlar', 'kullanicilar'])
-  assert.deepEqual(ids(nav.settings), ['denetim', 'sistem'])
-  assert.deepEqual(ids(nav.tools), ['kuyruk', 'cache', 'log'])
+  assert.deepEqual(ids(nav.settings), ['sistem'])
+  assert.deepEqual(ids(nav.tools), ['kuyruk', 'cache', 'log', 'denetim'])
 })
 
 test('system tools show only the tabs the user has a permission for; with none the menu entry disappears', () => {
   assert.deepEqual(ids(navigation(canOnly('system.queue.view')).tools), ['kuyruk'])
   assert.deepEqual(ids(navigation(canOnly('system.cache.view')).tools), ['cache'])
   assert.deepEqual(ids(navigation(canOnly('system.logs.view')).tools), ['log'])
-  // Ayarları görebilmek Sistem Araçları'nı açmaz; her aracın kendi izni vardır.
-  assert.deepEqual(navigation(canOnly('settings.view', 'settings.manage', 'audit.view')).tools, [])
+  // Ayarları görebilmek Sistem Araçları'nı açmaz; her aracın kendi izni vardır. Denetim kaydı audit.view ister.
+  assert.deepEqual(navigation(canOnly('settings.view', 'settings.manage')).tools, [])
+  assert.deepEqual(ids(navigation(canOnly('audit.view')).tools), ['denetim'])
+  // Ayarlar artık yalnızca yapılandırmadır: denetim izni tek başına Ayarlar'ı açmaz.
+  assert.deepEqual(navigation(canOnly('audit.view')).settings, [])
   assert.deepEqual(navigation(() => false).tools, [])
 })
 
@@ -115,4 +118,8 @@ test('the notifications address carries the tab and, for rules, the scope', () =
   assert.equal(notificationsPath('kanallar'), '/notifications?sekme=kanallar')
   assert.equal(notificationsPath('kurallar', { kind: 'sunucu', id: 'h1' }), '/notifications?sekme=kurallar&kapsam=sunucu&id=h1')
   assert.equal(notificationsPath('kisiler', { kind: 'org', id: 'o1' }), '/notifications?sekme=kisiler&id=o1')
+})
+
+test('the audit log lives under system tools', () => {
+  assert.equal(AUDIT_PATH, '/system?sekme=denetim')
 })
