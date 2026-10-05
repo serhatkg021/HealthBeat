@@ -2,45 +2,50 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { hostsApi } from '../api/endpoints'
 import { HostAlerts } from './HostAlerts'
-import { HostDocker } from './HostDocker'
-import { HostMetricHistory } from './HostMetricHistory'
+import { HostInventory } from './HostInventory'
 import { HostOverview } from './HostOverview'
+import { HostPerformance } from './HostPerformance'
+import { HostServices } from './HostServices'
 import { HostSettings } from './HostSettings'
-import { HostSystem } from './HostSystem'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import type { Host, HostThresholdsResponse, DockerContainerReport, MetricPoint } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { PageHeader } from '../components/PageHeader'
 import { Link } from 'react-router-dom'
-import { Bell, Container, LayoutDashboard, MonitorCog, Settings, TriangleAlert } from 'lucide-react'
+import { Bell, Boxes, ChartLine, LayoutDashboard, MonitorCog, Settings, TriangleAlert } from 'lucide-react'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
 import { useTab } from '../components/useTab'
 import { hostStatusLabel } from '../labels'
 import { useDocumentTitle } from '../components/useDocumentTitle'
 
-const TAB_IDS = ['genel', 'sistem', 'docker', 'alertler', 'ayarlar']
+// Sekmeler sabittir: yeni bir özellik yeni sekme açmaz, bu altısından birine girer (zamana bağlı metrikler
+// Performans'a, sunucuda çalışanlar Servisler'e, değişmeyen bilgiler Envanter'e).
+const TAB_IDS = ['genel', 'performans', 'servisler', 'envanter', 'alertler', 'ayarlar']
 
 const TAB_ITEMS: TabItem[] = [
   { id: 'genel', label: 'Genel', icon: LayoutDashboard },
-  { id: 'sistem', label: 'Sistem', icon: MonitorCog },
-  { id: 'docker', label: 'Docker', icon: Container },
+  { id: 'performans', label: 'Performans', icon: ChartLine },
+  { id: 'servisler', label: 'Servisler', icon: Boxes },
+  { id: 'envanter', label: 'Envanter', icon: MonitorCog },
   { id: 'alertler', label: 'Alert’ler', icon: Bell },
   { id: 'ayarlar', label: 'Ayarlar', icon: Settings },
 ]
+
+// Eski sekme adları (yer imleri, eski bağlantılar) yeni yerlerine açılır.
+const TAB_ALIASES = { sistem: 'envanter', docker: 'servisler' }
 
 export function HostDetailPage() {
   const { id } = useParams<{ id: string }>()
 
   const agentPolicy = useAgentPolicy()
   const [host, setHost] = useState<Host | null>(null)
-  // Son rapor edilen değerler — "Genel" sekmesi grafik değil, en güncel durumu gösterir; geçmiş bir "Detay"
-  // modalında ayrıca ve isteğe bağlı bir tarih aralığıyla yüklenir (bkz. HostMetricHistory).
+  // Son rapor edilen değerler — "Genel" sekmesi grafik değil, en güncel durumu gösterir; geçmiş "Performans"
+  // sekmesinde seçilen aralıkla ayrıca yüklenir (bkz. HostPerformance).
   const [latest, setLatest] = useState<MetricPoint | null>(null)
   const [containers, setContainers] = useState<DockerContainerReport[]>([])
   // Çubuk renkleri için sunucunun geçerli eşikleri (yüklenemezse çubuklar eşiksiz, yeşil kalır).
   const [thresholds, setThresholds] = useState<HostThresholdsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [historyModal, setHistoryModal] = useState<'cpu-ram' | 'disk' | null>(null)
 
   function reload() {
     if (!id) return
@@ -60,7 +65,7 @@ export function HostDetailPage() {
 
   useEffect(reload, [id])
 
-  const [tab, setTab] = useTab(TAB_IDS, 'genel')
+  const [tab, setTab] = useTab(TAB_IDS, 'genel', undefined, TAB_ALIASES)
   useDocumentTitle(host?.title)
 
   return (
@@ -92,15 +97,28 @@ export function HostDetailPage() {
       <Tabs items={TAB_ITEMS} active={tab} onChange={setTab} label="Sunucu bölümleri" />
 
       <TabPanel id="genel" active={tab}>
-        {host && <HostOverview host={host} latest={latest} thresholds={thresholds} policy={agentPolicy} onDetail={setHistoryModal} />}
+        {host && (
+          <HostOverview
+            host={host}
+            latest={latest}
+            thresholds={thresholds}
+            policy={agentPolicy}
+            onHistory={() => setTab('performans')}
+            onShowAlerts={() => setTab('alertler')}
+          />
+        )}
       </TabPanel>
 
-      <TabPanel id="sistem" active={tab}>
-        {host && <HostSystem host={host} disk={latest?.disk ?? []} thresholds={thresholds} />}
+      <TabPanel id="performans" active={tab}>
+        {host && <HostPerformance host={host} disk={latest?.disk ?? []} thresholds={thresholds} />}
       </TabPanel>
 
-      <TabPanel id="docker" active={tab}>
-        {host && <HostDocker host={host} containers={containers} thresholds={thresholds} />}
+      <TabPanel id="servisler" active={tab}>
+        {host && <HostServices host={host} containers={containers} thresholds={thresholds} />}
+      </TabPanel>
+
+      <TabPanel id="envanter" active={tab}>
+        {host && <HostInventory host={host} />}
       </TabPanel>
 
       {id && (
@@ -113,15 +131,6 @@ export function HostDetailPage() {
         <TabPanel id="ayarlar" active={tab} keepMounted>
           <HostSettings host={host} onChanged={reload} onError={setError} onThresholdsSaved={reloadThresholds} />
         </TabPanel>
-      )}
-
-      {id && (
-        <HostMetricHistory
-          hostId={id}
-          kind={historyModal ?? 'cpu-ram'}
-          open={historyModal !== null}
-          onClose={() => setHistoryModal(null)}
-        />
       )}
     </div>
   )

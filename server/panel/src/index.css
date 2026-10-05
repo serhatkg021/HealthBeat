@@ -672,6 +672,11 @@ code, .mono {
   margin-top: 16px;
 }
 
+/* Kartın ardından gelen kart ızgarası da aynı boşlukla ayrılır (aksi halde kenarları birbirine değer). */
+.card + .grid-2 {
+  margin-top: 16px;
+}
+
 .card-title {
   display: flex;
   align-items: center;
@@ -3486,4 +3491,82 @@ textarea {
     display: block;
     margin-left: 0;
   }
+}
+
+/* ---------- Yakında (henüz gelmemiş özelliklerin örnek veriyle yeri) ---------- */
+.coming-soon {
+  border-style: dashed;
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface-1) 70%, var(--bg));
+  box-shadow: none;
+}
+
+.coming-soon-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  background: var(--surface-3);
+}
+
+.coming-soon-body {
+  opacity: 0.55;
+  pointer-events: none;
+  user-select: none;
+  filter: grayscale(0.35);
+}
+
+.coming-soon-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.coming-soon-spark {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+
+.coming-soon-spark svg {
+  width: 100%;
+  height: 40px;
+  border-bottom: 1px solid var(--border);
+}
+
+.issue-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.issue-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.issue-list li:first-child {
+  border-top: 0;
+}
+
+.issue-list .issue-age {
+  margin-left: auto;
+  font-size: 12.5px;
 }

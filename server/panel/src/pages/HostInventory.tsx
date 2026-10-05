@@ -1,13 +1,10 @@
 import type { ReactNode } from 'react'
-import { Activity, HardDrive, MonitorCog, Network, ShieldCheck } from 'lucide-react'
-import type { Host, HostThresholdsResponse } from '../types/api'
-import { DiskGroupCard } from '../components/DiskGroupCard'
+import { Activity, MonitorCog, Network, ShieldCheck } from 'lucide-react'
+import type { Host } from '../types/api'
 import { EmptyState } from '../components/EmptyState'
-import { MountMeter } from '../components/MountMeter'
 import { StatusBadge } from '../components/StatusBadge'
-import { supportsHardwareSummary } from './agentStatus'
-import { diskLayout } from './diskLayout'
-import { formatBytes, formatCores } from './hardwareTotals'
+import { diskKindLabel, formatBytes, formatCores } from './hardwareTotals'
+import { UpdatesPreview } from './HostComingSoon'
 import {
   SECURITY_MODULE_LABEL,
   formatUptime,
@@ -20,8 +17,6 @@ import {
   swapText,
   virtualizationLabel,
 } from './inventory'
-import { mountLevels } from './usage'
-import type { DiskUsage } from '../types/api'
 
 function Row({ label, children, warning }: { label: string; children: ReactNode; warning?: string }) {
   return (
@@ -53,21 +48,12 @@ function Group({ title, icon: Icon, children }: { title: string; icon: typeof Ne
 
 const yesNo = (v: boolean | undefined, yes: string, no: string): ReactNode => (v === undefined ? '—' : v ? yes : no)
 
-// Sunucu sayfasının "Sistem" sekmesi: sunucunun ne olduğu (donanım, işletim sistemi, ağ, çalışma
-// durumu) ve fiziksel diskleri. Yalnızca bilgi içindir; IP uyuşmazlığı alert üretmez, ilgili
-// satırda uyarı rozeti olarak gösterilir. Docker bilgileri "Docker" sekmesindedir.
-export function HostSystem({
-  host,
-  disk,
-  thresholds,
-}: {
-  host: Host
-  // Son raporlanan mount kullanımı (Genel sekmesiyle aynı veri).
-  disk: DiskUsage[]
-  thresholds: HostThresholdsResponse | null
-}) {
+// Sunucu sayfasının "Envanter" sekmesi: sunucunun ne olduğu (donanım, işletim sistemi, ağ, çalışma durumu). Yalnızca
+// bilgi içindir; IP uyuşmazlığı alert üretmez, ilgili satırda uyarı rozeti olarak gösterilir. Disklerin doluluğu ve
+// zamana bağlı her şey "Performans", Docker "Servisler" sekmesindedir.
+export function HostInventory({ host }: { host: Host }) {
   const h = host.host_info
-  const layout = diskLayout(host.physical_disks, disk)
+  const disks = host.physical_disks ?? []
   const cores = formatCores(host.cpu_cores)
   const ram = host.ram_total_mb ? formatBytes(host.ram_total_mb * 1024 * 1024) : null
 
@@ -86,6 +72,20 @@ export function HostSystem({
             {h && <Row label="CPU modeli">{h.cpu_model || '—'}</Row>}
             <Row label="CPU çekirdeği">{cores ?? '—'}</Row>
             <Row label="Toplam RAM">{ram ?? '—'}</Row>
+            <Row label="Fiziksel diskler">
+              {disks.length > 0 ? (
+                <ul className="info-addresses">
+                  {disks.map((d) => (
+                    <li key={d.name}>
+                      <span className="mono">{d.name}</span>
+                      <span className="muted"> · {[d.size_bytes ? formatBytes(d.size_bytes) : null, d.kind ? diskKindLabel(d.kind) : null, d.model].filter(Boolean).join(' · ')}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                '—'
+              )}
+            </Row>
             {h && <Row label="Swap">{swapText(h)}</Row>}
             {h && (
               <Row label="Makine kimliği (özet)">
@@ -155,37 +155,7 @@ export function HostSystem({
         </div>
       </div>
 
-      <h2 className="section-title">
-        <HardDrive size={16} strokeWidth={1.75} />
-        Fiziksel diskler
-      </h2>
-      {layout.groups.length === 0 ? (
-        <div className="card">
-          <EmptyState icon={HardDrive}>
-            {!supportsHardwareSummary(host)
-              ? 'Bu agent donanım özetini göndermiyor; fiziksel diskler, çekirdek sayısı ve toplam RAM için agent güncellenmeli.'
-              : 'Fiziksel disk bilgisi yok (diskler keşfedilemedi).'}
-          </EmptyState>
-        </div>
-      ) : (
-        <div className="grid-2 disk-groups">
-          {layout.groups.map((g) => (
-            <DiskGroupCard key={g.disk.name} group={g} thresholds={thresholds} />
-          ))}
-        </div>
-      )}
-
-      {layout.groups.length > 0 && layout.unassigned.length > 0 && (
-        <div className="card">
-          <h2 className="card-title">Diğer bağlama noktaları</h2>
-          <p className="card-desc">Fiziksel bir diske bağlanamayan dosya sistemleri (ağ paylaşımı, sanal dosya sistemi vb.).</p>
-          <div className="mount-grid">
-            {layout.unassigned.map((u) => (
-              <MountMeter key={u.mount} mount={u.mount} usage={u} levels={mountLevels(thresholds?.thresholds, thresholds?.mount_thresholds, u.mount)} />
-            ))}
-          </div>
-        </div>
-      )}
+      <UpdatesPreview />
     </div>
   )
 }
