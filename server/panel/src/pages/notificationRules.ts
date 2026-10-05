@@ -63,7 +63,7 @@ export function candidatesForNewRoute(candidates: RecipientCandidate[], routes: 
 // Kapsamın bildirimlerinin kime gittiğini anlatan tek paragraf: sistem sahipleri her zaman alır, kurallar ek alıcıdır ve
 // sunucu, organizasyon ve üst organizasyon kuralları toplanır (hiçbiri diğerini ezmez).
 export function describeCoverage(scope: 'organization' | 'host', ruleCount: number): string {
-  const base = 'Alert bildirimleri her zaman sistem sahiplerine gider (Ayarlar → Sistem Ayarları → Sistem sahipleri); buradaki kişiler ek alıcıdır.'
+  const base = 'Alert bildirimleri her zaman sistem sahiplerine gider (Bildirim → Sistem sahipleri); buradaki kişiler ek alıcıdır.'
   if (scope === 'host') {
     return `${base} Bu sunucunun alert’lerinde sunucu kuralları, organizasyonunun ve üst organizasyonlarının kurallarıyla birlikte uygulanır.${ruleCount === 0 ? ' Bu sunucuya özel ek alıcı yok.' : ''}`
   }

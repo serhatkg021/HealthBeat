@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Permission } from './auth/permissions.ts'
-import { LEGACY_SETTINGS_ROUTES, alertRulesPath, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
+import { LEGACY_SETTINGS_ROUTES, alertRulesPath, notificationsPath, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
 
 const canOnly = (...allowed: Permission[]) => (p: Permission) => allowed.includes(p)
 const ids = (items: { id: string }[]) => items.map((i) => i.id)
@@ -100,4 +100,19 @@ test('the alert rules address carries the scope; the system scope is the bare pa
   assert.equal(alertRulesPath({ kind: 'org', id: 'o1' }), '/alert-rules?kapsam=org&id=o1')
   assert.equal(alertRulesPath({ kind: 'sunucu', id: 'h1' }), '/alert-rules?kapsam=sunucu&id=h1')
   assert.equal(alertRulesPath({ kind: 'sunucu' }), '/alert-rules?kapsam=sunucu')
+})
+
+test('notification tabs follow permissions; the menu entry disappears with none', () => {
+  assert.deepEqual(ids(navigation(() => true).notifications), ['kanallar', 'sahipler', 'kurallar', 'kisiler'])
+  // Org admin: kanallar ve sahipler kurulum genelidir.
+  assert.deepEqual(ids(navigation(canOnly('notification.view', 'notification.edit', 'contact.view')).notifications), ['kurallar', 'kisiler'])
+  // Operatör: yalnızca kurallar (salt okunur).
+  assert.deepEqual(ids(navigation(canOnly('notification.view')).notifications), ['kurallar'])
+  assert.ok(!ids(group(navigation(canOnly('host.view')), 'alert-yonetimi')!.items).includes('bildirim'))
+})
+
+test('the notifications address carries the tab and, for rules, the scope', () => {
+  assert.equal(notificationsPath('kanallar'), '/notifications?sekme=kanallar')
+  assert.equal(notificationsPath('kurallar', { kind: 'sunucu', id: 'h1' }), '/notifications?sekme=kurallar&kapsam=sunucu&id=h1')
+  assert.equal(notificationsPath('kisiler', { kind: 'org', id: 'o1' }), '/notifications?sekme=kisiler&id=o1')
 })

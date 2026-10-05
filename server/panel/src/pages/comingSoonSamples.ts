@@ -56,3 +56,15 @@ export const SAMPLE_RULES: { group: string; name: string; condition: string; dur
   { group: 'Sistem', name: 'Saat senkronu bozuk', condition: 'NTP eşitlenmemiş', duration: '30 dk boyunca', level: 'warning' },
   { group: 'Sistem', name: 'Güvenlik güncellemesi bekliyor', condition: '≥ 1 güvenlik paketi', duration: '7 gün sonra', level: 'info' },
 ]
+
+// Bildirim sayfasında "Bu alert kime gider?" önizlemesi: tüm kurallar birleştirilince çıkan alıcılar.
+export const SAMPLE_RECIPIENTS = {
+  host: 'web-01',
+  level: 'kritik',
+  recipients: [
+    { name: 'Sistem sahibi', source: 'sistem sahibi', channel: 'e-posta' },
+    { name: 'Nöbetçi DBA', source: 'Organizasyon: Üretim', channel: 'e-posta, SMS' },
+    { name: 'DC ekibi', source: 'Organizasyon: İstanbul DC', channel: 'e-posta' },
+    { name: 'Uygulama sorumlusu', source: 'Sunucu: web-01', channel: 'Telegram' },
+  ],
+}

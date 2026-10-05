@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { BellRing, KeyRound, Plug, RotateCw, Save, SlidersHorizontal, Trash2, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { KeyRound, Plug, RotateCw, Save, SlidersHorizontal, Trash2, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { hostsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import type { Permission } from '../auth/permissions'
@@ -8,9 +8,8 @@ import { Modal } from '../components/Modal'
 import { SecretNotice } from '../components/SecretNotice'
 import { useTab } from '../components/useTab'
 import type { Host } from '../types/api'
-import { alertRulesPath } from '../navigation'
+import { alertRulesPath, notificationsPath } from '../navigation'
 import { HostEffectiveRules } from './HostEffectiveRules'
-import { NotificationRules } from './NotificationRules'
 
 const SECTION_PARAM = 'bolum'
 
@@ -25,13 +24,12 @@ interface Section {
 const SECTIONS: Section[] = [
   { id: 'baglanti', label: 'Bağlantı ve kimlik', icon: Plug, requires: 'host.update' },
   { id: 'kurallar', label: 'Geçerli alert kuralları', icon: SlidersHorizontal, requires: 'threshold.view' },
-  { id: 'bildirim', label: 'Bildirim kuralları', icon: BellRing },
   { id: 'tehlike', label: 'Tehlikeli bölge', icon: TriangleAlert, requires: 'host.delete' },
 ]
 
 // Sunucu sayfasının "Ayarlar" sekmesi: bu sunucunun ayarları, bölümlere ayrılmış bir iç menüyle. Alert kuralları
-// (eşikler, disk seçimi) burada salt okunur özetlenir ve Alert kuralları sayfasında düzenlenir. Bildirim kuralları izni
-// olmayana salt okunur görünür; bağlantı/kimlik ve silme bölümleri hiç görünmez.
+// (eşikler, disk seçimi) burada salt okunur özetlenir ve Alert kuralları sayfasında, bildirim kuralları Bildirim
+// sayfasında düzenlenir. Bağlantı/kimlik ve silme bölümleri izni olmayana hiç görünmez.
 export function HostSettings({
   host,
   onChanged,
@@ -81,6 +79,8 @@ export function HostSettings({
   // Eski "Eşikler" ve "Disk alert'leri" bölümleri artık Alert kuralları sayfasında bu sunucunun kapsamıdır.
   const legacy = params.get(SECTION_PARAM)
   if (legacy === 'esikler' || legacy === 'disk') return <Navigate to={alertRulesPath({ kind: 'sunucu', id: host.id })} replace />
+  // Eski "Bildirim kuralları" bölümü artık Bildirim sayfasında bu sunucunun kapsamıdır.
+  if (legacy === 'bildirim') return <Navigate to={notificationsPath('kurallar', { kind: 'sunucu', id: host.id })} replace />
 
   const panel = (id: string, children: ReactNode) => (
     <div id={`settings-${id}`} hidden={section !== id} className="settings-panel">
@@ -151,7 +151,6 @@ export function HostSettings({
           )}
 
         {can('threshold.view') && panel('kurallar', <HostEffectiveRules hostId={host.id} />)}
-        {panel('bildirim', <NotificationRules scope={{ hostId: host.id }} canEdit={can('notification.edit')} />)}
 
         {can('host.delete') &&
           panel(

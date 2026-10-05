@@ -34,10 +34,14 @@ export interface SettingsTab extends PageTab {
 
 export type ToolTab = PageTab
 
+export type NotificationTab = PageTab & { id: NotificationTabId }
+export type NotificationTabId = 'kanallar' | 'sahipler' | 'kurallar' | 'kisiler'
+
 export interface Navigation {
   groups: NavGroup[]
   tools: ToolTab[]
   settings: SettingsTab[]
+  notifications: NotificationTab[]
 }
 
 export const SETTINGS_PATH = '/settings'
@@ -50,6 +54,14 @@ export const NOTIFICATIONS_PATH = '/notifications'
 export function navigation(can: Can): Navigation {
   const item = (show: boolean, def: NavItem): NavItem[] => (show ? [def] : [])
   const tab = (show: boolean, def: SettingsTab): SettingsTab[] => (show ? [def] : [])
+  // Bildirim sayfasının sekmeleri: kanallar ve sistem sahipleri kurulum genelidir (settings.view), kurallar ve iletişim
+  // kişileri organizasyon/sunucu kapsamındadır. Hiç sekmesi kalmayan kullanıcı menüde Bildirim'i görmez.
+  const notifications: NotificationTab[] = [
+    ...(can('settings.view') ? [{ id: 'kanallar' as const, label: 'Kanallar' }] : []),
+    ...(can('settings.view') ? [{ id: 'sahipler' as const, label: 'Sistem sahipleri' }] : []),
+    ...(can('notification.view') ? [{ id: 'kurallar' as const, label: 'Bildirim kuralları' }] : []),
+    ...(can('contact.view') ? [{ id: 'kisiler' as const, label: 'İletişim kişileri' }] : []),
+  ]
   // Organizasyonları göremeyen (operatör) kendisine atanmış sunucuları "Sunucularım"da görür. Sunucular sayfası
   // içeriği taşınınca ikisi tek sayfada birleşir.
   const groups = [
@@ -69,7 +81,7 @@ export function navigation(can: Can): Navigation {
       items: [
         ...item(can('threshold.view'), { id: 'kurallar', to: ALERT_RULES_PATH, label: 'Alert kuralları' }),
         { id: 'bakim', to: MAINTENANCE_PATH, label: 'Bakım pencereleri' },
-        ...item(can('notification.view') || can('settings.view'), { id: 'bildirim', to: NOTIFICATIONS_PATH, label: 'Bildirim' }),
+        ...item(notifications.length > 0, { id: 'bildirim', to: NOTIFICATIONS_PATH, label: 'Bildirim' }),
       ],
     },
     {
@@ -96,10 +108,10 @@ export function navigation(can: Can): Navigation {
     ...tab(can('settings.view'), {
       id: 'sistem',
       label: 'Sistem Ayarları',
-      description: 'Sistem sahipleri, bildirim kanalları, agent sürümleri, saklama, oturum ve loglama.',
+      description: 'Agent sürümleri, veri saklama, oturum ve hız sınırları, panel adresi ve loglama.',
     }),
   ]
-  return { groups, tools, settings }
+  return { groups, tools, settings, notifications }
 }
 
 const under = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`)
@@ -136,4 +148,15 @@ export function inToolsArea(pathname: string): boolean {
 // Grubun bir sayfası açıksa grup kapatılamaz görünmesin diye açık tutulur.
 export function groupHasActive(group: NavGroup, pathname: string): boolean {
   return group.items.some((i) => (i.end ? pathname === i.to : under(pathname, i.to)))
+}
+
+// notificationsPath, Bildirim sayfasının bir sekmesinin (ve kurallar için kapsamın, kişiler için organizasyonun)
+// adresidir; eski sekmelerden ve uyarı şeridinden gelen bağlantılar için.
+export function notificationsPath(tab: NotificationTabId, scope?: { kind: 'org' | 'sunucu'; id?: string }): string {
+  const params = new URLSearchParams({ sekme: tab })
+  if (scope) {
+    if (tab === 'kurallar') params.set('kapsam', scope.kind)
+    if (scope.id) params.set('id', scope.id)
+  }
+  return `${NOTIFICATIONS_PATH}?${params}`
 }

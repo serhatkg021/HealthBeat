@@ -16,6 +16,7 @@ import { SettingsHubPage } from './pages/SettingsHubPage'
 import { SystemToolsPage } from './pages/SystemToolsPage'
 import { PendingPage } from './pages/PendingPage'
 import { AlertRulesPage } from './pages/AlertRulesPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -127,16 +128,8 @@ export default function App() {
             <Route
               path={NOTIFICATIONS_PATH}
               element={
-                <RequirePermission permission={['notification.view', 'settings.view']}>
-                  <PendingPage
-                    title="Bildirim"
-                    subtitle="Kanallar, sistem sahipleri, bildirim kuralları ve iletişim kişileri"
-                    items={[
-                      'Ayarlar → Sistem Ayarları → Bildirim kanalları ve Sistem sahipleri',
-                      'Organizasyon ve sunucu → Bildirim kuralları',
-                      'Organizasyon → İletişim kişileri',
-                    ]}
-                  />
+                <RequirePermission permission={['notification.view', 'settings.view', 'contact.view']}>
+                  <NotificationsPage />
                 </RequirePermission>
               }
             />

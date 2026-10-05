@@ -16,13 +16,12 @@ import { Pagination } from '../components/Pagination'
 import { AgentBadge } from '../components/AgentBadge'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import { osLabel } from './inventory'
-import { BellRing, Contact, Plus, Server, Settings } from 'lucide-react'
+import { Contact, Plus, Server, Settings } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { OrganizationContacts } from './OrganizationContacts'
-import { NotificationRules } from './NotificationRules'
 import { OrganizationSettings } from './OrganizationSettings'
 import { useDocumentTitle } from '../components/useDocumentTitle'
-import { alertRulesPath } from '../navigation'
+import { alertRulesPath, notificationsPath } from '../navigation'
 
 const PAGE_SIZE = 20
 
@@ -65,14 +64,13 @@ export function OrganizationHostsPage() {
   }
   useEffect(loadOrg, [id])
 
-  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler', 'bildirimler', ...(canSeeSettings ? ['ayarlar'] : [])]
+  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler', ...(canSeeSettings ? ['ayarlar'] : [])]
   const [params] = useSearchParams()
   const [tab, setTab] = useTab(tabIds, 'sunucular')
   const tabItems: TabItem[] = [
     { id: 'sunucular', label: 'Sunucular', badge: total, icon: Server },
     ...(canAddHost ? [{ id: 'ekle', label: 'Sunucu ekle', icon: Plus }] : []),
     { id: 'kisiler', label: 'İletişim kişileri', icon: Contact },
-    { id: 'bildirimler', label: 'Bildirim kuralları', icon: BellRing },
     ...(canSeeSettings ? [{ id: 'ayarlar', label: 'Ayarlar', icon: Settings }] : []),
   ]
   // Üst zincir: bu organizasyonun üst şirketleri (adları bilgi olarak görünür).
@@ -86,6 +84,8 @@ export function OrganizationHostsPage() {
 
   // Eski "Eşikler" sekmesi artık Alert kuralları sayfasında bu organizasyonun kapsamıdır.
   if (id && params.get('sekme') === 'esikler') return <Navigate to={alertRulesPath({ kind: 'org', id })} replace />
+  // Eski "Bildirim kuralları" sekmesi artık Bildirim sayfasında bu organizasyonun kapsamıdır.
+  if (id && params.get('sekme') === 'bildirimler') return <Navigate to={notificationsPath('kurallar', { kind: 'org', id })} replace />
 
   return (
     <div>
@@ -168,14 +168,6 @@ export function OrganizationHostsPage() {
       {id && (
         <TabPanel id="kisiler" active={tab}>
           <OrganizationContacts organizationId={id} canEdit={can('contact.edit')} />
-        </TabPanel>
-      )}
-
-      {id && (
-        <TabPanel id="bildirimler" active={tab}>
-          <div className="page-readable">
-            <NotificationRules scope={{ organizationId: id }} canEdit={can('notification.edit')} />
-          </div>
         </TabPanel>
       )}
 

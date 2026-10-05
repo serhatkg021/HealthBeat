@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom'
 import { SlidersHorizontal } from 'lucide-react'
 import { hostsApi } from '../api/endpoints'
 import { StatusBadge } from '../components/StatusBadge'
-import { alertRulesPath } from '../navigation'
+import { useAuth } from '../auth/AuthContext'
+import { alertRulesPath, notificationsPath } from '../navigation'
 import { diskAlertSummary, effectiveRules, type EffectiveRule, type RuleSource } from './effectiveRules'
 
 const SOURCE: Record<RuleSource, { label: string; tone: 'warning' | 'neutral' }> = {
@@ -16,6 +17,7 @@ const SOURCE: Record<RuleSource, { label: string; tone: 'warning' | 'neutral' }>
 // Alert kuralları sayfasında, bu sunucunun kapsamında yapılır (organizasyon zincirini görebilenler orada değerin hangi
 // organizasyondan geldiğini de görür).
 export function HostEffectiveRules({ hostId }: { hostId: string }) {
+  const { can } = useAuth()
   const [rules, setRules] = useState<EffectiveRule[] | null>(null)
   const [disks, setDisks] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -42,9 +44,16 @@ export function HostEffectiveRules({ hostId }: { hostId: string }) {
           <SlidersHorizontal size={16} strokeWidth={1.75} />
           Geçerli alert kuralları
         </h2>
-        <Link className="btn btn-sm" to={alertRulesPath({ kind: 'sunucu', id: hostId })}>
-          Alert kurallarında düzenle →
-        </Link>
+        <span className="row">
+          {can('notification.view') && (
+            <Link className="btn btn-sm" to={notificationsPath('kurallar', { kind: 'sunucu', id: hostId })}>
+              Bildirim kuralları →
+            </Link>
+          )}
+          <Link className="btn btn-sm" to={alertRulesPath({ kind: 'sunucu', id: hostId })}>
+            Alert kurallarında düzenle →
+          </Link>
+        </span>
       </div>
       {error && <div className="error-banner">{error}</div>}
       {!rules && !error && <div className="muted">Yükleniyor…</div>}

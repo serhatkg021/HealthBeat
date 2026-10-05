@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Building2, ListPlus, Server } from 'lucide-react'
-import { dashboardApi, organizationsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import { ComingSoon } from '../components/ComingSoon'
-import { SearchSelect } from '../components/SearchSelect'
-import type { SelectOption } from '../components/searchSelect'
+import { HostPicker, OrgPicker } from '../components/ScopePickers'
+import { useScopeData } from '../components/useScopeData'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { StatusBadge } from '../components/StatusBadge'
@@ -17,7 +15,6 @@ import { SAMPLE_RULES } from './comingSoonSamples'
 import { DiskAlertSettings } from './DiskAlertSettings'
 import { HostThresholdSettings } from './HostThresholdSettings'
 import { OrganizationThresholds } from './OrganizationThresholds'
-import { buildTree } from './orgTree'
 import { SystemThresholds } from './SystemThresholds'
 
 // Alert kuralları: sistem varsayılanı, organizasyon ve sunucu eşikleri tek sayfada, üstteki kapsam seçiciyle. Kurallar
@@ -29,20 +26,7 @@ export function AlertRulesPage() {
   const [params, setParams] = useSearchParams()
   const scope = resolveScope(params.get('kapsam'), params.get('id'), canSeeOrgs)
 
-  const [orgs, setOrgs] = useState<Organization[]>([])
-  const [hosts, setHosts] = useState<OverviewHost[]>([])
-  const [orgNames, setOrgNames] = useState<Map<string, string>>(new Map())
-
-  useEffect(() => {
-    if (canSeeOrgs) organizationsApi.list().then(setOrgs).catch(() => undefined)
-    dashboardApi
-      .overview()
-      .then((o) => {
-        setHosts([...o.hosts].sort((a, b) => a.title.localeCompare(b.title)))
-        setOrgNames(new Map(o.organizations.map((x) => [x.id, x.name])))
-      })
-      .catch(() => undefined)
-  }, [canSeeOrgs])
+  const { orgs, hosts, orgNames } = useScopeData(canSeeOrgs)
 
   function select(next: RuleScope) {
     const p = new URLSearchParams()
@@ -69,8 +53,8 @@ export function AlertRulesPage() {
             Sunucu
           </button>
         </div>
-        {scope.kind === 'org' && <OrgPicker orgs={orgs} value={scope.id} onChange={(id) => select({ kind: 'org', id })} />}
-        {scope.kind === 'sunucu' && <HostPicker hosts={hosts} orgNames={orgNames} value={scope.id} onChange={(id) => select({ kind: 'sunucu', id })} />}
+        {scope.kind === 'org' && <OrgPicker idPrefix="rules" orgs={orgs} value={scope.id} onChange={(id) => select({ kind: 'org', id })} />}
+        {scope.kind === 'sunucu' && <HostPicker idPrefix="rules" hosts={hosts} orgNames={orgNames} value={scope.id} onChange={(id) => select({ kind: 'sunucu', id })} />}
       </div>
 
       {scope.kind === 'sistem' && <SystemThresholds />}
@@ -82,44 +66,6 @@ export function AlertRulesPage() {
         <RulesPreview />
       </div>
     </div>
-  )
-}
-
-function OrgPicker({ orgs, value, onChange }: { orgs: Organization[]; value?: string; onChange: (id: string) => void }) {
-  // Ağaç sırasında, girintili; üst şirket zinciri de aranır ("üretim" yazınca altındaki DC'ler de çıkar).
-  const options = useMemo<SelectOption[]>(
-    () => buildTree(orgs).map((r) => ({ value: r.org.id, label: r.org.name, depth: r.depth, keywords: r.path.join(' ') })),
-    [orgs],
-  )
-  return (
-    <span className="row">
-      <span className="muted">Organizasyon</span>
-      <SearchSelect id="rules-org" label="Organizasyon" options={options} value={value} onChange={onChange} placeholder="Organizasyon ara ya da seç…" />
-    </span>
-  )
-}
-
-// Sunucu seçici: 150+ sunucuda kaydırmak yerine adı ya da IP'si yazılarak bulunur.
-function HostPicker({
-  hosts,
-  orgNames,
-  value,
-  onChange,
-}: {
-  hosts: OverviewHost[]
-  orgNames: Map<string, string>
-  value?: string
-  onChange: (id: string) => void
-}) {
-  const options = useMemo<SelectOption[]>(
-    () => hosts.map((h) => ({ value: h.id, label: h.title, hint: orgNames.get(h.organization_id), keywords: h.ip })),
-    [hosts, orgNames],
-  )
-  return (
-    <span className="row">
-      <span className="muted">Sunucu</span>
-      <SearchSelect id="rules-host" label="Sunucu" options={options} value={value} onChange={onChange} placeholder="Sunucu adı ya da IP ara…" />
-    </span>
   )
 }
 
