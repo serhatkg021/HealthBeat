@@ -3,7 +3,7 @@ import { Navigate, Route, BrowserRouter, Routes, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import type { Permission } from './auth/permissions'
 import { Layout } from './components/Layout'
-import { LEGACY_SETTINGS_ROUTES, SETTINGS_PATH } from './navigation'
+import { ALERT_RULES_PATH, HOSTS_PATH, LEGACY_SETTINGS_ROUTES, MAINTENANCE_PATH, NOTIFICATIONS_PATH, SETTINGS_PATH } from './navigation'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
@@ -14,6 +14,7 @@ import { AlertsPage } from './pages/AlertsPage'
 import { UsersPage } from './pages/UsersPage'
 import { SettingsHubPage } from './pages/SettingsHubPage'
 import { SystemToolsPage } from './pages/SystemToolsPage'
+import { PendingPage } from './pages/PendingPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -31,9 +32,11 @@ function RequireAuth({ children }: { children: ReactElement }) {
   return children
 }
 
-function RequirePermission({ permission, children }: { permission: Permission; children: ReactElement }) {
+// permission bir listeyse içlerinden biri yeterlidir.
+function RequirePermission({ permission, children }: { permission: Permission | Permission[]; children: ReactElement }) {
   const { user, can } = useAuth()
-  if (!user || !can(permission)) return <Navigate to="/" replace />
+  const any = Array.isArray(permission) ? permission : [permission]
+  if (!user || !any.some(can)) return <Navigate to="/" replace />
   return children
 }
 
@@ -85,9 +88,59 @@ export default function App() {
                 </RequirePermission>
               }
             />
+            <Route
+              path={HOSTS_PATH}
+              element={
+                <RequirePermission permission="host.view">
+                  <PendingPage
+                    title="Sunucular"
+                    subtitle="Tüm sunucuların süzülebilir listesi"
+                    items={['Özet’teki sunucu tablosu ve süzgeçleri', 'Operatörün “Sunucularım” sayfası', 'Sunucu ekleme sihirbazı']}
+                  />
+                </RequirePermission>
+              }
+            />
             <Route path="/my-hosts" element={<MyHostsPage />} />
             <Route path="/hosts/:id" element={<HostDetailPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
+            <Route
+              path={ALERT_RULES_PATH}
+              element={
+                <RequirePermission permission="threshold.view">
+                  <PendingPage
+                    title="Alert kuralları"
+                    subtitle="Sistem, organizasyon ve sunucu eşikleri tek yerde"
+                    items={['Ayarlar → Sistem Eşikleri', 'Organizasyon → Eşikler', 'Sunucu → Ayarlar → Eşikler ve Disk alert’leri']}
+                  />
+                </RequirePermission>
+              }
+            />
+            <Route
+              path={MAINTENANCE_PATH}
+              element={
+                <PendingPage
+                  title="Bakım pencereleri"
+                  subtitle="Planlı bakım sırasında bildirimleri susturma"
+                  items={['Yakında: bakım penceresi listesi ve formu (örnek veriyle)']}
+                />
+              }
+            />
+            <Route
+              path={NOTIFICATIONS_PATH}
+              element={
+                <RequirePermission permission={['notification.view', 'settings.view']}>
+                  <PendingPage
+                    title="Bildirim"
+                    subtitle="Kanallar, sistem sahipleri, bildirim kuralları ve iletişim kişileri"
+                    items={[
+                      'Ayarlar → Sistem Ayarları → Bildirim kanalları ve Sistem sahipleri',
+                      'Organizasyon ve sunucu → Bildirim kuralları',
+                      'Organizasyon → İletişim kişileri',
+                    ]}
+                  />
+                </RequirePermission>
+              }
+            />
             <Route
               path="/users"
               element={

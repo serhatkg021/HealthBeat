@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Activity, Bell, Building2, ChevronDown, LayoutDashboard, Menu, Server, Settings, Users, Wrench, X, type LucideIcon } from 'lucide-react'
+import { Activity, Bell, Building2, CalendarClock, ChevronDown, LayoutDashboard, Menu, Send, Server, Settings, SlidersHorizontal, Users, Wrench, X, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { SETTINGS_PATH, TOOLS_PATH, groupHasActive, inSettingsArea, inToolsArea, navigation, type NavGroup, type NavItem } from '../navigation'
 import { pageTitle } from '../pageTitle'
@@ -17,8 +17,12 @@ import { useSystemNotices } from './useSystemNotices'
 
 const ICONS: Record<string, LucideIcon> = {
   ozet: LayoutDashboard,
+  sunucular: Server,
   sunucularim: Server,
   alertler: Bell,
+  kurallar: SlidersHorizontal,
+  bakim: CalendarClock,
+  bildirim: Send,
   organizasyonlar: Building2,
   kullanicilar: Users,
 }
@@ -128,9 +132,6 @@ export function Layout() {
           )}
         </div>
 
-        {nav.top.map((item) => (
-          <SideLink key={item.id} item={item} />
-        ))}
         {nav.groups.map((group) => (
           <SideGroup key={group.id} group={group} collapsed={collapsed.includes(group.id)} onToggle={() => toggleGroup(group.id)} />
         ))}

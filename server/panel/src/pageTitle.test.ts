@@ -11,6 +11,10 @@ test('static routes have a title; trailing slashes are ignored', () => {
   assert.equal(pageTitle('/login'), 'Giriş')
   assert.equal(pageTitle('/forgot-password'), 'Şifremi unuttum')
   assert.equal(pageTitle('/reset-password'), 'Yeni şifre')
+  assert.equal(pageTitle('/hosts'), 'Sunucular')
+  assert.equal(pageTitle('/alert-rules'), 'Alert kuralları')
+  assert.equal(pageTitle('/maintenance'), 'Bakım pencereleri')
+  assert.equal(pageTitle('/notifications'), 'Bildirim')
 })
 
 test('detail routes get their title from the page (data), so the route table returns null', () => {

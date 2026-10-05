@@ -5,12 +5,14 @@ import { LEGACY_SETTINGS_ROUTES, groupHasActive, inSettingsArea, inToolsArea, na
 
 const canOnly = (...allowed: Permission[]) => (p: Permission) => allowed.includes(p)
 const ids = (items: { id: string }[]) => items.map((i) => i.id)
+const group = (nav: ReturnType<typeof navigation>, id: string) => nav.groups.find((g) => g.id === id)
 
-test('a super admin sees the summary, alerts, the management group and all three settings tabs', () => {
+test('a super admin sees the monitoring, alert management and management groups and all three settings tabs', () => {
   const nav = navigation(() => true)
-  assert.deepEqual(ids(nav.top), ['ozet', 'alertler'])
-  assert.deepEqual(ids(nav.groups), ['yonetim'])
-  assert.deepEqual(ids(nav.groups[0].items), ['organizasyonlar', 'kullanicilar'])
+  assert.deepEqual(ids(nav.groups), ['izleme', 'alert-yonetimi', 'yonetim'])
+  assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucular', 'alertler'])
+  assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['kurallar', 'bakim', 'bildirim'])
+  assert.deepEqual(ids(group(nav, 'yonetim')!.items), ['organizasyonlar', 'kullanicilar'])
   assert.deepEqual(ids(nav.settings), ['esikler', 'denetim', 'sistem'])
   assert.deepEqual(ids(nav.tools), ['kuyruk', 'cache', 'log'])
 })
@@ -31,22 +33,37 @@ test('the system tools area is its own page, not part of settings', () => {
   assert.equal(inToolsArea('/settings/system'), false)
 })
 
-test('an operator gets "my hosts" instead of organizations; an empty group disappears', () => {
-  const nav = navigation(canOnly('alert.view', 'threshold.view'))
-  assert.deepEqual(ids(nav.top), ['ozet', 'sunucularim', 'alertler'])
-  assert.deepEqual(nav.groups, [])
+test('an operator gets "my hosts" instead of organizations and read-only alert management; an empty group disappears', () => {
+  const nav = navigation(canOnly('host.view', 'alert.view', 'threshold.view', 'notification.view'))
+  assert.deepEqual(ids(nav.groups), ['izleme', 'alert-yonetimi'])
+  assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucularim', 'alertler'])
+  assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['kurallar', 'bakim', 'bildirim'])
   assert.deepEqual(ids(nav.settings), ['esikler'])
 })
 
-test('with no permissions only the summary and "my hosts" remain and there is no settings entry', () => {
+test('an organization admin sees the host list and notifications but no users or settings', () => {
+  const nav = navigation(canOnly('organization.view', 'host.view', 'threshold.view', 'alert.view', 'notification.view', 'contact.view'))
+  assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucular', 'alertler'])
+  assert.deepEqual(ids(group(nav, 'yonetim')!.items), ['organizasyonlar'])
+  assert.deepEqual(ids(nav.settings), ['esikler'])
+})
+
+test('notifications are reachable with either notification or settings permission', () => {
+  assert.ok(ids(group(navigation(canOnly('settings.view')), 'alert-yonetimi')!.items).includes('bildirim'))
+  assert.ok(!ids(group(navigation(() => false), 'alert-yonetimi')!.items).includes('bildirim'))
+})
+
+test('with no permissions only the summary, "my hosts" and maintenance remain and there is no settings entry', () => {
   const nav = navigation(() => false)
-  assert.deepEqual(ids(nav.top), ['ozet', 'sunucularim'])
+  assert.deepEqual(ids(nav.groups), ['izleme', 'alert-yonetimi'])
+  assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucularim'])
+  assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['bakim'])
   assert.deepEqual(nav.settings, [])
 })
 
 test('a group keeps only the items the user may see', () => {
   const nav = navigation(canOnly('organization.view'))
-  assert.deepEqual(ids(nav.groups[0].items), ['organizasyonlar'])
+  assert.deepEqual(ids(group(nav, 'yonetim')!.items), ['organizasyonlar'])
 })
 
 test('the settings area is the settings page', () => {
@@ -61,10 +78,17 @@ test('the old separate pages map to settings tabs that exist', () => {
 })
 
 test('a group is active on its pages and their detail pages', () => {
-  const group = navigation(() => true).groups[0]
-  assert.equal(groupHasActive(group, '/organizations'), true)
-  assert.equal(groupHasActive(group, '/organizations/22d546c3'), true)
-  assert.equal(groupHasActive(group, '/users'), true)
-  assert.equal(groupHasActive(group, '/alerts'), false)
-  assert.equal(groupHasActive(group, '/'), false)
+  const nav = navigation(() => true)
+  const yonetim = group(nav, 'yonetim')!
+  assert.equal(groupHasActive(yonetim, '/organizations'), true)
+  assert.equal(groupHasActive(yonetim, '/organizations/22d546c3'), true)
+  assert.equal(groupHasActive(yonetim, '/users'), true)
+  assert.equal(groupHasActive(yonetim, '/alerts'), false)
+  assert.equal(groupHasActive(yonetim, '/'), false)
+  // Özet yalnızca tam eşleşmede etkin: başka her sayfa "/" ile başlar.
+  const izleme = group(nav, 'izleme')!
+  assert.equal(groupHasActive(izleme, '/'), true)
+  assert.equal(groupHasActive(izleme, '/hosts'), true)
+  assert.equal(groupHasActive(izleme, '/hosts/4c047b76'), true)
+  assert.equal(groupHasActive(izleme, '/organizations'), false)
 })

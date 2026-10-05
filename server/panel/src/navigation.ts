@@ -1,6 +1,7 @@
-// Sol menünün, Ayarlar sayfasının ve Sistem Araçları sayfasının yapısı — saf mantık (ikonlar Layout'ta eşlenir). Menü:
-// üstte doğrudan bağlantılar, altında açılır gruplar, en altta sabit Sistem Araçları ve Ayarlar. Bu ikisi menüde tek
-// bağlantıdır; içerikleri sayfanın içinde sekmelerle ayrılır. Her öğe yalnızca izni olan kullanıcıya görünür; hiç öğesi
+// Sol menünün, Ayarlar sayfasının ve Sistem Araçları sayfasının yapısı — saf mantık (ikonlar Layout'ta eşlenir). Menü,
+// kullanıcının sorduğu soruya göre üç açılır gruptur: İzleme (ne oluyor?), Alert Yönetimi (ne zaman, kime haber
+// verilir?) ve Yönetim; en altta sabit Sistem Araçları ve Ayarlar. Bu ikisi menüde tek bağlantıdır; içerikleri sayfanın
+// içinde sekmelerle ayrılır. Her öğe yalnızca izni olan kullanıcıya görünür; hiç öğesi
 // kalmayan grup (ve hiç sekmesi kalmayan Ayarlar ya da Sistem Araçları) gösterilmez.
 import type { Permission } from './auth/permissions.ts'
 
@@ -34,7 +35,6 @@ export interface SettingsTab extends PageTab {
 export type ToolTab = PageTab
 
 export interface Navigation {
-  top: NavItem[]
   groups: NavGroup[]
   tools: ToolTab[]
   settings: SettingsTab[]
@@ -42,17 +42,36 @@ export interface Navigation {
 
 export const SETTINGS_PATH = '/settings'
 export const TOOLS_PATH = '/system'
+export const HOSTS_PATH = '/hosts'
+export const ALERT_RULES_PATH = '/alert-rules'
+export const MAINTENANCE_PATH = '/maintenance'
+export const NOTIFICATIONS_PATH = '/notifications'
 
 export function navigation(can: Can): Navigation {
   const item = (show: boolean, def: NavItem): NavItem[] => (show ? [def] : [])
   const tab = (show: boolean, def: SettingsTab): SettingsTab[] => (show ? [def] : [])
-  // Organizasyonları göremeyen (operatör) kendisine atanmış sunucuları "Sunucularım"da görür.
-  const top = [
-    { id: 'ozet', to: '/', label: 'Özet', end: true },
-    ...item(!can('organization.view'), { id: 'sunucularim', to: '/my-hosts', label: 'Sunucularım' }),
-    ...item(can('alert.view'), { id: 'alertler', to: '/alerts', label: 'Alert’ler' }),
-  ]
+  // Organizasyonları göremeyen (operatör) kendisine atanmış sunucuları "Sunucularım"da görür. Sunucular sayfası
+  // içeriği taşınınca ikisi tek sayfada birleşir.
   const groups = [
+    {
+      id: 'izleme',
+      label: 'İzleme',
+      items: [
+        { id: 'ozet', to: '/', label: 'Özet', end: true },
+        ...item(can('host.view') && can('organization.view'), { id: 'sunucular', to: HOSTS_PATH, label: 'Sunucular' }),
+        ...item(!can('organization.view'), { id: 'sunucularim', to: '/my-hosts', label: 'Sunucularım' }),
+        ...item(can('alert.view'), { id: 'alertler', to: '/alerts', label: 'Alert’ler' }),
+      ],
+    },
+    {
+      id: 'alert-yonetimi',
+      label: 'Alert Yönetimi',
+      items: [
+        ...item(can('threshold.view'), { id: 'kurallar', to: ALERT_RULES_PATH, label: 'Alert kuralları' }),
+        { id: 'bakim', to: MAINTENANCE_PATH, label: 'Bakım pencereleri' },
+        ...item(can('notification.view') || can('settings.view'), { id: 'bildirim', to: NOTIFICATIONS_PATH, label: 'Bildirim' }),
+      ],
+    },
     {
       id: 'yonetim',
       label: 'Yönetim',
@@ -85,7 +104,7 @@ export function navigation(can: Can): Navigation {
       description: 'Sistem sahipleri, bildirim kanalları, agent sürümleri, saklama, oturum ve loglama.',
     }),
   ]
-  return { top, groups, tools, settings }
+  return { groups, tools, settings }
 }
 
 const under = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`)
