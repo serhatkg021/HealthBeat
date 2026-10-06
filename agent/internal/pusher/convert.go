@@ -136,3 +136,47 @@ func FromTCP(t collector.TCPStats) *TCP {
 	}
 	return &TCP{RetransPct: t.RetransPct, Established: t.Established, TimeWait: t.TimeWait}
 }
+
+func FromTemperatures(in []collector.TemperatureReading) []Temperature {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]Temperature, len(in))
+	for i, t := range in {
+		out[i] = Temperature{Sensor: t.Sensor, Kind: t.Kind, Celsius: t.Celsius, Max: t.Max, Crit: t.Crit}
+	}
+	return out
+}
+
+func FromProcesses(p collector.ProcessSummary) *Processes {
+	conv := func(in []collector.ProcessGroup) []ProcessGroup {
+		if len(in) == 0 {
+			return nil
+		}
+		out := make([]ProcessGroup, len(in))
+		for i, g := range in {
+			out[i] = ProcessGroup{Name: g.Name, Count: g.Count, CPUPct: g.CPUPct, RSSMB: g.RSSMB}
+		}
+		return out
+	}
+	return &Processes{Total: p.Total, Zombie: p.Zombie, TopCPU: conv(p.TopCPU), TopRAM: conv(p.TopRAM)}
+}
+
+func FromUpdates(u *collector.UpdatesInfo) *Updates {
+	if u == nil {
+		return nil
+	}
+	out := &Updates{Pending: u.Pending, Security: u.Security}
+	if !u.ListsUpdatedAt.IsZero() {
+		out.ListsUpdatedAt = u.ListsUpdatedAt.UTC().Format(time.RFC3339)
+	}
+	return out
+}
+
+func FromCapacity(c collector.CapacityStats) *Capacity {
+	if c == (collector.CapacityStats{}) {
+		return nil
+	}
+	return &Capacity{FileHandles: c.FileHandles, FileHandlesMax: c.FileHandlesMax, Conntrack: c.Conntrack,
+		ConntrackMax: c.ConntrackMax, Tasks: c.Tasks, PIDMax: c.PIDMax}
+}

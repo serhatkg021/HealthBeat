@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"healthbeat-agent/internal/collector"
 	"healthbeat-agent/internal/version"
@@ -38,9 +39,9 @@ func withV4(p *MetricsPayload) {
 	p.TCP = &TCP{RetransPct: ptr(0.3), Established: ptr(182), TimeWait: ptr(40)}
 	p.Temperatures = []Temperature{{Sensor: "coretemp/Package id 0", Kind: "cpu", Celsius: 64, Max: ptr(100.0), Crit: ptr(100.0)}}
 	p.RAID = []RAID{{Name: "md0", Level: "raid1", State: "degraded", Devices: 2, Active: 1, SyncPct: ptr(37.5)}}
-	p.Capacity = &Capacity{FileHandles: ptr(int64(12705)), FileHandlesMax: ptr(int64(1048576)), Processes: ptr(int64(312)), PIDMax: ptr(int64(4194304))}
+	p.Capacity = &Capacity{FileHandles: ptr(int64(12705)), FileHandlesMax: ptr(int64(1048576)), Tasks: ptr(int64(312)), PIDMax: ptr(int64(4194304))}
 	p.Processes = &Processes{Total: 312, TopCPU: []ProcessGroup{{Name: "postgres", Count: 23, CPUPct: 38.2, RSSMB: 4198}}}
-	p.Updates = &Updates{Pending: 14, Security: 3, CheckedAt: "2026-10-06T18:00:00Z"}
+	p.Updates = &Updates{Pending: 14, Security: 3, ListsUpdatedAt: "2026-10-06T18:00:00Z"}
 	p.Services = &Services{Items: []Service{{Name: "postgresql.service", Active: "failed", Sub: "failed", Restarts: ptr(3)}}}
 	p.TimeSync = &TimeSync{Enabled: ptr(true), Synchronized: ptr(true), Daemon: "timesyncd", OffsetMs: ptr(1.841),
 		Sources: []TimeSource{{Name: "185.125.190.57", State: "selected", Reach: ptr(255)}}}
@@ -148,5 +149,22 @@ func TestV4ConvertersKeepRawValuesAndOmitUnknown(t *testing.T) {
 	raid := FromRAID([]collector.RAIDArray{{Name: "md0", Level: "raid1", State: "recovering", Devices: 2, Active: 1, SyncPct: ptr(12.66)}})
 	if len(raid) != 1 || *raid[0].SyncPct != 12.66 || raid[0].State != "recovering" {
 		t.Errorf("raid = %+v", raid)
+	}
+}
+
+func TestInventoryConverters(t *testing.T) {
+	if FromUpdates(nil) != nil || FromCapacity(collector.CapacityStats{}) != nil || FromTemperatures(nil) != nil {
+		t.Fatal("unknown inventory objects must be omitted")
+	}
+	u := FromUpdates(&collector.UpdatesInfo{Pending: 3, Security: 1, ListsUpdatedAt: time.Date(2026, 10, 6, 9, 0, 0, 0, time.FixedZone("TR", 3*3600))})
+	if u.ListsUpdatedAt != "2026-10-06T06:00:00Z" || u.Pending != 3 || u.Security != 1 {
+		t.Errorf("updates = %+v", u)
+	}
+	if u := FromUpdates(&collector.UpdatesInfo{}); u.ListsUpdatedAt != "" {
+		t.Errorf("unknown list age serialized as %q", u.ListsUpdatedAt)
+	}
+	p := FromProcesses(collector.ProcessSummary{Total: 3, TopRAM: []collector.ProcessGroup{{Name: "java", Count: 1, RSSMB: 10}}})
+	if p.TopCPU != nil || len(p.TopRAM) != 1 || p.Total != 3 {
+		t.Errorf("processes = %+v; no CPU ranking yet must stay omitted", p)
 	}
 }

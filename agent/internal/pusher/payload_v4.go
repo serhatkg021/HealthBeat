@@ -92,11 +92,12 @@ type Capacity struct {
 	FileHandlesMax *int64 `json:"file_handles_max,omitempty"`
 	Conntrack      *int64 `json:"conntrack,omitempty"` // bağlantı izleme modülü yüklü değilse yok
 	ConntrackMax   *int64 `json:"conntrack_max,omitempty"`
-	Processes      *int64 `json:"processes,omitempty"`
+	Tasks          *int64 `json:"tasks,omitempty"` // süreç + iş parçacığı: pid_max sınırı bunlara uygulanır
 	PIDMax         *int64 `json:"pid_max,omitempty"`
 }
 
-// Processes, süreç özetidir. Yalnızca süreç adı (comm) gönderilir: komut satırı ve kullanıcı gönderilmez (komut
+// Processes, süreç özetidir; CPU yüzdesi makinenin toplam kapasitesine göredir (cpu_usage_pct ile aynı ölçek), RSS
+// grubun süreçlerinin toplamıdır. Yalnızca süreç adı (comm) gönderilir: komut satırı ve kullanıcı gönderilmez (komut
 // satırında parola gibi sırlar olabilir).
 type Processes struct {
 	Total  int            `json:"total"`
@@ -115,9 +116,11 @@ type ProcessGroup struct {
 
 // Updates, bekleyen paket güncellemeleridir (yalnızca apt ailesi).
 type Updates struct {
-	Pending   int    `json:"pending"`
-	Security  int    `json:"security"`
-	CheckedAt string `json:"checked_at,omitempty"` // RFC 3339
+	Pending  int `json:"pending"`
+	Security int `json:"security"`
+	// ListsUpdatedAt, paket listelerinin en son güncellendiği andır (RFC 3339): agent listeleri kendisi güncellemez,
+	// listeler eskiyse sayılar da eskidir.
+	ListsUpdatedAt string `json:"lists_updated_at,omitempty"`
 }
 
 // Services, systemd servisleridir. Full=true ise liste tamdır (server kendi listesini bununla değiştirir); false ise

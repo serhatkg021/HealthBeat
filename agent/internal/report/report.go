@@ -19,6 +19,12 @@ const (
 	dockerTimeout = 20 * time.Second
 	// servicesTimeout, bir servis toplamasının (list-units + show) tamamıdır; yüzlerce servisli makinede ~0,5 sn sürer.
 	servicesTimeout = 10 * time.Second
+	// processesEvery: süreç özeti 60 sn'de bir; CPU sıralaması bu aralığın ortalamasıdır.
+	processesEvery   = time.Minute
+	processesTimeout = 10 * time.Second
+	// updatesEvery: bekleyen güncellemeler saatte bir (paket listeleri zaten günde bir güncellenir).
+	updatesEvery   = time.Hour
+	updatesTimeout = 35 * time.Second
 	// FirstReportWait, açılıştaki ilk raporun yavaş kaynakların ilk sonucunu en çok ne kadar beklediğidir.
 	FirstReportWait = 3 * time.Second
 )
@@ -33,6 +39,8 @@ type Builder struct {
 	host       *collector.HostInfoCollector
 	services   *collector.Background[[]collector.ServiceState]
 	svcReport  *serviceReporter
+	processes  *collector.Background[collector.ProcessSummary]
+	updates    *collector.Background[*collector.UpdatesInfo]
 }
 
 // New, toplayıcıları kurar; interval, yavaş kaynakların her rapor aralığında toplananlarının (Docker) aralığıdır.
@@ -48,25 +56,35 @@ func New(diskMounts []string, interval func() time.Duration) *Builder {
 		host:       collector.NewHostInfoCollector(docker),
 		services:   collector.NewBackground("services", interval, servicesTimeout, collector.NewServiceCollector().Collect),
 		svcReport:  newServiceReporter(),
+		processes: collector.NewBackground("processes", every(processesEvery), processesTimeout,
+			collector.NewProcessCollector().Collect),
+		updates: collector.NewBackground("updates", every(updatesEvery), updatesTimeout,
+			collector.NewUpdatesCollector().Collect),
 	}
 }
+
+func every(d time.Duration) func() time.Duration { return func() time.Duration { return d } }
 
 // Start, arka plan toplayıcılarını ctx bitene kadar çalıştırır.
 func (b *Builder) Start(ctx context.Context) {
 	b.docker.Start(ctx)
 	b.services.Start(ctx)
+	b.processes.Start(ctx)
+	b.updates.Start(ctx)
 	b.host.Start(ctx)
 }
 
 // WaitReady, arka plan toplayıcılarının ilk sonucunu toplamda en çok d kadar bekler.
 func (b *Builder) WaitReady(ctx context.Context, d time.Duration) {
 	deadline := time.Now().Add(d)
-	b.docker.WaitReady(ctx, d)
-	if left := time.Until(deadline); left > 0 {
-		b.services.WaitReady(ctx, left)
-	}
-	if left := time.Until(deadline); left > 0 {
-		b.host.WaitReady(ctx, left)
+	for _, wait := range []func(context.Context, time.Duration){
+		b.docker.WaitReady, b.services.WaitReady, b.processes.WaitReady, b.updates.WaitReady, b.host.WaitReady,
+	} {
+		left := time.Until(deadline)
+		if left <= 0 {
+			return
+		}
+		wait(ctx, left)
 	}
 }
 
@@ -90,6 +108,17 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 	ioSample := b.io.Sample(physNames)
 	containers, _ := b.docker.Latest()
 	services, servicesKnown := b.services.Latest()
+	hostInfo := b.host.Collect(ctx)
+	var processes *pusher.Processes
+	if p, ok := b.processes.Latest(); ok {
+		processes = pusher.FromProcesses(p)
+	}
+	updates, _ := b.updates.Latest()
+	// Sıcaklık yalnızca fiziksel makinede: sanal makinelerin bildirdiği (acpitz gibi) sensörler sahte değerdir.
+	var temperatures []pusher.Temperature
+	if v := hostInfo.Virtualization; v == nil || (v.Kind != "vm" && v.Kind != "container") {
+		temperatures = pusher.FromTemperatures(collector.ReadTemperatures(""))
+	}
 
 	return pusher.MetricsPayload{
 		CPUUsagePct:      cpuPct,
@@ -98,7 +127,7 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		CPUCores:         collector.CPUCores(),
 		RAMTotalMB:       collector.TotalMemoryMB(),
 		PhysicalDisks:    pusher.FromPhysicalDisks(physical),
-		HostInfo:         b.host.Collect(ctx),
+		HostInfo:         hostInfo,
 		DockerContainers: pusher.FromDockerContainers(containers),
 
 		CPUDetail:    pusher.FromCPUBreakdown(b.cpu.Breakdown()),
@@ -109,5 +138,9 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		NetIO:        pusher.FromNetIO(ioSample.Net),
 		TCP:          pusher.FromTCP(ioSample.TCP),
 		Services:     b.svcReport.next(services, servicesKnown),
+		Temperatures: temperatures,
+		Capacity:     pusher.FromCapacity(collector.ReadCapacity("")),
+		Processes:    processes,
+		Updates:      pusher.FromUpdates(updates),
 	}
 }

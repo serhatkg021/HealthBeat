@@ -356,7 +356,12 @@ func (c *HostInfoCollector) collectFast(h *HostInfo, now time.Time) {
 // runCommand, dış bir komutu kısa bir zaman aşımıyla ve asgari bir ortamla çalıştırır. Komut yoksa ya da
 // hata verirse hata döner; çağıran alanı "bilinmiyor" bırakır.
 func runCommand(ctx context.Context, name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, execTimeout)
+	return runCommandTimeout(ctx, execTimeout, name, args...)
+}
+
+// runCommandTimeout, runCommand'ın verilen zaman aşımıyla çalışanıdır (ör. apt gibi daha yavaş komutlar için).
+func runCommandTimeout(ctx context.Context, timeout time.Duration, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C"}

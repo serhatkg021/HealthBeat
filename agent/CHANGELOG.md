@@ -28,6 +28,14 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - Ağ arayüzü başına trafik (`net_io`): gelen/giden bit/sn, hata ve düşen paket sayısı; `lo`, `docker0`, `veth*`,
     `br-*` (container iç trafiği) hariç. TCP yeniden gönderim oranı, kurulu bağlantı ve TIME_WAIT sayısı (`tcp`).
   - Oranlar iki rapor arasındaki farktır: agent'ın ilk raporunda ve sayaç geri gittiğinde (yeniden açılış) gönderilmez.
+  - Sıcaklık sensörleri (`temperatures`; yalnızca fiziksel makinede): CPU paketi, en sıcak çekirdek (çekirdekler tek
+    satırda), NVMe/SATA diskler ve diğerleri; donanımın bildirdiği üst ve kritik sınırlarla.
+  - En çok CPU ve RAM kullanan 5 süreç grubu, toplam ve zombi süreç sayısı (`processes`, 60 sn'de bir). Yalnızca süreç
+    adı gönderilir; komut satırı ve kullanıcı gönderilmez. CPU yüzdesi makinenin toplam kapasitesine göredir.
+  - Bekleyen paket güncellemeleri ve güvenlik güncellemeleri (`updates`, saatte bir; yalnızca apt ailesi) ile paket
+    listelerinin en son güncellendiği an.
+  - Kapasite sınırları (`capacity`): açık dosya tanıtıcısı, bağlantı izleme tablosu ve görev sayısının sınırlarına göre
+    doluluğu.
 
 ### Değişti
 - **Yavaş kaynaklar arka planda toplanıyor:** Docker ve envanterin komut gerektiren alanları (saat senkronu, başarısız
