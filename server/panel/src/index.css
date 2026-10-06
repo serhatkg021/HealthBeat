@@ -3514,6 +3514,7 @@ textarea {
 }
 
 .coming-soon-body {
+  overflow-x: auto;
   opacity: 0.55;
   pointer-events: none;
   user-select: none;
@@ -3847,13 +3848,23 @@ textarea {
   margin-left: auto;
 }
 
+/* Menüdeki arama girişi yalnızca dar ekranda görünür (geniş ekranda üst çubuktaki düğme vardır). */
+.sidebar-search {
+  display: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 @media (max-width: 860px) {
   .search-trigger {
-    width: auto;
+    display: none;
   }
 
-  .search-trigger .search-trigger-text,
-  .search-trigger kbd {
-    display: none;
+  .sidebar-search {
+    display: flex;
   }
 }

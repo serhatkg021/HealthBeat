@@ -61,11 +61,12 @@ export function candidatesForNewRoute(candidates: RecipientCandidate[], routes: 
 }
 
 // Kapsamın bildirimlerinin kime gittiğini anlatan tek paragraf: sistem sahipleri her zaman alır, kurallar ek alıcıdır ve
-// sunucu, organizasyon ve üst organizasyon kuralları toplanır (hiçbiri diğerini ezmez).
-export function describeCoverage(scope: 'organization' | 'host', ruleCount: number): string {
-  const base = 'Alert bildirimleri her zaman sistem sahiplerine gider (Bildirim → Sistem sahipleri); buradaki kişiler ek alıcıdır.'
+// sunucu, organizasyon ve üst organizasyon kuralları toplanır (hiçbiri diğerini ezmez). Sistem sahipleri sekmesine
+// yalnızca onu görebilene yön gösterilir.
+export function describeCoverage(scope: 'organization' | 'host', ownersVisible: boolean): string {
+  const base = `Alert bildirimleri her zaman sistem sahiplerine gider${ownersVisible ? ' (Bildirim → Sistem sahipleri)' : ''}; buradaki kişiler ek alıcıdır.`
   if (scope === 'host') {
-    return `${base} Bu sunucunun alert’lerinde sunucu kuralları, organizasyonunun ve üst organizasyonlarının kurallarıyla birlikte uygulanır.${ruleCount === 0 ? ' Bu sunucuya özel ek alıcı yok.' : ''}`
+    return `${base} Bu sunucunun alert’lerinde sunucu kuralları, organizasyonunun ve üst organizasyonlarının kurallarıyla birlikte uygulanır.`
   }
-  return `${base} Bu kurallar organizasyondaki ve alt organizasyonlarındaki bütün sunucular için geçerlidir; sunucu kurallarıyla birlikte uygulanır.${ruleCount === 0 ? ' Bu organizasyonda ek alıcı yok.' : ''}`
+  return `${base} Bu kurallar organizasyondaki ve alt organizasyonlarındaki bütün sunucular için geçerlidir; sunucu kurallarıyla birlikte uygulanır.`
 }

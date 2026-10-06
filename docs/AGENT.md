@@ -200,7 +200,8 @@ bırakır**: sanal dosya sistemleri (`proc`, `sysfs`, `cgroup`, …), bellek tab
 yerden bağlanması (bind mount) tek disk sayılır. Ağ dosya sistemleri (NFS/CIFS) dahildir; yanıt vermeyen bir NFS mount'u
 toplamayı **dondurmaz** (her mount en fazla 2 sn beklenir, takılanlar atlanır).
 
-**Panelde seçim:** Sunucu detay sayfası → **Disk alert'leri**:
+**Panelde seçim:** Alert kuralları → kapsam **Sunucu** → ilgili sunucu → **Disk alert'leri** (sunucu sayfasının Ayarlar →
+Geçerli alert kuralları bölümünde salt okunur özetlenir):
 
 - **Raporlanan tüm diskler** — seçim yapılmamış; raporlanan her disk eşiği aşarsa alert üretir (varsayılan).
 - **Yalnızca seçtiklerim** — agent'ın son raporladığı diskler doluluk yüzdeleriyle listelenir; alert istediklerini işaretle.
@@ -458,7 +459,7 @@ ve "güncel" rozetini gösterdiğini, CPU/RAM/disk verisinin aktığını birka�
 sunuculara tek tek (ya da kendi belirlediğin gruplarla) uygula. Her sunucuda çıktının `upgraded … -> X.Y.Z`
 ile bittiğini gör: `upgrade` başarısızlıkta kendi geri almasını yapar ve sıfırdan farklı kodla çıkar, yani
 "hata yok" demek çıktının sonunda `upgraded` görmek demektir. Özet ekranındaki **Agent güncellenmeli**
-sayacı ilerlemeyi gösterir; hangi sürümün "güncel" sayıldığı panelde Ayarlar → Sistem Ayarları → Agent sürümleri'nden belirlenir
+sayacı ilerlemeyi gösterir; hangi sürümün "güncel" sayıldığı panelde Ayarlar → Agent sürümleri'nden belirlenir
 (yeni bir agent sürümü yayınlandığında oradan gir; bkz. `docs/COMPATIBILITY.md`).
 
 **Neden otomatik kendini güncelleme yok?** Agent'ın kendini indirip değiştirmesi, imzalı bir artifact
@@ -502,7 +503,7 @@ bu ortamda **denenemedi**; ilk gerçek kurulumda `systemctl status` ile kontrol 
 | Push: `x509: certificate signed by unknown authority` | Server sertifikasını özel bir CA imzalıyor: CA'yı `--ca-cert` / `ca_cert_file` ile ver (ya da halka açık CA'lı bir sertifika kullan). Yalnızca geliştirmede `insecure_skip_verify` |
 | Push: `x509: certificate is valid for …, not …` | Sertifika, `server_url`'deki host için (DNS/IP SAN) düzenlenmemiş |
 | Push: log'da `server rejected the full payload … switching to core metrics only` | Server bu agent'ın gönderdiği yeni alanları tanımıyor (agent server'dan yeni). Metrikler **kaybolmaz** (CPU/RAM/disk/Docker gider), yalnızca donanım özeti gibi yeni alanlar gelmez. Server'ı güncelle; agent her 10 döngüde tam payload'ı yoklar ve server güncellenince kendiliğinden düzelir |
-| Push: log'da `server recommends agent X … update when convenient` | Server yeni bir agent sürümü öneriyor (panelde Ayarlar → Sistem Ayarları → Agent sürümleri); bilgi amaçlı, zorunlu değil |
+| Push: log'da `server recommends agent X … update when convenient` | Server yeni bir agent sürümü öneriyor (panelde Ayarlar → Agent sürümleri); bilgi amaçlı, zorunlu değil |
 | Push: `429 çok fazla istek` | Aynı IP'den çok fazla başarısız kimlik doğrulama; birkaç dakika bekle |
 | Pull: panelde sunucu offline | Güvenlik duvarı, `allowed_server_ips`'de server IP'si yok ya da secret uyuşmuyor (bölüm 6.b/6.c) |
 | Sunucu bir süre sonra **offline** alert'i veriyor | Ajan durmuş ya da ağ kopuk (push'ta `interval_seconds × 3` sessizlik) |
@@ -512,7 +513,7 @@ bu ortamda **denenemedi**; ilk gerçek kurulumda `systemctl status` ile kontrol 
 ## 10. Envanter (makine bilgisi)
 
 Agent 1.3.0 (protokol 3) yüzdelerin yanında makinenin **envanterini ve anlık durumunu** da bildirir; panelde sunucu
-sayfasının **Sistem** sekmesinde (gruplanmış kartlar) görünür. Yalnızca **bilgi içindir**: alert üretmez.
+sayfasının **Envanter** sekmesinde (gruplanmış kartlar) görünür. Yalnızca **bilgi içindir**: alert üretmez.
 
 **Ne bildirilir** (hepsi yetkisiz okunabilen kaynaklardan):
 

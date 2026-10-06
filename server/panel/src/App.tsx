@@ -13,7 +13,7 @@ import { AlertsPage } from './pages/AlertsPage'
 import { UsersPage } from './pages/UsersPage'
 import { SettingsHubPage } from './pages/SettingsHubPage'
 import { SystemToolsPage } from './pages/SystemToolsPage'
-import { PendingPage } from './pages/PendingPage'
+import { MaintenancePage } from './pages/MaintenancePage'
 import { HostsPage } from './pages/HostsPage'
 import { AlertRulesPage } from './pages/AlertRulesPage'
 import { NotificationsPage } from './pages/NotificationsPage'
@@ -113,16 +113,7 @@ export default function App() {
             {/* Eski Eşikler sayfası (yer imleri) artık Alert kurallarının sistem kapsamıdır. */}
             <Route path="/thresholds" element={<Navigate to={ALERT_RULES_PATH} replace />} />
             <Route path="/audit" element={<Navigate to={AUDIT_PATH} replace />} />
-            <Route
-              path={MAINTENANCE_PATH}
-              element={
-                <PendingPage
-                  title="Bakım pencereleri"
-                  subtitle="Planlı bakım sırasında bildirimleri susturma"
-                  items={['Yakında: bakım penceresi listesi ve formu (örnek veriyle)']}
-                />
-              }
-            />
+            <Route path={MAINTENANCE_PATH} element={<MaintenancePage />} />
             <Route
               path={NOTIFICATIONS_PATH}
               element={

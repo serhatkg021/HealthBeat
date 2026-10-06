@@ -110,9 +110,6 @@ export function navigation(can: Can): Navigation {
 
 const under = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`)
 
-// settingsTabPath, Ayarlar sayfasının bir sekmesinin adresidir (bağlantılar ve eski adreslerin yönlendirmesi için).
-export const settingsTabPath = (id: string): string => `${SETTINGS_PATH}?sekme=${id}`
-
 // Eski ayrı sayfaların adresleri (yer imleri, eski bağlantılar) artık Ayarlar'ın sekmeleridir.
 export const LEGACY_SETTINGS_ROUTES: Record<string, string> = {
   '/settings/system': 'sistem',

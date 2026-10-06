@@ -51,7 +51,7 @@ export function HostEffectiveRules({ hostId }: { hostId: string }) {
             </Link>
           )}
           <Link className="btn btn-sm" to={alertRulesPath({ kind: 'sunucu', id: hostId })}>
-            Alert kurallarında düzenle →
+            {can('threshold.edit') ? 'Alert kurallarında düzenle →' : 'Alert kurallarında gör →'}
           </Link>
         </span>
       </div>

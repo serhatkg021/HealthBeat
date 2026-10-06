@@ -149,6 +149,18 @@ export function Layout() {
           )}
         </div>
 
+        {/* Dar ekranda üst çubukta başlığa yer kalsın diye arama menünün başında durur. */}
+        <button
+          type="button"
+          className="sidebar-link sidebar-search"
+          onClick={() => {
+            setNavOpen(false)
+            setPaletteOpen(true)
+          }}
+        >
+          <Search size={16} strokeWidth={1.75} />
+          Ara
+        </button>
         {nav.groups.map((group) => (
           <SideGroup key={group.id} group={group} collapsed={collapsed.includes(group.id)} onToggle={() => toggleGroup(group.id)} />
         ))}

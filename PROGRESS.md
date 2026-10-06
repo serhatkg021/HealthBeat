@@ -4,10 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-05 — Sunucu ayarlarındaki "Kimlik bilgisini yenile" artık onay penceresi açıyor (yanlışlıkla
-tıklama agent'ı koparıyordu; dar ekranda bakılmadı). Denetim Kaydı'nın kategori süzgecine "Sistem araçları" eklendi (log görüntüleme ve indirme
-kayıtları). Ayarlar ve Sistem Araçları sekmeli tek sayfalardır; Sistem Araçları'nın üç sekmesi (Kuyruk Durumu, Cache Durumu,
-Log Analiz) tamam. Server + panel **2.0.0** yayında (2026-10-01); bunlar "Yayınlanmamış"ta.
+**Son güncelleme:** 2026-10-06 — Panel yeni düzene geçti: menü İzleme / Alert Yönetimi / Yönetim gruplarına ayrıldı;
+Sunucular, Alert kuralları ve Bildirim sayfaları tek yerde toplandı; sunucu sayfası altı sabit sekme; organizasyon ayarları
+çarkla açılan pencerede; Denetim Kaydı Sistem Araçları'nda; Ctrl+K araması. Gelecek özelliklerin yerleri "Yakında · örnek
+veri" olarak duruyor. Server + panel **2.0.0** yayında (2026-10-01); bunlar "Yayınlanmamış"ta.
 
 ## Durum
 
@@ -54,6 +54,8 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
   İki faktörlü doğrulama alanları yalnızca saklanır.
 - Server tek kopya çalışır: panelden yapılan ayar değişikliği başka server kopyalarına duyurulmaz.
 - Operatör organizasyon düzeyinde bir şey (iletişim kişileri, kurallar listesi) göremez; yalnızca atandığı sunucuların kurallarını okur.
+- Bildirim → İletişim kişileri tüm organizasyonları tek tek sorgular (server'da toplu uç nokta yok); organizasyon sayısı çok
+  artarsa toplu bir uç nokta gerekir.
 
 ## Doğrulanmadı
 
@@ -65,3 +67,6 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 1. Sistem Araçları şimdilik salt okunur; kuyrukta "yeniden dene / iptal", cache'te "önbelleği boşalt" ileride ele alınabilir.
    Log Analiz bir günü baştan sona tarar: çok büyük günlerde (yüzlerce MB) yavaşlar, 15 sn'de zaman aşımına uğrar.
 2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
+3. Panelde "Yakında" olarak yeri hazır olan özellikler (her biri ayrı iş; çoğu agent protokol 4 gerektirir): sistem servisleri
+   durumu, disk G/Ç (gecikme, hız, IOPS), ağ trafiği, sıcaklık, en çok kaynak kullanan süreçler, bekleyen güncellemeler,
+   Docker sağlık durumu, yeni alert kuralı türleri, bakım pencereleri, "bu alert kime gider?" önizlemesi.

@@ -25,13 +25,14 @@ test('labels show name, address and where the recipient comes from', () => {
 })
 
 test('the coverage text says owners always get alerts and rules add up', () => {
-  for (const text of [describeCoverage('organization', 0), describeCoverage('host', 2)]) {
+  for (const text of [describeCoverage('organization', true), describeCoverage('host', false)]) {
     assert.match(text, /her zaman sistem sahiplerine/)
     assert.match(text, /ek alıcı/)
     assert.doesNotMatch(text, /YALNIZCA|varsayılan alıcı/)
   }
-  assert.match(describeCoverage('host', 1), /birlikte uygulanır/)
-  assert.match(describeCoverage('organization', 0), /ek alıcı yok/)
+  assert.match(describeCoverage('host', true), /birlikte uygulanır/)
+  assert.match(describeCoverage('organization', true), /Sistem sahipleri\)/)
+  assert.doesNotMatch(describeCoverage('organization', false), /Bildirim →/)
 })
 
 test('only personal channels the server can send are offered; closed ones say why', () => {

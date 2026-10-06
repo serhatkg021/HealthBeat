@@ -99,7 +99,7 @@ yazar.
 - **Sunucu sayfası:** "Agent" kutusu (sürüm + durum rozeti), güncellenmesi gerekiyorsa "Agent
   güncellenmeli" uyarısı, agent server'dan yeniyse "Server güncellenmeli" uyarısı, eski agent'ta
   donanım özeti için açıklayıcı boş durum.
-- **Sunucu listeleri:** "Agent" sütunu (organizasyon sayfası ve Özet).
+- **Sunucu listeleri:** "Agent" sütunu (Sunucular sayfası ve organizasyon sayfası).
 - **Özet:** "Agent güncellenmeli" sayacı ve "Yalnızca agent'ı güncellenmesi gereken sunucular"
   süzgeci (adreste `agentguncelle=1`).
 
@@ -113,7 +113,7 @@ Durumlar (`server/panel/src/pages/agentStatus.ts`):
 | **eski agent** | sürüm bildirmiyor (protokol 1) |
 | **bilinmiyor** | henüz rapor yok / sürüm okunamadı |
 
-Politika **yalnızca bilgilendirir**; hiçbir agent sürümü yüzünden reddedilmez. Panelden (Ayarlar → Sistem Ayarları → Agent sürümleri)
+Politika **yalnızca bilgilendirir**; hiçbir agent sürümü yüzünden reddedilmez. Panelden (Ayarlar → Agent sürümleri)
 yönetilir; 2.0.0'dan önce ortam değişkeniydi (`LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION`, artık okunmaz):
 
 | Ayar | Varsayılan | |

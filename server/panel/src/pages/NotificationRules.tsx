@@ -4,12 +4,14 @@ import { channelsApi, notificationsApi, type RouteScope } from '../api/endpoints
 import type { AlertLevel, ChannelOption, NotificationChannel, NotificationRoute, RecipientCandidate } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { EmptyState } from '../components/EmptyState'
+import { useAuth } from '../auth/AuthContext'
 import { alertLevelLabel } from '../labels'
 import { LEVEL_CHOICES, candidateKey, candidateLabel, candidatesForNewRoute, channelChoices, channelLabel, describeCoverage } from './notificationRules'
 
 // Bir kapsamın (organizasyon ya da sunucu) bildirim kuralları: sistem sahiplerine ek alıcılar. Sunucu, organizasyon ve
 // üst organizasyon kuralları toplanır. Yalnızca açık ve kişiye giden kanallar seçilebilir; kanalı kapalı kural işaretlenir.
 export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEdit: boolean }) {
+  const { can } = useAuth()
   const isHost = 'hostId' in scope
   const scopeId = isHost ? scope.hostId : scope.organizationId
   const [routes, setRoutes] = useState<NotificationRoute[] | null>(null)
@@ -75,11 +77,11 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
         <BellRing size={16} strokeWidth={1.75} />
         Bildirim kuralları
       </h2>
-      <p className="card-desc">{describeCoverage(isHost ? 'host' : 'organization', list.length)}</p>
+      <p className="card-desc">{describeCoverage(isHost ? 'host' : 'organization', can('settings.view'))}</p>
       {error && <div className="error-banner">{error}</div>}
 
       {routes !== null && list.length === 0 ? (
-        <EmptyState icon={BellRing}>Ek alıcı yok — bildirimler yalnızca sistem sahiplerine gider.</EmptyState>
+        <EmptyState icon={BellRing}>{isHost ? 'Bu sunucuya' : 'Bu organizasyona'} özel ek alıcı yok.</EmptyState>
       ) : (
         <table className="stack">
           <thead>

@@ -96,8 +96,9 @@ export function SystemThresholds() {
           <Info size={16} strokeWidth={1.9} />
           Nasıl çalışır?
         </div>
-        Bunlar genel varsayılanlardır: bir organizasyon kendi değerini tanımlamadıkça (Kapsam › Organizasyon) ya da bir sunucu
-        kendi değerini seçmedikçe (Kapsam › Sunucu) herkes bunu kullanır. Organizasyon değerleri alt organizasyonlara miras
+        Bunlar genel varsayılanlardır: bir organizasyon kendi değerini tanımlamadıkça
+        {can('organization.view') && ' (Kapsam › Organizasyon)'} ya da bir sunucu kendi değerini seçmedikçe (Kapsam › Sunucu)
+        herkes bunu kullanır. Organizasyon değerleri alt organizasyonlara miras
         kalır. Varsayılanı olmayan bir metrik, özel değeri olmayan sunucularda alert üretmez.
       </div>
       {error && <div className="error-banner">{error}</div>}

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { Permission } from './auth/permissions.ts'
-import { AUDIT_PATH, LEGACY_SETTINGS_ROUTES, addHostPath, alertRulesPath, notificationsPath, groupHasActive, inSettingsArea, inToolsArea, navigation, settingsTabPath } from './navigation.ts'
+import { AUDIT_PATH, LEGACY_SETTINGS_ROUTES, addHostPath, alertRulesPath, notificationsPath, groupHasActive, inSettingsArea, inToolsArea, navigation } from './navigation.ts'
 
 const canOnly = (...allowed: Permission[]) => (p: Permission) => allowed.includes(p)
 const ids = (items: { id: string }[]) => items.map((i) => i.id)
@@ -78,7 +78,6 @@ test('the settings area is the settings page', () => {
 test('the old separate pages map to settings tabs that exist', () => {
   const tabs = ids(navigation(() => true).settings)
   for (const [path, tab] of Object.entries(LEGACY_SETTINGS_ROUTES)) assert.ok(tabs.includes(tab), `${path} -> ${tab}`)
-  assert.equal(settingsTabPath('sistem'), '/settings?sekme=sistem')
 })
 
 test('a group is active on its pages and their detail pages', () => {
