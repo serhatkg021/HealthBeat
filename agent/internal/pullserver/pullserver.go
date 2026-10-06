@@ -18,17 +18,15 @@ import (
 	"sync"
 	"time"
 
-	"healthbeat-agent/internal/collector"
 	"healthbeat-agent/internal/config"
-	"healthbeat-agent/internal/pusher"
+	"healthbeat-agent/internal/report"
 	"healthbeat-agent/internal/version"
 )
 
 type Server struct {
-	cfg             *config.Config
-	cpuCollector    *collector.CPUCollector
-	dockerCollector *collector.DockerCollector
-	hostCollector   *collector.HostInfoCollector
+	cfg      *config.Config
+	builder  *report.Builder
+	interval *intervalTracker
 
 	allowedIPs  map[string]struct{}
 	allowedNets []*net.IPNet
@@ -37,13 +35,12 @@ type Server struct {
 }
 
 func New(cfg *config.Config) (*Server, error) {
-	docker := collector.NewDockerCollector()
+	interval := newIntervalTracker(time.Now)
 	s := &Server{
-		cfg:             cfg,
-		cpuCollector:    collector.NewCPUCollector(),
-		dockerCollector: docker,
-		hostCollector:   collector.NewHostInfoCollector(docker),
-		allowedIPs:      map[string]struct{}{},
+		cfg:        cfg,
+		builder:    report.New(cfg.DiskMounts, interval.Interval),
+		interval:   interval,
+		allowedIPs: map[string]struct{}{},
 	}
 
 	for _, entry := range cfg.AllowedServerIPs {
@@ -68,8 +65,8 @@ func New(cfg *config.Config) (*Server, error) {
 		Addr:    cfg.ListenAddr,
 		Handler: mux,
 		// Bunlar olmadan bir karşı taraf bağlantıları sonsuza dek açık tutabilir (Slowloris).
-		// ReadTimeout TLS el sıkışmasını da sınırlar. WriteTimeout bir toplama döngüsünü
-		// kapsamalı (Docker stats çalışan container başına ~1 sn sürer).
+		// ReadTimeout TLS el sıkışmasını da sınırlar. Yanıt yavaş kaynakları beklemez (arka planda
+		// toplanırlar); WriteTimeout yalnızca açılıştaki ilk bekleyişi ve yavaş bir istemciyi kapsar.
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       15 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -115,34 +112,10 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
-	defer cancel()
-
-	cpuPct, err := s.cpuCollector.Sample()
-	if err != nil {
-		log.Printf("collect cpu: %v", err)
-	}
-	ramPct, err := collector.SampleMemory()
-	if err != nil {
-		log.Printf("collect memory: %v", err)
-	}
-	disks := collector.SampleDisk(s.cfg.DiskMounts)
-	containers, err := s.dockerCollector.Sample(ctx)
-	if err != nil {
-		log.Printf("collect docker: %v", err)
-		containers = nil
-	}
-
-	payload := pusher.MetricsPayload{
-		CPUUsagePct:      cpuPct,
-		RAMUsagePct:      ramPct,
-		Disk:             pusher.FromDiskUsages(disks),
-		CPUCores:         collector.CPUCores(),
-		RAMTotalMB:       collector.TotalMemoryMB(),
-		PhysicalDisks:    pusher.FromPhysicalDisks(collector.PhysicalDisks(collector.MountsOf(disks))),
-		HostInfo:         s.hostCollector.Collect(ctx),
-		DockerContainers: pusher.FromDockerContainers(containers),
-	}
+	s.interval.Observe()
+	ctx := r.Context()
+	s.builder.WaitReady(ctx, report.FirstReportWait) // yalnızca açılıştan hemen sonraki ilk isteklerde bekler
+	payload := s.builder.Build(ctx)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set(version.HeaderAgentVersion, version.Version)
@@ -150,6 +123,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(payload); err != nil {
 		log.Printf("encode status response: %v", err)
 	}
+}
+
+// Start, raporun arka plan toplayıcılarını ctx bitene kadar çalıştırır; ListenAndServe'den önce çağrılır.
+func (s *Server) Start(ctx context.Context) {
+	s.builder.Start(ctx)
 }
 
 func (s *Server) ListenAndServe() error {

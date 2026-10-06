@@ -226,6 +226,8 @@ func TestDockerCollectorSample(t *testing.T) {
 				{"Id": "ccc", "Names": []string{"/vanished"}, "Image": "alpine"},
 				{"Id": "ddd", "Names": []string{}, "Image": "scratch"},
 			})
+		case r.URL.Path == "/version":
+			w.Write([]byte(`{"Version":"27.3.1","ApiVersion":"1.47"}`))
 		case r.URL.Path == "/containers/aaa/json":
 			w.Write([]byte(`{"RestartCount":3,"State":{"Status":"running","StartedAt":"` + started + `"}}`))
 		case r.URL.Path == "/containers/bbb/json":
@@ -304,6 +306,10 @@ func TestDockerCollectorSamplesContainersConcurrentlyAndBounded(t *testing.T) {
 	var mu sync.Mutex
 	inFlight, maxInFlight := 0, 0
 	c := fakeDocker(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/version" {
+			w.Write([]byte(`{"Version":"27.3.1","ApiVersion":"1.47"}`))
+			return
+		}
 		if r.URL.Path == "/containers/json" {
 			list := make([]map[string]any, n)
 			for i := range list {

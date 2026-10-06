@@ -10,6 +10,15 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 ## [Yayınlanmamış]
 
 ### Değişti
+- **Yavaş kaynaklar arka planda toplanıyor:** Docker ve envanterin komut gerektiren alanları (saat senkronu, başarısız
+  servisler, Docker sürümü) kendi aralıklarıyla arka planda toplanıyor; rapor onları beklemiyor. Önceden toplama ve
+  gönderim tek bir 15 sn'lik süreyi paylaşıyordu: çok container'lı makinelerde Docker toplaması süreyi doldurunca raporun
+  tamamı (CPU, RAM, disk dahil) kayboluyordu. Gönderimin artık kendi 10 sn'lik süresi var. Pull modunda yanıt da yavaş
+  kaynakları beklemeden dönüyor; agent sorgu aralığını gelen isteklerden öğreniyor (bkz. `docs/AGENT.md` §11).
+- **Docker istatistikleri hızlandı:** daha önce görülmüş container'ların istatistiği tek örnekle (`one-shot`, Docker API
+  1.41+) alınıyor ve CPU yüzdesi agent'ta hesaplanıyor; container başına ~2 sn'lik bekleme yalnızca ilk kez yapılıyor.
+  Container inspect bilgisi durumu değişmedikçe önbellekten geliyor. Docker toplama hatası her döngüde değil, yalnızca
+  durum değiştiğinde loglanıyor.
 - Proje MIT lisansıyla yayınlanıyor: `.deb`/`.rpm` paketlerinin lisans alanı `MIT` oldu, `LICENSE` dosyası paketlere
   (`/usr/share/doc/healthbeat/LICENSE`) ve tarball'a eklendi.
 

@@ -16,8 +16,12 @@ import (
 	"healthbeat-agent/internal/config"
 	"healthbeat-agent/internal/pullserver"
 	"healthbeat-agent/internal/pusher"
+	"healthbeat-agent/internal/report"
 	"healthbeat-agent/internal/version"
 )
+
+// sendTimeout, bir raporun gönderiminin süresidir. Toplama ayrıdır ve yavaş kaynakları beklemez (bkz. report).
+const sendTimeout = 10 * time.Second
 
 func main() {
 	configPath := flag.String("config", "config.json", "path to agent config file")
@@ -66,6 +70,7 @@ func runPullMode(ctx context.Context, cfg *config.Config) {
 	if err != nil {
 		log.Fatalf("pull server: %v", err)
 	}
+	srv.Start(ctx)
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- srv.ListenAndServe() }()
@@ -86,8 +91,6 @@ func runPullMode(ctx context.Context, cfg *config.Config) {
 }
 
 func runPushMode(ctx context.Context, cfg *config.Config) {
-	cpuCollector := collector.NewCPUCollector()
-	dockerCollector := collector.NewDockerCollector()
 	roots, err := cfg.RootCAs()
 	if err != nil {
 		log.Fatalf("config: %v", err) // config.Load tarafından zaten doğrulanmış; güvenlik ağı olarak bırakıldı
@@ -97,8 +100,12 @@ func runPushMode(ctx context.Context, cfg *config.Config) {
 	interval := time.Duration(cfg.IntervalSeconds) * time.Second
 	log.Printf("HealthBeat agent %s (protocol %d) starting: pushing to %s every %s", version.Version, version.Protocol, cfg.ServerURL, interval)
 
-	session := &pushSession{p: p, compat: pusher.NewCompat(p), host: collector.NewHostInfoCollector(dockerCollector)}
-	runPushCycle(ctx, cfg, cpuCollector, dockerCollector, session)
+	builder := report.New(cfg.DiskMounts, func() time.Duration { return interval })
+	builder.Start(ctx)
+	builder.WaitReady(ctx, report.FirstReportWait)
+
+	session := &pushSession{p: p, compat: pusher.NewCompat(p)}
+	runPushCycle(ctx, builder, session)
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -109,7 +116,7 @@ func runPushMode(ctx context.Context, cfg *config.Config) {
 			log.Println("shutting down")
 			return
 		case <-ticker.C:
-			runPushCycle(ctx, cfg, cpuCollector, dockerCollector, session)
+			runPushCycle(ctx, builder, session)
 		}
 	}
 }
@@ -119,7 +126,6 @@ func runPushMode(ctx context.Context, cfg *config.Config) {
 type pushSession struct {
 	p      *pusher.Pusher
 	compat *pusher.Compat
-	host   *collector.HostInfoCollector
 
 	announced bool
 	lastInfo  pusher.ServerInfo
@@ -138,40 +144,12 @@ func (s *pushSession) announceServer() {
 	}
 }
 
-func runPushCycle(ctx context.Context, cfg *config.Config, cpuCollector *collector.CPUCollector, dockerCollector *collector.DockerCollector, session *pushSession) {
-	cycleCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+func runPushCycle(ctx context.Context, builder *report.Builder, session *pushSession) {
+	payload := builder.Build(ctx)
+
+	sendCtx, cancel := context.WithTimeout(ctx, sendTimeout)
 	defer cancel()
-
-	cpuPct, err := cpuCollector.Sample()
-	if err != nil {
-		log.Printf("collect cpu: %v", err)
-	}
-
-	ramPct, err := collector.SampleMemory()
-	if err != nil {
-		log.Printf("collect memory: %v", err)
-	}
-
-	disks := collector.SampleDisk(cfg.DiskMounts)
-
-	containers, err := dockerCollector.Sample(cycleCtx)
-	if err != nil {
-		log.Printf("collect docker: %v", err)
-		containers = nil
-	}
-
-	payload := pusher.MetricsPayload{
-		CPUUsagePct:      cpuPct,
-		RAMUsagePct:      ramPct,
-		Disk:             pusher.FromDiskUsages(disks),
-		CPUCores:         collector.CPUCores(),
-		RAMTotalMB:       collector.TotalMemoryMB(),
-		PhysicalDisks:    pusher.FromPhysicalDisks(collector.PhysicalDisks(collector.MountsOf(disks))),
-		HostInfo:         session.host.Collect(cycleCtx),
-		DockerContainers: pusher.FromDockerContainers(containers),
-	}
-
-	if err := session.compat.Push(cycleCtx, payload); err != nil {
+	if err := session.compat.Push(sendCtx, payload); err != nil {
 		log.Printf("push metrics: %v", err)
 		return
 	}
@@ -180,5 +158,6 @@ func runPushCycle(ctx context.Context, cfg *config.Config, cpuCollector *collect
 	if session.compat.Degraded() {
 		mode = " (core metrics only: the server does not accept the full payload)"
 	}
-	log.Printf("pushed metrics: cpu=%.1f%% ram=%.1f%% disks=%d containers=%d%s", cpuPct, ramPct, len(disks), len(containers), mode)
+	log.Printf("pushed metrics: cpu=%.1f%% ram=%.1f%% disks=%d containers=%d%s",
+		payload.CPUUsagePct, payload.RAMUsagePct, len(payload.Disk), len(payload.DockerContainers), mode)
 }

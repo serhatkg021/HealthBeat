@@ -42,6 +42,7 @@ içinde çalışan agent diskleri keşfedemeyebilir (bu durumda panel önceki bi
 8. Servisin sertleştirmesi
 9. Sorun giderme
 10. Envanter (makine bilgisi)
+11. Toplama düzeni (hangi veri ne zaman toplanır)
 
 ## 1. Hızlı başlangıç (push, önerilen yol)
 
@@ -555,3 +556,33 @@ arkasındaki bir push sunucusunda IP uyarısı beklenen bir durumdur; alert üre
 "yeniden başlatma gerekiyor" bilgisi yetkisiz güvenilir bir kaynak olmadığı için bilinmez; saat senkronu ve başarısız servis
 sayısı systemd gerektirir; sanallaştırma tespiti DMI'a ve hipervizör bayrağına dayanır (bulut sağlayıcılarının çoğu tanınır,
 tanınmayan bir hipervizör "sanal makine" olarak, satıcısız gösterilir).
+
+## 11. Toplama düzeni
+
+Rapor (push'ta gönderilen gövde, pull'da server'a verilen yanıt; ikisi aynıdır) iki tür kaynaktan kurulur:
+
+- **Hızlı kaynaklar rapor anında okunur:** CPU, RAM, disk doluluğu, uptime, yük, swap, IP adresleri. Hepsi `/proc`,
+  `/sys` ya da `statfs` okumasıdır, milisaniyeler sürer.
+- **Yavaş kaynaklar arka planda kendi aralıklarıyla toplanır;** rapor yalnızca son sonuçlarını okur, onları **beklemez**:
+
+| Kaynak | Aralık | Bir toplamanın süre sınırı |
+| --- | --- | --- |
+| Docker (container listesi, durum, CPU/RAM) | rapor aralığı | 20 sn |
+| Envanterin komut gerektiren alanları (saat senkronu, başarısız servis sayısı, yeniden başlatma gerekiyor, Docker sürümü) | 5 dk | 10 sn |
+| Envanterin kimlik alanları (işletim sistemi, kernel, CPU modeli, donanım) | saatte bir | — (dosya okuması) |
+
+Bu sayede yavaş ya da takılan bir kaynak (çok container'lı bir Docker, yanıt vermeyen bir `systemctl`) raporu geciktiremez
+ve kaybettiremez; gönderimin kendi süre sınırı vardır (10 sn).
+
+- **Açılış:** agent başlayınca yavaş kaynaklar hemen bir kez toplanır; ilk rapor bu ilk sonuçları en çok 3 sn bekler.
+- **Başarısız toplama** son iyi sonucu silmez; ama son başarılı toplama üç aralık (+ süre sınırı) eskiyse o kısım
+  gönderilmez ve panelde "bilinmiyor" görünür. Hata logda her döngüde değil, yalnızca durum değiştiğinde görünür
+  (`collect docker: …` ve düzelince `collect docker: recovered`).
+- **Pull modunda aralık:** sorgu sıklığına server karar verir; agent bu aralığı gelen isteklerden öğrenir (son iki istek
+  arası, 10 sn – 5 dk ile sınırlı; ilk isteklerden önce 30 sn). Yanıt yavaş kaynakları beklemediği için hemen döner.
+- **Docker maliyeti:** ilk kez görülen çalışan bir container'ın istatistiği daemon'da ~2 sn sürer; sonrakiler tek örnekle
+  (`one-shot`, Docker 20.10+ / API 1.41+) milisaniyelerde alınır ve CPU yüzdesi agent'ta önceki örnekle hesaplanır.
+  Container'ın inspect bilgisi durumu değişmedikçe 5 dakikada bir yenilenir. Eski Docker'larda her seferinde ~2 sn'lik
+  ölçüm kullanılır (arka planda olduğu için raporu yine geciktirmez).
+- **Gecikme payı:** rapordaki Docker verisi en çok bir rapor aralığı eskidir.
+

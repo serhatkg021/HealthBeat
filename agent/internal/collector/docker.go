@@ -27,12 +27,36 @@ type DockerContainer struct {
 	UptimeSeconds int64
 }
 
+// inspectMaxAge, durumu değişmeyen bir container'ın inspect önbelleğinin en uzun ömrüdür.
+const inspectMaxAge = 5 * time.Minute
+
 // DockerCollector yerel Docker Engine API'siyle unix soketi üzerinden konuşur. Soket yoksa
 // (Docker kurulu değil ya da çalışmıyor) Sample hata yerine boş liste döndürür —
 // Docker'sız sunucularda metrik toplama bozulmamalıdır (docs/MIMARI.md bölüm 8).
+//
+// Maliyeti düşük tutmak için iki önbellek tutar: inspect yanıtı (container'ın listedeki durumu değişmedikçe ve
+// inspectMaxAge dolmadıkça yeniden sorulmaz) ve container başına son CPU örneği (bir sonraki istatistik "one-shot"
+// alınıp CPU farkı agent'ta hesaplanır; daemon'un ~2 sn'lik iki örnekli ölçümü yalnızca ilk kez yapılır).
 type DockerCollector struct {
 	httpClient *http.Client
 	available  bool
+	now        func() time.Time
+
+	mu       sync.Mutex
+	oneShot  *bool // daemon one-shot istatistiği destekliyor mu (API >= 1.41); nil = henüz sorulmadı
+	inspects map[string]cachedInspect
+	prevCPU  map[string]containerCPU
+}
+
+type cachedInspect struct {
+	state string // listedeki State + Status: container yeniden başlayınca ya da durumu değişince değişir
+	at    time.Time
+	resp  inspectResponse
+}
+
+// containerCPU, bir container'ın kümülatif CPU sayaçlarıdır.
+type containerCPU struct {
+	total, system uint64
 }
 
 func NewDockerCollector() *DockerCollector {
@@ -41,10 +65,13 @@ func NewDockerCollector() *DockerCollector {
 
 func newDockerCollector(socketPath string) *DockerCollector {
 	if _, err := os.Stat(socketPath); err != nil {
-		return &DockerCollector{available: false}
+		return &DockerCollector{available: false, now: time.Now}
 	}
 	return &DockerCollector{
 		available: true,
+		now:       time.Now,
+		inspects:  map[string]cachedInspect{},
+		prevCPU:   map[string]containerCPU{},
 		httpClient: &http.Client{
 			Timeout: 5 * time.Second,
 			Transport: &http.Transport{
@@ -66,9 +93,15 @@ func (d *DockerCollector) Sample(ctx context.Context) ([]DockerContainer, error)
 	if err != nil {
 		return nil, err
 	}
+	d.mu.Lock()
+	known := d.oneShot != nil
+	d.mu.Unlock()
+	if !known {
+		d.Version(ctx) // API sürümünü de öğrenir (one-shot desteği)
+	}
 
-	// Çalışan her container'ın stats çağrısı ~2 sn sürer (daemon iki kez örnek alır); sıralı
-	// toplama doğrusal büyür ve poll zaman aşımlarını aşar.
+	// İlk kez görülen çalışan container'ın stats çağrısı ~2 sn sürer (daemon iki kez örnek alır);
+	// sıralı toplama doğrusal büyürdü.
 	sampled := make([]*DockerContainer, len(summaries))
 	sem := make(chan struct{}, maxConcurrentContainerSamples)
 	var wg sync.WaitGroup
@@ -82,6 +115,7 @@ func (d *DockerCollector) Sample(ctx context.Context) ([]DockerContainer, error)
 		}(i, s)
 	}
 	wg.Wait()
+	d.forgetGone(summaries)
 
 	result := make([]DockerContainer, 0, len(summaries))
 	for _, c := range sampled {
@@ -105,17 +139,51 @@ func (d *DockerCollector) Version(ctx context.Context) string {
 		return ""
 	}
 	var v struct {
-		Version string `json:"Version"`
+		Version    string `json:"Version"`
+		APIVersion string `json:"ApiVersion"`
 	}
 	if json.Unmarshal(body, &v) != nil {
 		return ""
 	}
+	oneShot := apiAtLeast(v.APIVersion, 1, 41)
+	d.mu.Lock()
+	d.oneShot = &oneShot
+	d.mu.Unlock()
 	return strings.TrimSpace(v.Version)
+}
+
+// apiAtLeast, "1.43" biçimindeki Docker API sürümünün en az major.minor olup olmadığıdır; okunamayan sürüm hayır sayılır.
+func apiAtLeast(v string, major, minor int) bool {
+	var ma, mi int
+	if _, err := fmt.Sscanf(strings.TrimSpace(v), "%d.%d", &ma, &mi); err != nil {
+		return false
+	}
+	return ma > major || (ma == major && mi >= minor)
+}
+
+// forgetGone, listede artık olmayan container'ların önbelleklerini atar.
+func (d *DockerCollector) forgetGone(summaries []containerSummary) {
+	present := make(map[string]struct{}, len(summaries))
+	for _, s := range summaries {
+		present[s.ID] = struct{}{}
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for id := range d.inspects {
+		if _, ok := present[id]; !ok {
+			delete(d.inspects, id)
+		}
+	}
+	for id := range d.prevCPU {
+		if _, ok := present[id]; !ok {
+			delete(d.prevCPU, id)
+		}
+	}
 }
 
 // sampleContainer, container liste ile inspect arasında kaybolduysa nil döndürür.
 func (d *DockerCollector) sampleContainer(ctx context.Context, s containerSummary) *DockerContainer {
-	detail, err := d.inspect(ctx, s.ID)
+	detail, err := d.cachedInspect(ctx, s)
 	if err != nil {
 		return nil
 	}
@@ -129,9 +197,8 @@ func (d *DockerCollector) sampleContainer(ctx context.Context, s containerSummar
 		if startedAt, err := time.Parse(time.RFC3339Nano, detail.State.StartedAt); err == nil {
 			c.UptimeSeconds = int64(time.Since(startedAt).Seconds())
 		}
-		if stats, err := d.stats(ctx, s.ID); err == nil {
-			c.CPUPct = computeContainerCPUPercent(stats)
-			c.RAMMB = float64(stats.MemoryStats.Usage) / (1024 * 1024)
+		if cpu, ramMB, ok := d.sampleUsage(ctx, s.ID); ok {
+			c.CPUPct, c.RAMMB = cpu, ramMB
 		}
 	}
 	return c
@@ -148,6 +215,10 @@ type containerSummary struct {
 	ID    string   `json:"Id"`
 	Names []string `json:"Names"`
 	Image string   `json:"Image"`
+	// State ("running") ve Status ("Up 2 hours (healthy)") yalnızca inspect önbelleğini geçersiz kılmak için: container
+	// yeniden başlayınca, durduğunda ya da sağlık durumu değişince Status metni değişir.
+	State  string `json:"State"`
+	Status string `json:"Status"`
 }
 
 func (d *DockerCollector) listContainers(ctx context.Context) ([]containerSummary, error) {
@@ -168,6 +239,26 @@ type inspectResponse struct {
 		Status    string `json:"Status"`
 		StartedAt string `json:"StartedAt"`
 	} `json:"State"`
+}
+
+// cachedInspect, container'ın listedeki durumu değişmediyse ve önbellek inspectMaxAge'den genç ise önbellekteki
+// inspect yanıtını, değilse yenisini döndürür.
+func (d *DockerCollector) cachedInspect(ctx context.Context, s containerSummary) (inspectResponse, error) {
+	state := s.State + "|" + s.Status
+	d.mu.Lock()
+	c, ok := d.inspects[s.ID]
+	d.mu.Unlock()
+	if ok && c.state == state && d.now().Sub(c.at) < inspectMaxAge {
+		return c.resp, nil
+	}
+	resp, err := d.inspect(ctx, s.ID)
+	if err != nil {
+		return inspectResponse{}, err
+	}
+	d.mu.Lock()
+	d.inspects[s.ID] = cachedInspect{state: state, at: d.now(), resp: resp}
+	d.mu.Unlock()
+	return resp, nil
 }
 
 func (d *DockerCollector) inspect(ctx context.Context, id string) (inspectResponse, error) {
@@ -201,10 +292,48 @@ type statsResponse struct {
 	} `json:"memory_stats"`
 }
 
-// stream=false, daemon'un ~1 sn arayla iki iç örnek alıp ikisini birden tek bir anlık görüntü
-// olarak döndürmesini sağlar — bizim iki kez örneklememize gerek yok.
-func (d *DockerCollector) stats(ctx context.Context, id string) (statsResponse, error) {
-	body, err := d.get(ctx, "/containers/"+id+"/stats?stream=false")
+// sampleUsage, çalışan bir container'ın CPU yüzdesini ve RAM'ini döndürür. Container'ın önceki bir CPU örneği varsa ve
+// daemon destekliyorsa istatistik "one-shot" alınır (milisaniyeler) ve CPU farkı önceki örnekle hesaplanır; yoksa (ilk
+// kez görülen container, eski daemon, sayaç geri gitti) daemon'un iki örnekli ölçümü kullanılır (~2 sn).
+func (d *DockerCollector) sampleUsage(ctx context.Context, id string) (cpuPct, ramMB float64, ok bool) {
+	d.mu.Lock()
+	prev, hasPrev := d.prevCPU[id]
+	oneShot := d.oneShot != nil && *d.oneShot
+	d.mu.Unlock()
+
+	if hasPrev && oneShot {
+		if st, err := d.stats(ctx, id, true); err == nil {
+			cur := containerCPU{total: st.CPUStats.CPUUsage.TotalUsage, system: st.CPUStats.SystemCPUUsage}
+			if cur.total >= prev.total && cur.system > prev.system {
+				d.rememberCPU(id, cur)
+				st.PreCPUStats.CPUUsage.TotalUsage, st.PreCPUStats.SystemCPUUsage = prev.total, prev.system
+				return computeContainerCPUPercent(st), float64(st.MemoryStats.Usage) / (1024 * 1024), true
+			}
+		}
+	}
+
+	st, err := d.stats(ctx, id, false)
+	if err != nil {
+		return 0, 0, false
+	}
+	d.rememberCPU(id, containerCPU{total: st.CPUStats.CPUUsage.TotalUsage, system: st.CPUStats.SystemCPUUsage})
+	return computeContainerCPUPercent(st), float64(st.MemoryStats.Usage) / (1024 * 1024), true
+}
+
+func (d *DockerCollector) rememberCPU(id string, s containerCPU) {
+	d.mu.Lock()
+	d.prevCPU[id] = s
+	d.mu.Unlock()
+}
+
+// stream=false, daemon'un ~1 sn arayla iki iç örnek alıp ikisini birden tek bir anlık görüntü olarak döndürmesini
+// sağlar. one-shot=true (API >= 1.41) ise beklemeden tek örnek döner (precpu_stats boş gelir; farkı çağıran hesaplar).
+func (d *DockerCollector) stats(ctx context.Context, id string, oneShot bool) (statsResponse, error) {
+	path := "/containers/" + id + "/stats?stream=false"
+	if oneShot {
+		path += "&one-shot=true"
+	}
+	body, err := d.get(ctx, path)
 	if err != nil {
 		return statsResponse{}, err
 	}
