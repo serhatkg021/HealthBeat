@@ -17,6 +17,8 @@ const (
 	// dockerTimeout, bir Docker toplamasının tamamıdır. İlk kez görülen her çalışan container'ın istatistiği ~2 sn sürer
 	// (16'şar paralel); sonraki toplamalar one-shot olduğu için milisaniyeler sürer.
 	dockerTimeout = 20 * time.Second
+	// servicesTimeout, bir servis toplamasının (list-units + show) tamamıdır; yüzlerce servisli makinede ~0,5 sn sürer.
+	servicesTimeout = 10 * time.Second
 	// FirstReportWait, açılıştaki ilk raporun yavaş kaynakların ilk sonucunu en çok ne kadar beklediğidir.
 	FirstReportWait = 3 * time.Second
 )
@@ -28,6 +30,8 @@ type Builder struct {
 	memory     *collector.MemoryCollector
 	docker     *collector.Background[[]collector.DockerContainer]
 	host       *collector.HostInfoCollector
+	services   *collector.Background[[]collector.ServiceState]
+	svcReport  *serviceReporter
 }
 
 // New, toplayıcıları kurar; interval, yavaş kaynakların her rapor aralığında toplananlarının (Docker) aralığıdır.
@@ -40,12 +44,15 @@ func New(diskMounts []string, interval func() time.Duration) *Builder {
 		memory:     collector.NewMemoryCollector(),
 		docker:     collector.NewBackground("docker", interval, dockerTimeout, docker.Sample),
 		host:       collector.NewHostInfoCollector(docker),
+		services:   collector.NewBackground("services", interval, servicesTimeout, collector.NewServiceCollector().Collect),
+		svcReport:  newServiceReporter(),
 	}
 }
 
 // Start, arka plan toplayıcılarını ctx bitene kadar çalıştırır.
 func (b *Builder) Start(ctx context.Context) {
 	b.docker.Start(ctx)
+	b.services.Start(ctx)
 	b.host.Start(ctx)
 }
 
@@ -53,6 +60,9 @@ func (b *Builder) Start(ctx context.Context) {
 func (b *Builder) WaitReady(ctx context.Context, d time.Duration) {
 	deadline := time.Now().Add(d)
 	b.docker.WaitReady(ctx, d)
+	if left := time.Until(deadline); left > 0 {
+		b.services.WaitReady(ctx, left)
+	}
 	if left := time.Until(deadline); left > 0 {
 		b.host.WaitReady(ctx, left)
 	}
@@ -71,6 +81,7 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 	}
 	disks := collector.SampleDisk(b.diskMounts)
 	containers, _ := b.docker.Latest()
+	services, servicesKnown := b.services.Latest()
 
 	return pusher.MetricsPayload{
 		CPUUsagePct:      cpuPct,
@@ -86,5 +97,6 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		MemoryDetail: pusher.FromMemoryStats(b.memory.Sample()),
 		Pressure:     pusher.FromPressure(collector.ReadPressure("")),
 		RAID:         pusher.FromRAID(collector.ReadRAID("")),
+		Services:     b.svcReport.next(services, servicesKnown),
 	}
 }

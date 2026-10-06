@@ -1,6 +1,10 @@
 package pusher
 
-import "healthbeat-agent/internal/collector"
+import (
+	"time"
+
+	"healthbeat-agent/internal/collector"
+)
 
 // FromDiskUsages ve FromDockerContainers, collector çıktısını tel üzerindeki payload
 // biçimine uyarlar. Push döngüsü ve pull modu HTTP işleyicisi tarafından paylaşılır; böylece
@@ -88,4 +92,16 @@ func FromRAID(in []collector.RAIDArray) []RAID {
 		out[i] = RAID{Name: a.Name, Level: a.Level, State: a.State, Devices: a.Devices, Active: a.Active, SyncPct: a.SyncPct}
 	}
 	return out
+}
+
+// FromServices, servis listesini tel biçimine çevirir; full, listenin tam olup olmadığıdır.
+func FromServices(in []collector.ServiceState, full bool) *Services {
+	items := make([]Service, len(in))
+	for i, s := range in {
+		items[i] = Service{Name: s.Name, Description: s.Description, Active: s.Active, Sub: s.Sub, Restarts: s.Restarts, Enabled: s.Enabled}
+		if !s.Since.IsZero() {
+			items[i].Since = s.Since.UTC().Format(time.RFC3339)
+		}
+	}
+	return &Services{Full: full, Items: items}
 }

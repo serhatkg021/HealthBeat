@@ -19,6 +19,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - Disk girdilerinde salt okunur bağlı olup olmadığı (`read_only`).
   - Container'ların Docker healthcheck sonucu ve üst üste başarısız deneme sayısı; durmuş container'ların çıkış kodu ve
     bellek yetmediği için öldürülüp öldürülmediği.
+  - systemd servislerinin durumu (`services`): ad, açıklama, durum, ne zamandan beri, yeniden başlatma sayısı, açılışta
+    etkin mi. Tam liste açılışta ve 5 dakikada bir; aradaki raporlarda yalnızca sorunlu (çökmüş, başlatılıyor, yeniden
+    başlatma döngüsünde) ve son rapordan beri durumu değişen servisler. Kurulu olmayan (`not-found`) ve `masked` servisler
+    raporlanmaz.
 
 ### Değişti
 - **Yavaş kaynaklar arka planda toplanıyor:** Docker ve envanterin komut gerektiren alanları (saat senkronu, başarısız
