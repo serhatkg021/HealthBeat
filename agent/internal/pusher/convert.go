@@ -9,7 +9,8 @@ import "healthbeat-agent/internal/collector"
 func FromDiskUsages(in []collector.DiskUsage) []DiskUsage {
 	out := make([]DiskUsage, len(in))
 	for i, d := range in {
-		out[i] = DiskUsage{Mount: d.Mount, UsedPct: d.UsedPct, Total: d.Total, Free: d.Free, InodesUsedPct: d.InodesUsedPct}
+		readOnly := d.ReadOnly
+		out[i] = DiskUsage{Mount: d.Mount, UsedPct: d.UsedPct, Total: d.Total, Free: d.Free, InodesUsedPct: d.InodesUsedPct, ReadOnly: &readOnly}
 	}
 	return out
 }
@@ -36,7 +37,55 @@ func FromDockerContainers(in []collector.DockerContainer) []DockerContainer {
 			RAMMB:         c.RAMMB,
 			RestartCount:  c.RestartCount,
 			UptimeSeconds: c.UptimeSeconds,
+
+			Health:              c.Health,
+			HealthFailingStreak: c.HealthFailingStreak,
+			ExitCode:            c.ExitCode,
+			OOMKilled:           c.OOMKilled,
 		}
+	}
+	return out
+}
+
+// Protokol 4 dönüştürücüleri. Değerler ölçüldüğü gibi gönderilir: yuvarlama bir saklama kararıdır ve server'da yapılır
+// (alert'ler ham değere bakar; hassasiyet değişince agent'ı yeniden yayınlamak gerekmez). Bütün alanları bilinmeyen
+// nesne nil döner ve gönderilmez.
+
+func FromCPUBreakdown(b collector.CPUBreakdown) *CPUDetail {
+	if b.IOWaitPct == nil && b.StealPct == nil && b.ProcsBlocked == nil {
+		return nil
+	}
+	return &CPUDetail{IOWaitPct: b.IOWaitPct, StealPct: b.StealPct, ProcsBlocked: b.ProcsBlocked}
+}
+
+func FromMemoryStats(m collector.MemoryStats) *MemoryDetail {
+	if m == (collector.MemoryStats{}) {
+		return nil
+	}
+	return &MemoryDetail{AvailableMB: m.AvailableMB, CachedMB: m.CachedMB, SwapInPerS: m.SwapInPerS,
+		SwapOutPerS: m.SwapOutPerS, OOMKills: m.OOMKills}
+}
+
+func FromPressure(p collector.SystemPressure) *Pressure {
+	conv := func(s *collector.PressureStall) *PressureStall {
+		if s == nil {
+			return nil
+		}
+		return &PressureStall{Some10: s.Some10, Some60: s.Some60, Full10: s.Full10, Full60: s.Full60}
+	}
+	if p.CPU == nil && p.Memory == nil && p.IO == nil {
+		return nil
+	}
+	return &Pressure{CPU: conv(p.CPU), Memory: conv(p.Memory), IO: conv(p.IO)}
+}
+
+func FromRAID(in []collector.RAIDArray) []RAID {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]RAID, len(in))
+	for i, a := range in {
+		out[i] = RAID{Name: a.Name, Level: a.Level, State: a.State, Devices: a.Devices, Active: a.Active, SyncPct: a.SyncPct}
 	}
 	return out
 }

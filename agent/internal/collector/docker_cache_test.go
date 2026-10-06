@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -168,5 +169,58 @@ func TestAPIAtLeast(t *testing.T) {
 		if got := apiAtLeast(v, 1, 41); got != want {
 			t.Errorf("apiAtLeast(%q, 1, 41) = %v, want %v", v, got, want)
 		}
+	}
+}
+
+// Sağlık durumu yalnızca healthcheck tanımlıysa, çıkış kodu ve OOM yalnızca durmuş/yeniden başlayan container'da gelir.
+func TestDockerCollectorHealthExitCodeAndOOM(t *testing.T) {
+	c := fakeDocker(t, func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/version":
+			w.Write([]byte(`{"Version":"27.3.1","ApiVersion":"1.47"}`))
+		case "/containers/json":
+			w.Write([]byte(`[{"Id":"a","Names":["/api"]},{"Id":"b","Names":["/redis"]},{"Id":"c","Names":["/worker"]},
+				{"Id":"d","Names":["/flappy"]},{"Id":"e","Names":["/migrate"]}]`))
+		case "/containers/a/json":
+			w.Write([]byte(`{"State":{"Status":"running","ExitCode":0,"Health":{"Status":"unhealthy","FailingStreak":3}}}`))
+		case "/containers/b/json":
+			w.Write([]byte(`{"State":{"Status":"running","ExitCode":0}}`)) // healthcheck yok
+		case "/containers/c/json":
+			w.Write([]byte(`{"State":{"Status":"exited","ExitCode":137,"OOMKilled":true,"Health":{"Status":"unhealthy","FailingStreak":1}}}`))
+		case "/containers/d/json":
+			w.Write([]byte(`{"RestartCount":8,"State":{"Status":"restarting","ExitCode":1,"OOMKilled":false,"Health":{"Status":"starting","FailingStreak":0}}}`))
+		case "/containers/e/json":
+			w.Write([]byte(`{"State":{"Status":"exited","ExitCode":0,"Health":{"Status":"none"}}}`))
+		default:
+			if strings.HasSuffix(r.URL.Path, "/stats") {
+				w.Write([]byte(`{"cpu_stats":{},"precpu_stats":{},"memory_stats":{}}`))
+				return
+			}
+			t.Errorf("unexpected docker API call %s", r.URL)
+		}
+	})
+	got, err := c.Sample(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	by := map[string]DockerContainer{}
+	for _, ct := range got {
+		by[ct.Name] = ct
+	}
+
+	if api := by["api"]; api.Health != "unhealthy" || api.HealthFailingStreak == nil || *api.HealthFailingStreak != 3 || api.ExitCode != nil || api.OOMKilled != nil {
+		t.Errorf("running unhealthy container = %+v; want health with streak 3 and no exit code/OOM", api)
+	}
+	if redis := by["redis"]; redis.Health != "" || redis.HealthFailingStreak != nil {
+		t.Errorf("container without a healthcheck reported health %+v", redis)
+	}
+	if w := by["worker"]; w.ExitCode == nil || *w.ExitCode != 137 || w.OOMKilled == nil || !*w.OOMKilled {
+		t.Errorf("OOM-killed exited container = %+v; want exit 137, oom_killed=true", w)
+	}
+	if f := by["flappy"]; f.Health != "starting" || f.ExitCode == nil || *f.ExitCode != 1 || f.OOMKilled == nil || *f.OOMKilled {
+		t.Errorf("restarting container = %+v; want health starting, exit 1, oom_killed=false", f)
+	}
+	if m := by["migrate"]; m.Health != "" || m.ExitCode == nil || *m.ExitCode != 0 {
+		t.Errorf("exited job = %+v; health \"none\" is no healthcheck, exit code 0 is known", m)
 	}
 }

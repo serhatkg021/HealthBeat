@@ -25,6 +25,7 @@ const (
 type Builder struct {
 	diskMounts []string
 	cpu        *collector.CPUCollector
+	memory     *collector.MemoryCollector
 	docker     *collector.Background[[]collector.DockerContainer]
 	host       *collector.HostInfoCollector
 }
@@ -36,6 +37,7 @@ func New(diskMounts []string, interval func() time.Duration) *Builder {
 	return &Builder{
 		diskMounts: diskMounts,
 		cpu:        collector.NewCPUCollector(),
+		memory:     collector.NewMemoryCollector(),
 		docker:     collector.NewBackground("docker", interval, dockerTimeout, docker.Sample),
 		host:       collector.NewHostInfoCollector(docker),
 	}
@@ -79,5 +81,10 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		PhysicalDisks:    pusher.FromPhysicalDisks(collector.PhysicalDisks(collector.MountsOf(disks))),
 		HostInfo:         b.host.Collect(ctx),
 		DockerContainers: pusher.FromDockerContainers(containers),
+
+		CPUDetail:    pusher.FromCPUBreakdown(b.cpu.Breakdown()),
+		MemoryDetail: pusher.FromMemoryStats(b.memory.Sample()),
+		Pressure:     pusher.FromPressure(collector.ReadPressure("")),
+		RAID:         pusher.FromRAID(collector.ReadRAID("")),
 	}
 }

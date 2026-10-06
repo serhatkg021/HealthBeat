@@ -7,20 +7,35 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 type cpuSample struct {
-	idle  uint64
-	total uint64
+	idle   uint64
+	total  uint64
+	iowait uint64
+	steal  uint64
+	// hasIOWait/hasSteal: çok eski çekirdeklerde bu sütunlar yoktur; yokluğu "0" sayılmaz.
+	hasIOWait, hasSteal bool
+}
+
+// CPUBreakdown, CPU zamanının kullanım dışındaki dağılımıdır; nil = bilinmiyor.
+type CPUBreakdown struct {
+	IOWaitPct    *float64 // diske bekleyen CPU
+	StealPct     *float64 // sanal makinede hipervizörün başkasına verdiği CPU
+	ProcsBlocked *int     // G/Ç'de takılı (D durumunda) süreç sayısı; anlık
 }
 
 // CPUCollector, CPU kullanımını iki /proc/stat örneği arasındaki fark olarak raporlar.
 // İlk çağrıdan sonraki her çağrı, bir önceki çağrının örneğini başlangıç değeri alır;
 // böylece kullanım push'lar arasındaki gerçek aralığı yansıtır. İlk çağrının başlangıç
-// değeri henüz yoktur, bu yüzden 200 ms sonra hızlı bir ek örnek alır.
+// değeri henüz yoktur, bu yüzden 200 ms sonra hızlı bir ek örnek alır. Eşzamanlı çağrılabilir
+// (pull modunda istekler paralel gelir).
 type CPUCollector struct {
-	prev *cpuSample
+	mu        sync.Mutex
+	prev      *cpuSample
+	breakdown CPUBreakdown
 }
 
 func NewCPUCollector() *CPUCollector {
@@ -28,26 +43,56 @@ func NewCPUCollector() *CPUCollector {
 }
 
 func (c *CPUCollector) Sample() (float64, error) {
-	cur, err := readProcStat()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	cur, blocked, err := readProcStat()
 	if err != nil {
 		return 0, err
 	}
 
 	if c.prev == nil {
-		c.prev = &cur
+		first := cur // ayrı kopya: cur aşağıda ikinci örnekle değişir
+		c.prev = &first
 		time.Sleep(200 * time.Millisecond)
-		cur2, err := readProcStat()
+		cur2, blocked2, err := readProcStat()
 		if err != nil {
 			return 0, err
 		}
-		pct := percentFromDelta(*c.prev, cur2)
-		c.prev = &cur2
-		return pct, nil
+		cur, blocked = cur2, blocked2
 	}
 
 	pct := percentFromDelta(*c.prev, cur)
+	c.breakdown = breakdownFromDelta(*c.prev, cur)
+	c.breakdown.ProcsBlocked = blocked
 	c.prev = &cur
 	return pct, nil
+}
+
+// Breakdown, son Sample'ın aralığındaki CPU dağılımıdır (Sample'dan sonra çağrılır).
+func (c *CPUCollector) Breakdown() CPUBreakdown {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.breakdown
+}
+
+// breakdownFromDelta, iowait ve steal'in aralıktaki payını verir; sütun yoksa ya da sayaçlar geri gittiyse bilinmiyor.
+func breakdownFromDelta(prev, cur cpuSample) CPUBreakdown {
+	var out CPUBreakdown
+	if cur.total <= prev.total {
+		return out
+	}
+	totalDelta := float64(cur.total - prev.total)
+	share := func(p, c uint64, ok bool) *float64 {
+		if !ok || c < p {
+			return nil
+		}
+		v := min(float64(c-p)/totalDelta*100, 100)
+		return &v
+	}
+	out.IOWaitPct = share(prev.iowait, cur.iowait, cur.hasIOWait && prev.hasIOWait)
+	out.StealPct = share(prev.steal, cur.steal, cur.hasSteal && prev.hasSteal)
+	return out
 }
 
 // CPUCores, mantıksal çekirdek sayısını döndürür (bu sürecin çalışabildiği CPU'lar).
@@ -55,19 +100,32 @@ func CPUCores() int {
 	return runtime.NumCPU()
 }
 
-func readProcStat() (cpuSample, error) {
+// readProcStat, toplam CPU satırını ve G/Ç'de takılı süreç sayısını (procs_blocked; yoksa nil) okur.
+func readProcStat() (cpuSample, *int, error) {
 	f, err := os.Open("/proc/stat")
 	if err != nil {
-		return cpuSample{}, err
+		return cpuSample{}, nil, err
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	if !scanner.Scan() {
-		return cpuSample{}, fmt.Errorf("empty /proc/stat")
+		return cpuSample{}, nil, fmt.Errorf("empty /proc/stat")
 	}
-
-	return parseProcStatLine(scanner.Text())
+	sample, err := parseProcStatLine(scanner.Text())
+	if err != nil {
+		return cpuSample{}, nil, err
+	}
+	var blocked *int
+	for scanner.Scan() {
+		if v, ok := strings.CutPrefix(scanner.Text(), "procs_blocked "); ok {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n >= 0 {
+				blocked = &n
+			}
+			break
+		}
+	}
+	return sample, blocked, nil
 }
 
 // parseProcStatLine, /proc/stat'ın toplam "cpu ..." satırını ayrıştırır.
@@ -93,12 +151,15 @@ func parseProcStatLine(line string) (cpuSample, error) {
 	// alanlar: user nice system idle iowait irq softirq steal guest guest_nice
 	// boşta süre (kullanım hesabı için) idle + iowait'tir. Çok eski çekirdeklerde iowait
 	// yoktur; bu yüzden aralık dışı bir indeks yerine isteğe bağlı okunur.
-	idle := values[3]
+	sample := cpuSample{idle: values[3], total: total}
 	if len(values) > 4 {
-		idle += values[4]
+		sample.idle += values[4]
+		sample.iowait, sample.hasIOWait = values[4], true
 	}
-
-	return cpuSample{idle: idle, total: total}, nil
+	if len(values) > 7 {
+		sample.steal, sample.hasSteal = values[7], true
+	}
+	return sample, nil
 }
 
 func percentFromDelta(prev, cur cpuSample) float64 {

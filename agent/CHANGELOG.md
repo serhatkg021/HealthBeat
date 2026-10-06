@@ -9,6 +9,17 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Eklendi
+- **Protokol 4: sistem sağlığı ve performans verileri.** Hepsi yetkisiz okunur; okunamayan alan gönderilmez.
+  - CPU'da iowait ve steal payı, G/Ç'de takılı süreç sayısı (`cpu_detail`).
+  - Bellek ayrıntısı: kullanılabilir bellek, önbellek, swap'a yazma/okuma hızı ve OOM (bellek yetmediği için öldürülen
+    süreç) sayacı (`memory_detail`).
+  - Kaynak baskısı (PSI): CPU, bellek ve G/Ç'de bekleme yüzdesi (`pressure`; PSI'ı kapalı çekirdeklerde gönderilmez).
+  - Yazılım RAID dizilerinin durumu (`raid`: temiz, bozuk, yeniden kuruluyor, eşitleniyor).
+  - Disk girdilerinde salt okunur bağlı olup olmadığı (`read_only`).
+  - Container'ların Docker healthcheck sonucu ve üst üste başarısız deneme sayısı; durmuş container'ların çıkış kodu ve
+    bellek yetmediği için öldürülüp öldürülmediği.
+
 ### Değişti
 - **Yavaş kaynaklar arka planda toplanıyor:** Docker ve envanterin komut gerektiren alanları (saat senkronu, başarısız
   servisler, Docker sürümü) kendi aralıklarıyla arka planda toplanıyor; rapor onları beklemiyor. Önceden toplama ve
@@ -19,6 +30,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   1.41+) alınıyor ve CPU yüzdesi agent'ta hesaplanıyor; container başına ~2 sn'lik bekleme yalnızca ilk kez yapılıyor.
   Container inspect bilgisi durumu değişmedikçe önbellekten geliyor. Docker toplama hatası her döngüde değil, yalnızca
   durum değiştiğinde loglanıyor.
+
+### Düzeltildi
+- Pull modunda aynı anda gelen iki istek CPU ölçümünün önceki örneğini birlikte değiştirebiliyordu; CPU toplayıcısı artık
+  eşzamanlı çağrılara karşı korumalı.
 - Proje MIT lisansıyla yayınlanıyor: `.deb`/`.rpm` paketlerinin lisans alanı `MIT` oldu, `LICENSE` dosyası paketlere
   (`/usr/share/doc/healthbeat/LICENSE`) ve tarball'a eklendi.
 

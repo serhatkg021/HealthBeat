@@ -14,12 +14,18 @@ type DiskUsage struct {
 	// InodesUsedPct, inode doluluğudur; nil = bilinmiyor (btrfs gibi dosya sistemleri inode sayısı bildirmez).
 	// Disk yüzdesinden önce dolabilir ve dosya oluşturmayı engeller.
 	InodesUsedPct *float64
+	// ReadOnly, dosya sisteminin salt okunur bağlı olup olmadığıdır (statfs ST_RDONLY). Çekirdek disk hatasında dosya
+	// sistemini salt okunura alır: uygulamalar yazamaz ama doluluk normal görünür.
+	ReadOnly bool
 }
 
 // statfsTimeout tek bir statfs() çağrısını sınırlar. Takılan bir ağ mount'unda (yanıt
 // vermeyi bırakan bir NFS sunucusu) syscall dakikalarca bloke olabilir ve tüm toplama
 // döngüsünü — CPU, RAM ve Docker dahil — dondurabilirdi.
 var statfsTimeout = 2 * time.Second // değişken, testler kısaltabilsin diye
+
+// stRdonly, statfs f_flags'teki salt okunur bitidir (ST_RDONLY; syscall paketinde Linux için tanımlı değil).
+const stRdonly = 0x1
 
 var (
 	statfsFn       = syscall.Statfs // testlerde değiştirilir
@@ -58,7 +64,8 @@ func sampleDisk(configured []string, discover func() ([]string, error)) []DiskUs
 			if total > 0 {
 				usedPct = float64(total-free) / float64(total) * 100
 			}
-			results[i] = result{DiskUsage{Mount: mount, UsedPct: usedPct, Total: total, Free: free, InodesUsedPct: inodePct(uint64(stat.Files), uint64(stat.Ffree))}, stat.Fsid, true}
+			results[i] = result{DiskUsage{Mount: mount, UsedPct: usedPct, Total: total, Free: free,
+				InodesUsedPct: inodePct(uint64(stat.Files), uint64(stat.Ffree)), ReadOnly: stat.Flags&stRdonly != 0}, stat.Fsid, true}
 		}()
 	}
 	wg.Wait()

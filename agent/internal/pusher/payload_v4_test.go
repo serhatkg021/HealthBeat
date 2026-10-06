@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"healthbeat-agent/internal/collector"
 	"healthbeat-agent/internal/version"
 )
 
@@ -123,5 +124,29 @@ func TestCoreDoesNotMutateTheFullPayload(t *testing.T) {
 	_ = p.Core()
 	if !hasV4(p) || p.DockerContainers[0].Health != "unhealthy" || p.Disk[0].ReadOnly == nil {
 		t.Fatalf("Core() stripped the v4 fields from the original payload: %+v", p)
+	}
+}
+
+// Dönüştürücüler değeri değiştirmez (yuvarlama server'da yapılır); bütünüyle bilinmeyen nesneyi göndermez.
+func TestV4ConvertersKeepRawValuesAndOmitUnknown(t *testing.T) {
+	if FromCPUBreakdown(collector.CPUBreakdown{}) != nil || FromMemoryStats(collector.MemoryStats{}) != nil ||
+		FromPressure(collector.SystemPressure{}) != nil || FromRAID(nil) != nil {
+		t.Fatal("a completely unknown v4 object must be omitted, not sent empty")
+	}
+	cpu := FromCPUBreakdown(collector.CPUBreakdown{IOWaitPct: ptr(1.2345), ProcsBlocked: ptr(0)})
+	if *cpu.IOWaitPct != 1.2345 || cpu.StealPct != nil || *cpu.ProcsBlocked != 0 {
+		t.Errorf("cpu detail = %+v", cpu)
+	}
+	mem := FromMemoryStats(collector.MemoryStats{SwapInPerS: ptr(0.04), OOMKills: ptr(uint64(2))})
+	if *mem.SwapInPerS != 0.04 || *mem.OOMKills != 2 || mem.AvailableMB != nil {
+		t.Errorf("memory detail = %+v", mem)
+	}
+	psi := FromPressure(collector.SystemPressure{IO: &collector.PressureStall{Some10: 3.14159, Some60: 2, Full10: ptr(0.96)}})
+	if psi.CPU != nil || psi.IO.Some10 != 3.14159 || *psi.IO.Full10 != 0.96 || psi.IO.Full60 != nil {
+		t.Errorf("pressure = %+v / io %+v", psi, psi.IO)
+	}
+	raid := FromRAID([]collector.RAIDArray{{Name: "md0", Level: "raid1", State: "recovering", Devices: 2, Active: 1, SyncPct: ptr(12.66)}})
+	if len(raid) != 1 || *raid[0].SyncPct != 12.66 || raid[0].State != "recovering" {
+		t.Errorf("raid = %+v", raid)
 	}
 }

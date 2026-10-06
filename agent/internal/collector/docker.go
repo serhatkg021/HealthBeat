@@ -25,6 +25,13 @@ type DockerContainer struct {
 	RAMMB         float64
 	RestartCount  int
 	UptimeSeconds int64
+	// Health, Docker healthcheck sonucudur (healthy | unhealthy | starting); healthcheck tanımlı değilse "".
+	Health              string
+	HealthFailingStreak *int
+	// ExitCode ve OOMKilled yalnızca durmuş/yeniden başlayan container'da (exited, dead, restarting) doludur: çalışan
+	// container'da son çıkışın bilgisi anlamsızdır.
+	ExitCode  *int
+	OOMKilled *bool
 }
 
 // inspectMaxAge, durumu değişmeyen bir container'ın inspect önbelleğinin en uzun ömrüdür.
@@ -193,6 +200,15 @@ func (d *DockerCollector) sampleContainer(ctx context.Context, s containerSummar
 		Status:       detail.State.Status,
 		RestartCount: detail.RestartCount,
 	}
+	if h := detail.State.Health; h != nil && h.Status != "" && h.Status != "none" {
+		streak := h.FailingStreak
+		c.Health, c.HealthFailingStreak = h.Status, &streak
+	}
+	switch detail.State.Status {
+	case "exited", "dead", "restarting":
+		exit, oom := detail.State.ExitCode, detail.State.OOMKilled
+		c.ExitCode, c.OOMKilled = &exit, &oom
+	}
 	if detail.State.Status == "running" {
 		if startedAt, err := time.Parse(time.RFC3339Nano, detail.State.StartedAt); err == nil {
 			c.UptimeSeconds = int64(time.Since(startedAt).Seconds())
@@ -238,6 +254,12 @@ type inspectResponse struct {
 	State        struct {
 		Status    string `json:"Status"`
 		StartedAt string `json:"StartedAt"`
+		ExitCode  int    `json:"ExitCode"`
+		OOMKilled bool   `json:"OOMKilled"`
+		Health    *struct {
+			Status        string `json:"Status"`
+			FailingStreak int    `json:"FailingStreak"`
+		} `json:"Health"`
 	} `json:"State"`
 }
 

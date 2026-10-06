@@ -409,3 +409,24 @@ func TestSampleDiskReportsInodeUsage(t *testing.T) {
 		t.Errorf("/btrfs (no inode count) = %v, want nil", *got["/btrfs"])
 	}
 }
+
+func TestSampleDiskReportsReadOnlyMounts(t *testing.T) {
+	orig := statfsFn
+	t.Cleanup(func() { statfsFn = orig })
+	statfsFn = func(path string, st *syscall.Statfs_t) error {
+		st.Blocks, st.Bavail, st.Bsize = 1000, 500, 4096
+		if path == "/broken" {
+			st.Flags = stRdonly | 0x400 // ST_RDONLY + ST_NOATIME: diğer bayraklar yanıltmamalı
+		} else {
+			st.Flags = 0x400
+		}
+		return nil
+	}
+	got := map[string]bool{}
+	for _, d := range SampleDisk([]string{"/broken", "/data"}) {
+		got[d.Mount] = d.ReadOnly
+	}
+	if !got["/broken"] || got["/data"] {
+		t.Fatalf("read-only = %v; want /broken true, /data false", got)
+	}
+}
