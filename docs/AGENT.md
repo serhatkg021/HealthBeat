@@ -489,11 +489,14 @@ sudo ./install.sh uninstall --purge    # yapılandırma, sertifikalar ve kullan�
 filtresi (`@system-service`, `~@privileged`), yalnızca `AF_INET/AF_INET6/AF_UNIX`.
 `systemd-analyze security` puanı **1.6 (OK)**.
 
-Doğrulama durumu (dürüst kayıt): unit `systemd-analyze verify` ile temiz; seccomp/`MemoryDenyWriteExecute`
-kümesi, `ProtectSystem=strict`, `ProtectHome=read-only`, `PrivateTmp` ve `RestrictNamespaces` ile
-**gerçek ajan bir kullanıcı systemd örneğinde çalıştırılıp** metrik verdiği görüldü. Capability
-düşürme, `Protect*Kernel*`, `PrivateDevices` gibi direktifler root'un systemd örneğini gerektirir ve
-bu ortamda **denenemedi**; ilk gerçek kurulumda `systemctl status` ile kontrol et.
+Doğrulama durumu (dürüst kayıt): unit `systemd-analyze verify` ile temiz. Agent, unit'in **bütün** direktifleriyle ve
+`healthbeat` kullanıcısıyla root'un systemd'sinde (`sudo systemd-run --wait --pipe -p User=healthbeat -p …`)
+`--print-report` çalıştırılarak doğrulandı (2026-10-06, protokol 4): kök ve `/proc/sys` salt okunur, `/tmp` ve `/dev`
+ayrı, capability kümeleri boş, `NoNewPrivs=1`, seccomp filtre modunda, isim alanı açılamıyor; raporun bütün alanları
+(servisler, süreçler, güncellemeler, saat senkronu, sıcaklık, disk G/Ç, ağ dahil) sandbox'sız çalıştırmayla aynı geldi.
+Docker alanları yalnızca `healthbeat` kullanıcısı `docker` grubundaysa gelir (§3).
+**Not:** kullanıcı systemd örneği (`systemd-run --user`) dosya sistemi direktiflerini (`ProtectSystem`, `ProtectHome`,
+`PrivateTmp`) sessizce uygulamaz; o yöntemle yalnızca seccomp, adres ailesi ve `NoNewPrivileges` sınanabilir.
 **`SystemCallFilter=~@resources` ekleme:** `systemd-analyze` önerse de ajanı çökertir.
 
 ## 9. Sorun giderme
@@ -543,7 +546,7 @@ kullanıcısına ek yetki verilmez. Bir alan okunamazsa "bilinmiyor" olarak boş
 **Sandbox uyumu (neden bazı yollar seçildi):** agent'ın systemd unit'i `ProtectClock`, `~@privileged` ve
 `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX` kullanır. Bu yüzden `adjtimex` çağrısı **süreci öldürürdü** (SIGSYS) ve
 `net.Interfaces()` (netlink) çalışmaz; saat senkronu için `timedatectl` (systemd'ye D-Bus ile sorar), IP adresleri için
-`/proc/net/*` kullanılır. Toplayıcılar unit'in sandbox direktifleriyle (`systemd-run --user`) çalıştırılıp doğrulandı.
+`/proc/net/*` kullanılır. Toplayıcılar unit'in bütün sandbox direktifleriyle doğrulandı (bkz. §8).
 
 **Ne gönderiyor, görmek için:** `healthbeat-agent --print-inventory` bu agent'ın raporlayacağı envanteri yapılandırma
 gerekmeden JSON olarak yazdırır (ör. bir sunucuyu panele eklemeden önce).
