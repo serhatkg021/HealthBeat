@@ -105,3 +105,34 @@ func FromServices(in []collector.ServiceState, full bool) *Services {
 	}
 	return &Services{Full: full, Items: items}
 }
+
+func FromDiskIO(in []collector.DiskIORate) []DiskIO {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]DiskIO, len(in))
+	for i, d := range in {
+		out[i] = DiskIO{Name: d.Name, ReadIOPS: d.ReadIOPS, WriteIOPS: d.WriteIOPS, ReadBps: d.ReadBps, WriteBps: d.WriteBps,
+			UtilPct: d.UtilPct, AwaitMs: d.AwaitMs, QueueDepth: d.QueueDepth}
+	}
+	return out
+}
+
+func FromNetIO(in []collector.NetIORate) []NetIO {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]NetIO, len(in))
+	for i, n := range in {
+		out[i] = NetIO{Interface: n.Interface, RxBps: n.RxBps, TxBps: n.TxBps, RxErrors: n.RxErrors, TxErrors: n.TxErrors,
+			RxDrops: n.RxDrops, TxDrops: n.TxDrops}
+	}
+	return out
+}
+
+func FromTCP(t collector.TCPStats) *TCP {
+	if t == (collector.TCPStats{}) {
+		return nil
+	}
+	return &TCP{RetransPct: t.RetransPct, Established: t.Established, TimeWait: t.TimeWait}
+}

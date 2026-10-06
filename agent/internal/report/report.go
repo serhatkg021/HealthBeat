@@ -28,6 +28,7 @@ type Builder struct {
 	diskMounts []string
 	cpu        *collector.CPUCollector
 	memory     *collector.MemoryCollector
+	io         *collector.IOCollector
 	docker     *collector.Background[[]collector.DockerContainer]
 	host       *collector.HostInfoCollector
 	services   *collector.Background[[]collector.ServiceState]
@@ -42,6 +43,7 @@ func New(diskMounts []string, interval func() time.Duration) *Builder {
 		diskMounts: diskMounts,
 		cpu:        collector.NewCPUCollector(),
 		memory:     collector.NewMemoryCollector(),
+		io:         collector.NewIOCollector(),
 		docker:     collector.NewBackground("docker", interval, dockerTimeout, docker.Sample),
 		host:       collector.NewHostInfoCollector(docker),
 		services:   collector.NewBackground("services", interval, servicesTimeout, collector.NewServiceCollector().Collect),
@@ -80,6 +82,12 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		log.Printf("collect memory: %v", err)
 	}
 	disks := collector.SampleDisk(b.diskMounts)
+	physical := collector.PhysicalDisks(collector.MountsOf(disks))
+	physNames := make([]string, len(physical))
+	for i, d := range physical {
+		physNames[i] = d.Name
+	}
+	ioSample := b.io.Sample(physNames)
 	containers, _ := b.docker.Latest()
 	services, servicesKnown := b.services.Latest()
 
@@ -89,7 +97,7 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		Disk:             pusher.FromDiskUsages(disks),
 		CPUCores:         collector.CPUCores(),
 		RAMTotalMB:       collector.TotalMemoryMB(),
-		PhysicalDisks:    pusher.FromPhysicalDisks(collector.PhysicalDisks(collector.MountsOf(disks))),
+		PhysicalDisks:    pusher.FromPhysicalDisks(physical),
 		HostInfo:         b.host.Collect(ctx),
 		DockerContainers: pusher.FromDockerContainers(containers),
 
@@ -97,6 +105,9 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		MemoryDetail: pusher.FromMemoryStats(b.memory.Sample()),
 		Pressure:     pusher.FromPressure(collector.ReadPressure("")),
 		RAID:         pusher.FromRAID(collector.ReadRAID("")),
+		DiskIO:       pusher.FromDiskIO(ioSample.Disks),
+		NetIO:        pusher.FromNetIO(ioSample.Net),
+		TCP:          pusher.FromTCP(ioSample.TCP),
 		Services:     b.svcReport.next(services, servicesKnown),
 	}
 }

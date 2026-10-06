@@ -23,6 +23,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
     etkin mi. Tam liste açılışta ve 5 dakikada bir; aradaki raporlarda yalnızca sorunlu (çökmüş, başlatılıyor, yeniden
     başlatma döngüsünde) ve son rapordan beri durumu değişen servisler. Kurulu olmayan (`not-found`) ve `masked` servisler
     raporlanmaz.
+  - Fiziksel disk başına G/Ç (`disk_io`): okuma/yazma IOPS ve bayt/sn, ortalama gecikme, meşguliyet yüzdesi, kuyruk
+    derinliği (`/proc/diskstats`, iostat'ın formülleri).
+  - Ağ arayüzü başına trafik (`net_io`): gelen/giden bit/sn, hata ve düşen paket sayısı; `lo`, `docker0`, `veth*`,
+    `br-*` (container iç trafiği) hariç. TCP yeniden gönderim oranı, kurulu bağlantı ve TIME_WAIT sayısı (`tcp`).
+  - Oranlar iki rapor arasındaki farktır: agent'ın ilk raporunda ve sayaç geri gittiğinde (yeniden açılış) gönderilmez.
 
 ### Değişti
 - **Yavaş kaynaklar arka planda toplanıyor:** Docker ve envanterin komut gerektiren alanları (saat senkronu, başarısız
