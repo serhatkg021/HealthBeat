@@ -1,42 +1,26 @@
-import { Navigate } from 'react-router-dom'
-import { ScrollText, Settings, SlidersHorizontal, type LucideIcon } from 'lucide-react'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/PageHeader'
-import { TabPanel, Tabs } from '../components/Tabs'
-import { useTab } from '../components/useTab'
-import { navigation } from '../navigation'
-import { AuditPage } from './AuditPage'
+import { ALERT_RULES_PATH, AUDIT_PATH, navigation, notificationsPath } from '../navigation'
 import { SettingsPage } from './SettingsPage'
-import { ThresholdsPage } from './ThresholdsPage'
 
-const ICONS: Record<string, LucideIcon> = {
-  esikler: SlidersHorizontal,
-  denetim: ScrollText,
-  sistem: Settings,
-}
-
-// Ayarlar: kurulum geneli sayfalar (eşikler, denetim kaydı, sistem ayarları) tek sayfada sekmelerle ayrılır. Her sekme
-// yalnızca izni olana görünür; hiçbirini göremeyen buraya gelemez.
+// Ayarlar: yalnızca kurulum geneli yapılandırma (agent sürümleri, saklama, oturum, panel adresi, loglama), soldaki bölüm
+// menüsüyle. Eşikler Alert kuralları'na, kanallar ve sistem sahipleri Bildirim'e, denetim kaydı Sistem Araçları'na taşındı;
+// eski adresleri oralara yönlenir.
 export function SettingsHubPage() {
   const { can } = useAuth()
-  const tabs = navigation(can).settings
-  const ids = tabs.map((t) => t.id)
-  const [active, setActive] = useTab(ids, ids[0] ?? '')
-  if (tabs.length === 0) return <Navigate to="/" replace />
-  const description = tabs.find((t) => t.id === active)?.description
+  const [params] = useSearchParams()
+  const tab = navigation(can).settings[0]
+  const sekme = params.get('sekme')
+  if (sekme === 'esikler') return <Navigate to={ALERT_RULES_PATH} replace />
+  if (sekme === 'denetim') return <Navigate to={AUDIT_PATH} replace />
+  const bolum = params.get('bolum')
+  if (bolum === 'sahipler' || bolum === 'kanallar') return <Navigate to={notificationsPath(bolum)} replace />
+  if (!tab) return <Navigate to="/" replace />
   return (
     <div>
-      <PageHeader title="Ayarlar" subtitle={description} />
-      <Tabs items={tabs.map((t) => ({ id: t.id, label: t.label, icon: ICONS[t.id] }))} active={active} onChange={setActive} label="Ayarlar" />
-      <TabPanel id="esikler" active={active}>
-        <ThresholdsPage />
-      </TabPanel>
-      <TabPanel id="denetim" active={active}>
-        <AuditPage />
-      </TabPanel>
-      <TabPanel id="sistem" active={active}>
-        <SettingsPage />
-      </TabPanel>
+      <PageHeader title="Ayarlar" subtitle={tab.description} />
+      <SettingsPage />
     </div>
   )
 }

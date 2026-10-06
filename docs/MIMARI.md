@@ -235,7 +235,7 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   Seçili bir disk üst üste birkaç raporda görünmezse `disk_missing`.
 - **Kime gider — sistem sahipleri ve ek alıcılar:** bildirimin amacı **sistem sahibidir**; organizasyon ve sunucu kuralları
   "bunlara da gitsin" der. Bir alert'in alıcıları üç katmanın **toplamıdır** (hiçbiri diğerini ezmez):
-  1. **Sistem sahipleri** (`notification_owners`, Ayarlar → Sistem Ayarları → Sistem sahipleri): her açık kanaldan, alert seviyesi kanalın
+  1. **Sistem sahipleri** (`notification_owners`, Bildirim → Sistem sahipleri): her açık kanaldan, alert seviyesi kanalın
      sahip seviyesine (`owner_min_level`, ör. e-posta ve Slack uyarı, SMS yalnızca kritik) ulaşıyorsa ve sahip o kanaldan
      almak istiyorsa. Panel kullanıcısı olmaları gerekmez.
   2. Sunucunun organizasyonunun **ve bütün üst organizasyonlarının** kuralları.
@@ -246,7 +246,7 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   - Aynı kanal ve adres bir kez bildirilir (sahip olan biri bir kuralda da geçse tek ileti alır).
   - **Varsayılan alıcı yoktur:** süper admin ya da organizasyon yöneticisi olmak kendiliğinden bildirim almak demek değildir.
     Hiç sahip ve kural yoksa bildirim kimseye gitmez; panel bunu süper admine bir uyarı bandıyla söyler.
-- **Kanallar** (`notification_channels`, Ayarlar → Sistem Ayarları → Bildirim kanalları) sistem düzeyindedir: ayarı (ör. SMTP) ve sırrı
+- **Kanallar** (`notification_channels`, Bildirim → Kanallar) sistem düzeyindedir: ayarı (ör. SMTP) ve sırrı
   (şifreli) orada tutulur; ayarı eksik ya da kapalı kanal kurallarda seçilemez. İki tür kanal vardır: **kişiye giden**
   (e-posta, SMS: adres kişinin kaydından gelir; organizasyon/sunucu kurallarında seçilebilir) ve **ortak** (ör. Slack:
   tek bir ortak hedefe gider, yalnızca sistem sahiplerine gönderir, kurallarda seçilemez). Kanalı kapatılan kurallar

@@ -19,8 +19,8 @@ import {
 } from './thresholds'
 import { Check, Save, SlidersHorizontal } from 'lucide-react'
 
-// Bir sunucunun eşikleri: metrik başına varsayılan (Eşikler sayfasında tanımlı) ya da kendi değerleri.
-export function HostThresholdSettings({ hostId, canEdit, onSaved }: { hostId: string; canEdit: boolean; onSaved?: () => void }) {
+// Bir sunucunun eşikleri: metrik başına varsayılan (sistem ya da organizasyondan devralınan) ya da kendi değerleri.
+export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; canEdit: boolean }) {
   const [saved, setSaved] = useState<Drafts | null>(null)
   const [draft, setDraft] = useState<Drafts | null>(null)
   const [savedMounts, setSavedMounts] = useState<MountDrafts>({})
@@ -111,7 +111,6 @@ export function HostThresholdSettings({ hostId, canEdit, onSaved }: { hostId: st
       setDraftMounts(mounts)
       setDefaults(defaultsFromServer(thresholds))
       setNotice('Eşikler kaydedildi.')
-      onSaved?.() // Genel sekmesindeki çubuk renkleri yeni eşikleri izlesin.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'eşikler kaydedilemedi')
     } finally {
@@ -126,8 +125,8 @@ export function HostThresholdSettings({ hostId, canEdit, onSaved }: { hostId: st
         Eşikler
       </h2>
       <p className="card-desc">
-        Her metrik için varsayılan değer ya da bu sunucuya özel değer. Varsayılan seçili olan metrikler, Eşikler
-        sayfasındaki değer değişirse onu izler.
+        Her metrik için varsayılan değer ya da bu sunucuya özel değer. Varsayılan seçili olan metrikler, sistem ya da
+        organizasyon varsayılanı değişirse onu izler.
       </p>
       {error && <div className="error-banner">{error}</div>}
       {notice && !dirty && (

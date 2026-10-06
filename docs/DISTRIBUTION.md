@@ -302,7 +302,7 @@ GHCR paketlerini herkese açmak istiyorsan ilk yayından sonra paket ayarlarınd
 | --- | --- | --- |
 | Etiket | `agent/vX.Y.Z` | `server/vX.Y.Z` |
 | Sürüm kaynağı | `agent/internal/version/version.go` (`Version`) | `server/internal/version/version.go` (`Version`) **ve** `server/panel/package.json` + `server/panel/package-lock.json` (aynı numara; `cd server/panel && npm version X.Y.Z --no-git-tag-version`) |
-| Ayrıca | Yayından sonra panelde Ayarlar → Sistem Ayarları → Agent sürümleri'nde en güncel sürüm X.Y.Z yapılır (her kurulumda; server'a gömülü değildir) | — |
+| Ayrıca | Yayından sonra panelde Ayarlar → Agent sürümleri'nde en güncel sürüm X.Y.Z yapılır (her kurulumda; server'a gömülü değildir) | — |
 | Değişiklik günlüğü | `agent/CHANGELOG.md` → `## [X.Y.Z] - YYYY-AA-GG` | `server/CHANGELOG.md` → `## [X.Y.Z] - YYYY-AA-GG` (panel maddeleri "Panel:" ile başlar) |
 | Yayınlananlar | binary, tarball, `.deb`/`.rpm`, `SHA256SUMS` + GPG imzası → GitHub Release | `healthbeat-server`, `-panel`, `-certs-init` imajları (`X.Y.Z`, `X.Y`, `latest`) → GHCR → GitHub Release (notlar + imaj adları) |
 | Yerel deneme | `scripts/release.sh agent X.Y.Z --allow-dirty` (imzasız; `dist/agent-vX.Y.Z/`) | `scripts/release.sh server X.Y.Z --check` (yalnızca sürüm tutarlılığı) ya da tam: testler + panel build + notlar (`dist/server-vX.Y.Z/`) |
@@ -312,7 +312,7 @@ GHCR paketlerini herkese açmak istiyorsan ilk yayından sonra paket ayarlarınd
 "güncelleme var" görünmez). Agent'ı değiştiren bir iş (yeni alan, düzeltme) **agent hattını** çıkarır; ingest'e yeni alan
 eklendiyse protokol/`COMPATIBILITY.md` kuralları geçerlidir ve genellikle bir server sürümü de gerekir (server yeni alanı işlesin diye).
 Server önce, agent sonra dağıtılır (bölüm 5). Panelin "güncel agent" saydığı sürüm server'a gömülü değildir: agent yayınlandıktan
-sonra her kurulumda Ayarlar → Sistem Ayarları → Agent sürümleri'nden girilir.
+sonra her kurulumda Ayarlar → Agent sürümleri'nden girilir.
 
 **Agent sürümü için kontrol listesi:**
 
@@ -321,7 +321,7 @@ sonra her kurulumda Ayarlar → Sistem Ayarları → Agent sürümleri'nden giri
 - [ ] `agent/CHANGELOG.md`'de `## [X.Y.Z] - YYYY-AA-GG` bölümü yazıldı (release notları buradan çıkar).
 - [ ] Testler yeşil: `go test` (agent), `agent/deploy/install_test.sh`, `agent/packaging/test_packages.sh`.
 - [ ] Yerel deneme: `scripts/release.sh agent X.Y.Z --allow-dirty`.
-- [ ] Yayından sonra: kurulumların panelinde Ayarlar → Sistem Ayarları → Agent sürümleri → en güncel sürüm X.Y.Z.
+- [ ] Yayından sonra: kurulumların panelinde Ayarlar → Agent sürümleri → en güncel sürüm X.Y.Z.
 - [ ] Commit'lendi, `main`'a alındı.
 - [ ] `git tag agent/vX.Y.Z && git push origin agent/vX.Y.Z` → Actions: CI (agent) → artifact + imza + GitHub Release.
 - [ ] Release sayfasında dosyaları ve `SHA256SUMS.asc` imzasını (`gpg --verify`) kontrol et.

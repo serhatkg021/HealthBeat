@@ -1,5 +1,8 @@
-import { Activity, CircleArrowUp, Clock, Cpu, Download, HardDrive, Maximize2, MemoryStick, Timer, Upload, type LucideIcon } from 'lucide-react'
-import type { Host, HostThresholdsResponse, MetricPoint } from '../types/api'
+import { useEffect, useState } from 'react'
+import { Activity, BellRing, ChartLine, CircleArrowUp, Clock, Cpu, Download, HardDrive, MemoryStick, Timer, Upload, type LucideIcon } from 'lucide-react'
+import { alertsApi } from '../api/endpoints'
+import { useAuth } from '../auth/AuthContext'
+import type { Alert, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
 import { AgentBadge } from '../components/AgentBadge'
 import { EmptyState } from '../components/EmptyState'
 import { MountMeter } from '../components/MountMeter'
@@ -11,22 +14,27 @@ import { agentHint, agentKind, needsUpdate, unsupportedFieldsNotice, type AgentP
 import { formatCores, formatRamUsage } from './hardwareTotals'
 import { statusDuration } from './hostStatus'
 import { effectiveLevels, mountLevels, pctText, usageTone, TONE_LABEL } from './usage'
-import { hostStatusLabel } from '../labels'
+import { alertLevelLabel, alertLevelTone, alertMetricLabel, hostStatusLabel } from '../labels'
+import { alertReading } from './alertText'
 
-// Sunucu sayfasının "Genel" sekmesi: sunucunun şu anki durumu. Yalnızca en son raporu gösterir; geçmiş
-// "Detay" modalında (HostMetricHistory) ayrıca yüklenir. Donanım ve envanter "Sistem" sekmesindedir.
+// Sunucu sayfasının "Genel" sekmesi: sunucunun şu anki durumu ve açık sorunları. Yalnızca en son raporu gösterir;
+// geçmiş grafikleri "Performans", donanım ve envanter "Envanter" sekmesindedir.
 export function HostOverview({
   host,
   latest,
   thresholds,
   policy,
-  onDetail,
+  onHistory,
+  onShowAlerts,
 }: {
   host: Host
   latest: MetricPoint | null
   thresholds: HostThresholdsResponse | null
   policy: AgentPolicy
-  onDetail: (kind: 'cpu-ram' | 'disk') => void
+  // Performans sekmesine geçer (geçmiş grafikleri).
+  onHistory: () => void
+  // Alert'ler sekmesine geçer.
+  onShowAlerts: () => void
 }) {
   const online = host.status === 'online'
   // Çevrimiçiyse uptime, çevrimdışıysa son veriden bu yana geçen süre (canlı akar); bkz. statusDuration.
@@ -85,6 +93,8 @@ export function HostOverview({
         <StatTile label="Son görülme" icon={Clock} small value={host.last_seen ? new Date(host.last_seen).toLocaleString() : '—'} />
       </div>
 
+      <OpenIssues hostId={host.id} onShowAlerts={onShowAlerts} />
+
       {latest ? (
         <div className="grid-2">
           <UsageCard
@@ -93,7 +103,7 @@ export function HostOverview({
             pct={latest.cpu_usage_pct}
             detail={formatCores(host.cpu_cores) ?? undefined}
             levels={effectiveLevels(thresholds?.thresholds, 'cpu')}
-            onDetail={() => onDetail('cpu-ram')}
+            onHistory={onHistory}
           />
           <UsageCard
             title="RAM"
@@ -101,7 +111,7 @@ export function HostOverview({
             pct={latest.ram_usage_pct}
             detail={formatRamUsage(latest.ram_usage_pct, host.ram_total_mb) ?? undefined}
             levels={effectiveLevels(thresholds?.thresholds, 'ram')}
-            onDetail={() => onDetail('cpu-ram')}
+            onHistory={onHistory}
           />
         </div>
       ) : (
@@ -116,9 +126,9 @@ export function HostOverview({
             <HardDrive size={16} strokeWidth={1.75} />
             Disk kullanımı
           </h2>
-          <button className="btn btn-sm" type="button" onClick={() => onDetail('disk')} disabled={!latest || latest.disk.length === 0}>
-            <Maximize2 size={14} strokeWidth={2} />
-            Detay
+          <button className="btn btn-sm" type="button" onClick={onHistory} disabled={!latest || latest.disk.length === 0}>
+            <ChartLine size={14} strokeWidth={2} />
+            Geçmiş
           </button>
         </div>
         {latest && latest.disk.length > 0 ? (
@@ -148,14 +158,14 @@ function UsageCard({
   pct,
   detail,
   levels,
-  onDetail,
+  onHistory,
 }: {
   title: string
   icon: LucideIcon
   pct: number
   detail?: string
   levels: ReturnType<typeof effectiveLevels>
-  onDetail: () => void
+  onHistory: () => void
 }) {
   const tone = usageTone(pct, levels)
   return (
@@ -165,9 +175,9 @@ function UsageCard({
           <Icon size={16} strokeWidth={1.75} />
           {title}
         </h2>
-        <button className="btn btn-sm" type="button" onClick={onDetail}>
-          <Maximize2 size={14} strokeWidth={2} />
-          Detay
+        <button className="btn btn-sm" type="button" onClick={onHistory}>
+          <ChartLine size={14} strokeWidth={2} />
+          Geçmiş
         </button>
       </div>
       <div className="usage-card-value">
@@ -179,6 +189,73 @@ function UsageCard({
       <div className="usage-card-foot muted">
         {levels ? `Uyarı %${levels.warning_level} · Kritik %${levels.critical_level}` : 'Bu metrik için eşik tanımlı değil'}
       </div>
+    </div>
+  )
+}
+
+const OPEN_ISSUES_LIMIT = 5
+
+// Sayaç rozeti açık alert'lerin en ağırının rengini taşır (yalnızca uyarı varken kırmızı görünmesin).
+function worstTone(alerts: Alert[]): 'critical' | 'warning' | 'neutral' {
+  if (alerts.some((a) => a.level === 'critical')) return 'critical'
+  if (alerts.some((a) => a.level === 'warning')) return 'warning'
+  return 'neutral'
+}
+
+// Bu sunucunun açık alert'leri (en çok OPEN_ISSUES_LIMIT tanesi); ayrıntı ve onaylama Alert'ler sekmesindedir. Alert
+// görme izni yoksa ya da açık alert yoksa kart sessizce "sorun yok" der.
+function OpenIssues({ hostId, onShowAlerts }: { hostId: string; onShowAlerts: () => void }) {
+  const { can } = useAuth()
+  const allowed = can('alert.view')
+  const [alerts, setAlerts] = useState<Alert[] | null>(null)
+  const [total, setTotal] = useState(0)
+
+  useEffect(() => {
+    if (!allowed) return
+    alertsApi
+      .list({ status: 'open', hostId, q: '', limit: OPEN_ISSUES_LIMIT, offset: 0 })
+      .then((page) => {
+        setAlerts(page.items)
+        setTotal(page.total)
+      })
+      .catch(() => setAlerts([]))
+  }, [allowed, hostId])
+
+  if (!allowed || alerts === null) return null
+  return (
+    <div className="card">
+      <div className="card-title-row">
+        <h2 className="card-title">
+          <BellRing size={16} strokeWidth={1.75} />
+          Açık sorunlar
+          {total > 0 && <StatusBadge tone={worstTone(alerts)}>{total}</StatusBadge>}
+        </h2>
+        {total > 0 && (
+          <button className="btn btn-sm" type="button" onClick={onShowAlerts}>
+            Alert’ler
+          </button>
+        )}
+      </div>
+      {alerts.length === 0 ? (
+        <p className="muted" style={{ margin: 0 }}>
+          Açık alert yok.
+        </p>
+      ) : (
+        <ul className="issue-list">
+          {alerts.map((a) => (
+            <li key={a.id}>
+              <StatusBadge tone={alertLevelTone(a.level)}>{alertLevelLabel(a.level)}</StatusBadge>
+              <span>
+                {alertMetricLabel(a.alert_type)}
+                {a.subject && <span className="muted"> · {a.subject}</span>}
+              </span>
+              {alertReading(a) && <span className="muted tnum">{alertReading(a)}</span>}
+              <span className="muted issue-age">{new Date(a.created_at).toLocaleString()}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {total > alerts.length && <p className="muted" style={{ margin: '8px 0 0', fontSize: 13 }}>ve {total - alerts.length} tane daha</p>}
     </div>
   )
 }

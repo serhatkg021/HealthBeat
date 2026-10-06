@@ -5,9 +5,11 @@
 export const TAB_PARAM = 'sekme'
 
 // URL'deki değer izin verilen sekmelerden biri değilse (yazım hatası, artık var olmayan bir sekme,
-// yetkisi olmayan bir sekme) varsayılan sekmeye düşülür.
-export function resolveTab(raw: string | null, ids: readonly string[], fallback: string): string {
-  return raw !== null && ids.includes(raw) ? raw : fallback
+// yetkisi olmayan bir sekme) varsayılan sekmeye düşülür. aliases, adı değişmiş ya da başka sekmeye taşınmış eski
+// sekme adlarını (yer imleri, eski bağlantılar) yenisine çevirir.
+export function resolveTab(raw: string | null, ids: readonly string[], fallback: string, aliases: Readonly<Record<string, string>> = {}): string {
+  const id = raw !== null && Object.hasOwn(aliases, raw) ? aliases[raw] : raw
+  return id !== null && ids.includes(id) ? id : fallback
 }
 
 // Ok tuşları komşu sekmeye (uçlarda başa/sona sarar), Home/End ilk/son sekmeye gider; başka tuş null.

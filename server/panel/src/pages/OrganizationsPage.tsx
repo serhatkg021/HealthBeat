@@ -10,7 +10,8 @@ import { useTab } from '../components/useTab'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
-import { Building2, LayoutGrid, List as ListIcon, Plus } from 'lucide-react'
+import { Building2, LayoutGrid, List as ListIcon, Plus, Settings } from 'lucide-react'
+import { OrganizationSettingsModal } from './OrganizationSettings'
 
 type ViewMode = 'card' | 'list'
 // Görünüm tercihi yalnızca bu tarayıcıda hatırlanır (kullanıcı/organizasyon verisi değil) —
@@ -36,6 +37,8 @@ export function OrganizationsPage() {
   const [creating, setCreating] = useState(false)
   const [search, setSearch] = useState('')
   const [view, setView] = useState<ViewMode>(loadView)
+  const [editing, setEditing] = useState<Organization | null>(null)
+  const canManage = can('organization.update') || can('organization.delete')
 
   function changeView(v: ViewMode) {
     setView(v)
@@ -139,9 +142,15 @@ export function OrganizationsPage() {
                   {body}
                 </div>
               ) : (
-                <Link key={org.id} to={`/organizations/${org.id}`} className="entity-card">
+                <div key={org.id} className="entity-card">
+                  <Link to={`/organizations/${org.id}`} className="entity-card-link" aria-label={org.name} />
                   {body}
-                </Link>
+                  {canManage && (
+                    <button type="button" className="icon-btn entity-card-gear" aria-label={`${org.name} ayarları`} title="Ayarlar" onClick={() => setEditing(org)}>
+                      <Settings size={16} strokeWidth={1.75} />
+                    </button>
+                  )}
+                </div>
               )
             })}
           </div>
@@ -153,6 +162,7 @@ export function OrganizationsPage() {
                   <th>Ad</th>
                   <th>Adres</th>
                   <th>Oluşturulma</th>
+                  {canManage && <th className="actions" />}
                 </tr>
               </thead>
               <tbody>
@@ -171,6 +181,15 @@ export function OrganizationsPage() {
                     </td>
                     <td className="muted" data-label="Adres">{row.org.address ?? '—'}</td>
                     <td className="muted" data-label="Oluşturulma">{new Date(row.org.created_at).toLocaleString()}</td>
+                    {canManage && (
+                      <td className="actions">
+                        {row.org.access !== 'context' && (
+                          <button type="button" className="icon-btn" aria-label={`${row.org.name} ayarları`} title="Ayarlar" onClick={() => setEditing(row.org)}>
+                            <Settings size={16} strokeWidth={1.75} />
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -178,6 +197,8 @@ export function OrganizationsPage() {
           </div>
         )}
       </TabPanel>
+
+      <OrganizationSettingsModal organization={editing} orgs={orgs} onClose={() => setEditing(null)} onSaved={reload} onDeleted={reload} />
 
       {canCreate && (
         <TabPanel id="yeni" active={tab}>

@@ -4,10 +4,15 @@ import { resolveTab, TAB_PARAM } from '../tabs'
 
 // Etkin sekmeyi URL'de (`?sekme=`) tutar: yenileme ve geri tuşu sekmeyi korur, bağlantı paylaşılabilir.
 // Varsayılan sekme adreste görünmez. `param` başka bir menü (ör. ayarlar bölümleri) için farklı bir
-// parametre adı seçmeye yarar.
-export function useTab(ids: readonly string[], fallback: string, param: string = TAB_PARAM): [string, (id: string) => void] {
+// parametre adı seçmeye yarar; `aliases` eski sekme adlarını yenisine çevirir (bkz. resolveTab).
+export function useTab(
+  ids: readonly string[],
+  fallback: string,
+  param: string = TAB_PARAM,
+  aliases?: Readonly<Record<string, string>>,
+): [string, (id: string) => void] {
   const [params, setParams] = useSearchParams()
-  const active = resolveTab(params.get(param), ids, fallback)
+  const active = resolveTab(params.get(param), ids, fallback, aliases)
   const setActive = useCallback(
     (id: string) => {
       setParams(

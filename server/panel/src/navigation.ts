@@ -1,6 +1,7 @@
-// Sol menünün, Ayarlar sayfasının ve Sistem Araçları sayfasının yapısı — saf mantık (ikonlar Layout'ta eşlenir). Menü:
-// üstte doğrudan bağlantılar, altında açılır gruplar, en altta sabit Sistem Araçları ve Ayarlar. Bu ikisi menüde tek
-// bağlantıdır; içerikleri sayfanın içinde sekmelerle ayrılır. Her öğe yalnızca izni olan kullanıcıya görünür; hiç öğesi
+// Sol menünün, Ayarlar sayfasının ve Sistem Araçları sayfasının yapısı — saf mantık (ikonlar Layout'ta eşlenir). Menü,
+// kullanıcının sorduğu soruya göre üç açılır gruptur: İzleme (ne oluyor?), Alert Yönetimi (ne zaman, kime haber
+// verilir?) ve Yönetim; en altta sabit Sistem Araçları ve Ayarlar. Bu ikisi menüde tek bağlantıdır; içerikleri sayfanın
+// içinde sekmelerle ayrılır. Her öğe yalnızca izni olan kullanıcıya görünür; hiç öğesi
 // kalmayan grup (ve hiç sekmesi kalmayan Ayarlar ya da Sistem Araçları) gösterilmez.
 import type { Permission } from './auth/permissions.ts'
 
@@ -33,26 +34,54 @@ export interface SettingsTab extends PageTab {
 
 export type ToolTab = PageTab
 
+export type NotificationTab = PageTab & { id: NotificationTabId }
+export type NotificationTabId = 'kanallar' | 'sahipler' | 'kurallar' | 'kisiler'
+
 export interface Navigation {
-  top: NavItem[]
   groups: NavGroup[]
   tools: ToolTab[]
   settings: SettingsTab[]
+  notifications: NotificationTab[]
 }
 
 export const SETTINGS_PATH = '/settings'
 export const TOOLS_PATH = '/system'
+export const HOSTS_PATH = '/hosts'
+export const ALERT_RULES_PATH = '/alert-rules'
+export const MAINTENANCE_PATH = '/maintenance'
+export const NOTIFICATIONS_PATH = '/notifications'
 
 export function navigation(can: Can): Navigation {
   const item = (show: boolean, def: NavItem): NavItem[] => (show ? [def] : [])
   const tab = (show: boolean, def: SettingsTab): SettingsTab[] => (show ? [def] : [])
-  // Organizasyonları göremeyen (operatör) kendisine atanmış sunucuları "Sunucularım"da görür.
-  const top = [
-    { id: 'ozet', to: '/', label: 'Özet', end: true },
-    ...item(!can('organization.view'), { id: 'sunucularim', to: '/my-hosts', label: 'Sunucularım' }),
-    ...item(can('alert.view'), { id: 'alertler', to: '/alerts', label: 'Alert’ler' }),
+  // Bildirim sayfasının sekmeleri: kanallar ve sistem sahipleri kurulum genelidir (settings.view), kurallar ve iletişim
+  // kişileri organizasyon/sunucu kapsamındadır. Hiç sekmesi kalmayan kullanıcı menüde Bildirim'i görmez.
+  const notifications: NotificationTab[] = [
+    ...(can('settings.view') ? [{ id: 'kanallar' as const, label: 'Kanallar' }] : []),
+    ...(can('settings.view') ? [{ id: 'sahipler' as const, label: 'Sistem sahipleri' }] : []),
+    ...(can('notification.view') ? [{ id: 'kurallar' as const, label: 'Bildirim kuralları' }] : []),
+    ...(can('contact.view') ? [{ id: 'kisiler' as const, label: 'İletişim kişileri' }] : []),
   ]
+  // Sunucular herkese tek sayfadır; liste yetkiye göre süzülü gelir (operatöre yalnızca atanmış sunucular).
   const groups = [
+    {
+      id: 'izleme',
+      label: 'İzleme',
+      items: [
+        { id: 'ozet', to: '/', label: 'Özet', end: true },
+        ...item(can('host.view'), { id: 'sunucular', to: HOSTS_PATH, label: 'Sunucular' }),
+        ...item(can('alert.view'), { id: 'alertler', to: '/alerts', label: 'Alert’ler' }),
+      ],
+    },
+    {
+      id: 'alert-yonetimi',
+      label: 'Alert Yönetimi',
+      items: [
+        ...item(can('threshold.view'), { id: 'kurallar', to: ALERT_RULES_PATH, label: 'Alert kuralları' }),
+        { id: 'bakim', to: MAINTENANCE_PATH, label: 'Bakım pencereleri' },
+        ...item(notifications.length > 0, { id: 'bildirim', to: NOTIFICATIONS_PATH, label: 'Bildirim' }),
+      ],
+    },
     {
       id: 'yonetim',
       label: 'Yönetim',
@@ -62,42 +91,43 @@ export function navigation(can: Can): Navigation {
       ],
     },
   ].filter((g) => g.items.length > 0)
-  // Her aracın kendi izni vardır (system.*; varsayılan olarak yalnızca süper admin).
+  // Her aracın kendi izni vardır (system.*, denetim kaydı için audit.view; varsayılan olarak yalnızca süper admin).
   const tools = [
     ...(can('system.queue.view') ? [{ id: 'kuyruk', label: 'Kuyruk Durumu' }] : []),
     ...(can('system.cache.view') ? [{ id: 'cache', label: 'Cache Durumu' }] : []),
     ...(can('system.logs.view') ? [{ id: 'log', label: 'Log Analiz' }] : []),
+    ...(can('audit.view') ? [{ id: 'denetim', label: 'Denetim Kaydı' }] : []),
   ]
   const settings = [
-    ...tab(can('threshold.view'), {
-      id: 'esikler',
-      label: 'Sistem Eşikleri',
-      description: 'Kendi değeri olmayan tüm sunucuların kullandığı varsayılan alert eşikleri.',
-    }),
-    ...tab(can('audit.view'), {
-      id: 'denetim',
-      label: 'Denetim Kaydı',
-      description: 'Panelde ve API’de yapılan yönetim işlemlerinin geçmişi.',
-    }),
     ...tab(can('settings.view'), {
       id: 'sistem',
       label: 'Sistem Ayarları',
-      description: 'Sistem sahipleri, bildirim kanalları, agent sürümleri, saklama, oturum ve loglama.',
+      description: 'Agent sürümleri, veri saklama, oturum ve hız sınırları, panel adresi ve loglama.',
     }),
   ]
-  return { top, groups, tools, settings }
+  return { groups, tools, settings, notifications }
 }
 
 const under = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`)
 
-// settingsTabPath, Ayarlar sayfasının bir sekmesinin adresidir (bağlantılar ve eski adreslerin yönlendirmesi için).
-export const settingsTabPath = (id: string): string => `${SETTINGS_PATH}?sekme=${id}`
-
 // Eski ayrı sayfaların adresleri (yer imleri, eski bağlantılar) artık Ayarlar'ın sekmeleridir.
 export const LEGACY_SETTINGS_ROUTES: Record<string, string> = {
-  '/thresholds': 'esikler',
-  '/audit': 'denetim',
   '/settings/system': 'sistem',
+}
+
+// Denetim Kaydı Sistem Araçları'nın bir sekmesidir (eski /audit ve /settings?sekme=denetim adresleri buraya yönlenir).
+export const AUDIT_PATH = `${TOOLS_PATH}?sekme=denetim`
+
+// Alert kurallarının kapsamı: sistem varsayılanı, bir organizasyon ya da bir sunucu (id yoksa seçilmemiş).
+export type RuleScope = { kind: 'sistem' } | { kind: 'org'; id?: string } | { kind: 'sunucu'; id?: string }
+
+// alertRulesPath, kurallar sayfasının o kapsam seçili adresidir (organizasyon/sunucu sayfalarından ve eski eşik
+// adreslerinden gelen bağlantılar için).
+export function alertRulesPath(scope: RuleScope = { kind: 'sistem' }): string {
+  if (scope.kind === 'sistem') return ALERT_RULES_PATH
+  const params = new URLSearchParams({ kapsam: scope.kind })
+  if (scope.id) params.set('id', scope.id)
+  return `${ALERT_RULES_PATH}?${params}`
 }
 
 export function inSettingsArea(pathname: string): boolean {
@@ -111,4 +141,26 @@ export function inToolsArea(pathname: string): boolean {
 // Grubun bir sayfası açıksa grup kapatılamaz görünmesin diye açık tutulur.
 export function groupHasActive(group: NavGroup, pathname: string): boolean {
   return group.items.some((i) => (i.end ? pathname === i.to : under(pathname, i.to)))
+}
+
+// notificationsPath, Bildirim sayfasının bir sekmesinin (ve kurallar için kapsamın, kişiler için organizasyonun)
+// adresidir; eski sekmelerden ve uyarı şeridinden gelen bağlantılar için.
+export function notificationsPath(tab: NotificationTabId, scope?: { kind: 'org' | 'sunucu'; id?: string }): string {
+  const params = new URLSearchParams({ sekme: tab })
+  if (scope) {
+    if (tab === 'kurallar') params.set('kapsam', scope.kind)
+    if (scope.id) params.set('id', scope.id)
+  }
+  return `${NOTIFICATIONS_PATH}?${params}`
+}
+
+// ADD_HOST_ORG_PARAM, sihirbazın organizasyonunu taşıyan parametredir. Liste süzgecinin "org" parametresinden ayrıdır:
+// ikisi aynı adreste bulunabilir ve karışmamalıdır.
+export const ADD_HOST_ORG_PARAM = 'hedef'
+
+// addHostPath, Sunucular sayfasının "Sunucu ekle" sekmesidir; organizasyon verilirse sihirbaz onunla açılır.
+export function addHostPath(organizationId?: string): string {
+  const params = new URLSearchParams({ sekme: 'ekle' })
+  if (organizationId) params.set(ADD_HOST_ORG_PARAM, organizationId)
+  return `${HOSTS_PATH}?${params}`
 }

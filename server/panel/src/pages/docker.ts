@@ -1,4 +1,4 @@
-// Docker sekmesinin özet sayıları — saf mantık.
+// Servisler sekmesindeki Docker bölümünün özet sayıları — saf mantık.
 import type { DockerContainerReport } from '../types/api.ts'
 
 export interface DockerSummary {

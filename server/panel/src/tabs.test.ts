@@ -13,6 +13,17 @@ test('an allowed tab is used, anything else falls back to the default', () => {
   assert.equal(resolveTab('ayarlar', ids.slice(0, 3), 'genel'), 'genel', 'a tab the user may not see is not reachable through the URL')
 })
 
+test('an old tab name maps to the tab that replaced it; an alias to a tab the user cannot see falls back', () => {
+  const ids = ['genel', 'envanter', 'servisler']
+  const aliases = { sistem: 'envanter', docker: 'servisler', eski: 'yok' }
+  assert.equal(resolveTab('sistem', ids, 'genel', aliases), 'envanter')
+  assert.equal(resolveTab('docker', ids, 'genel', aliases), 'servisler')
+  assert.equal(resolveTab('envanter', ids, 'genel', aliases), 'envanter')
+  assert.equal(resolveTab('eski', ids, 'genel', aliases), 'genel')
+  // Nesnenin kendi alanı olmayan adlar (ör. "constructor") eşleme sayılmaz.
+  assert.equal(resolveTab('constructor', ids, 'genel', aliases), 'genel')
+})
+
 test('arrow keys move to the neighbour and wrap around; Home/End jump to the ends', () => {
   assert.equal(nextTab(ids, 'genel', 'ArrowRight'), 'disk')
   assert.equal(nextTab(ids, 'ayarlar', 'ArrowRight'), 'genel')

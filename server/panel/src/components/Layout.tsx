@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { Activity, Bell, Building2, ChevronDown, LayoutDashboard, Menu, Server, Settings, Users, Wrench, X, type LucideIcon } from 'lucide-react'
+import { Activity, Bell, Building2, CalendarClock, ChevronDown, LayoutDashboard, Menu, Search, Send, Server, Settings, SlidersHorizontal, Users, Wrench, X, type LucideIcon } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { SETTINGS_PATH, TOOLS_PATH, groupHasActive, inSettingsArea, inToolsArea, navigation, type NavGroup, type NavItem } from '../navigation'
 import { pageTitle } from '../pageTitle'
 import { versionInfo } from '../versionInfo'
 import { AlertCounters } from './AlertCounters'
+import { CommandPalette } from './CommandPalette'
 import { HeaderSlotContext } from './headerSlot'
 import { ProfileMenu } from './ProfileMenu'
 import { SystemTicker } from './SystemTicker'
@@ -17,13 +18,20 @@ import { useSystemNotices } from './useSystemNotices'
 
 const ICONS: Record<string, LucideIcon> = {
   ozet: LayoutDashboard,
+  sunucular: Server,
   sunucularim: Server,
   alertler: Bell,
+  kurallar: SlidersHorizontal,
+  bakim: CalendarClock,
+  bildirim: Send,
   organizasyonlar: Building2,
   kullanicilar: Users,
 }
 
 const COLLAPSED_KEY = 'healthbeat_nav_collapsed'
+
+// Arama kısayolunun gösterimi: Mac'te ⌘K, diğerlerinde Ctrl K (kısayol ikisini de kabul eder).
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform)
 
 function loadCollapsed(): string[] {
   try {
@@ -70,12 +78,25 @@ export function Layout() {
   const [navOpen, setNavOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(loadCollapsed)
   const [titleSlot, setTitleSlot] = useState<HTMLElement | null>(null)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   // Detay sayfaları (sunucu, organizasyon) başlığı kendileri verir; burada yalnızca sabit rotalar.
   useDocumentTitle(pageTitle(pathname))
   useScrollStrips()
   const version = versionInfo(typeof __PANEL_VERSION__ === 'string' ? __PANEL_VERSION__ : 'dev', useServerVersion())
   const counts = useOpenAlertCounts(!!user && can('alert.view') && can('dashboard.view'))
   const notices = useSystemNotices(!!user && can('settings.view'), version.mismatch ? version.title : null)
+
+  // Ctrl+K / ⌘K her sayfada aramayı açar (tarayıcının kendi kısayolunun yerine).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     document.body.classList.toggle('nav-open', navOpen)
@@ -128,9 +149,18 @@ export function Layout() {
           )}
         </div>
 
-        {nav.top.map((item) => (
-          <SideLink key={item.id} item={item} />
-        ))}
+        {/* Dar ekranda üst çubukta başlığa yer kalsın diye arama menünün başında durur. */}
+        <button
+          type="button"
+          className="sidebar-link sidebar-search"
+          onClick={() => {
+            setNavOpen(false)
+            setPaletteOpen(true)
+          }}
+        >
+          <Search size={16} strokeWidth={1.75} />
+          Ara
+        </button>
         {nav.groups.map((group) => (
           <SideGroup key={group.id} group={group} collapsed={collapsed.includes(group.id)} onToggle={() => toggleGroup(group.id)} />
         ))}
@@ -166,6 +196,11 @@ export function Layout() {
             <Menu size={20} strokeWidth={1.75} />
           </button>
           <div className="topbar-title" ref={setTitleSlot} />
+          <button type="button" className="search-trigger" onClick={() => setPaletteOpen(true)} aria-label="Ara" aria-keyshortcuts={IS_MAC ? 'Meta+K' : 'Control+K'}>
+            <Search size={15} strokeWidth={1.9} aria-hidden="true" />
+            <span className="search-trigger-text">Ara…</span>
+            <kbd>{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
+          </button>
           {counts && <AlertCounters counts={counts} />}
           <ProfileMenu />
         </header>
@@ -175,6 +210,8 @@ export function Layout() {
             <Outlet />
           </HeaderSlotContext.Provider>
         </main>
+
+        <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
         <footer className="statusbar">
           <span className={`version-note${version.mismatch ? ' mismatch' : ''}`} title={version.title}>

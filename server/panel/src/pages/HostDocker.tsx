@@ -8,7 +8,7 @@ import { dockerSummary, formatMB } from './docker'
 import { formatUptime } from './inventory'
 import { containerLevels, usageTone } from './usage'
 
-// Sunucu sayfasının "Docker" sekmesi: Docker sürümü, container sayıları/kaynak toplamı ve container listesi.
+// Sunucu sayfasının "Servisler" sekmesindeki Docker bölümü: Docker sürümü, container sayıları/kaynak toplamı ve container listesi.
 export function HostDocker({
   host,
   containers,

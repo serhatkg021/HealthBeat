@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { channelsApi, ownersApi } from '../api/endpoints'
-import { settingsTabPath } from '../navigation'
+import { notificationsPath } from '../navigation'
 import { SETTINGS_CHANGED, notificationGap } from '../pages/settingsForm'
 
 export interface SystemNotice {
@@ -34,7 +34,7 @@ export function useSystemNotices(canViewSettings: boolean, versionMismatch: stri
   }, [canViewSettings, pathname])
 
   const notices: SystemNotice[] = []
-  if (canViewSettings && gap) notices.push({ id: 'bildirim', text: gap, to: settingsTabPath('sistem') })
+  if (canViewSettings && gap) notices.push({ id: 'bildirim', text: gap, to: notificationsPath('kanallar') })
   if (versionMismatch) notices.push({ id: 'surum', text: versionMismatch })
   return notices
 }

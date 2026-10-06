@@ -35,11 +35,32 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   İstemci yalnızca gün verir, dosya yolu veremez. Bir günün açılması (`system.logs.view`) ve indirilmesi
   (`system.logs.download`) denetim kaydına yazılır.
 - Panel: Denetim Kaydı'nın kategori süzgecine "Sistem araçları" eklendi (log görüntüleme ve indirme kayıtları).
+- Panel: **Ctrl+K (⌘K) araması**: sunuculara (ad ya da IP), organizasyonlara ve sayfalara yazarak gidilir; yalnızca
+  kullanıcının görebildikleri listelenir.
+- Panel: uzun listelerde (organizasyon, sunucu, üst şirket seçimi) yazarak aranabilen seçim kutuları.
 - Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir.
 
 ### Değişti
-- Panel: Ayarlar sekmeli tek sayfa oldu (Sistem Araçları gibi): kartlı giriş sayfası yerine Sistem Eşikleri, Denetim Kaydı
-  ve Sistem Ayarları sekmeleri. Eski adresler (`/thresholds`, `/audit`, `/settings/system`) ilgili sekmeye yönlenir.
+- **Panel: yeni düzen.** Sol menü üç gruba ayrıldı: **İzleme** (Özet, Sunucular, Alert'ler), **Alert Yönetimi** (Alert
+  kuralları, Bakım pencereleri, Bildirim) ve **Yönetim** (Organizasyonlar, Kullanıcılar); altta Sistem Araçları ve Ayarlar.
+  - **Sunucular:** görülebilen tüm sunucuların süzülebilir listesi ve sunucu ekleme tek sayfada; operatörün "Sunucularım"
+    sayfası bununla birleşti. **Özet** sayaçlara, sorunlu sunuculara ve açık alert'lere odaklandı; sayaçlar Sunucular'ı
+    ilgili süzgeçle açar.
+  - **Sunucu sayfası** sabit altı sekme: Genel (açık sorunlar dahil), Performans (geçmiş grafikleri tek zaman seçiciyle ve
+    fiziksel diskler; eski "Detay" penceresinin yerine), Servisler (Docker), Envanter (eski "Sistem"), Alert'ler, Ayarlar.
+  - **Alert kuralları:** sistem, organizasyon ve sunucu eşikleri ile disk alert seçimi tek sayfada, kapsam seçiciyle. Sunucu
+    ayarlarında geçerli kurallar ve nereden geldikleri (devralındı / bu sunucuya özel) salt okunur gösterilir.
+  - **Bildirim:** kanallar, sistem sahipleri, bildirim kuralları (organizasyon ya da sunucu kapsamı) ve tüm organizasyonların
+    iletişim kişileri (salt okunur, aranabilir) tek sayfada. Kişiler organizasyon sayfasında düzenlenir.
+  - **Organizasyon ayarları** (ad, adres, üst şirket, silme) organizasyon listesindeki ve organizasyon sayfasındaki çarkla
+    açılan pencerede; silme pencerenin içinde ikinci bir onay ister.
+  - **Denetim Kaydı** Sistem Araçları'na taşındı; **Ayarlar** yalnızca kurulum yapılandırmasıdır (agent sürümleri, saklama,
+    oturum, panel adresi, loglama).
+  - Henüz gelmemiş özelliklerin yerleri (sistem servisleri, disk G/Ç, ağ, sıcaklık, süreçler, bekleyen güncellemeler, yeni
+    kural türleri, bakım pencereleri, Telegram/Webhook, "bu alert kime gider?") "Yakında · örnek veri" olarak gösterilir;
+    örnek veri gerçek sayaçlara ve özetlere karışmaz.
+  - Eski adresler (`/thresholds`, `/audit`, `/settings/system`, `/my-hosts` ve eski sekme/bölüm adresleri) yeni yerlerine
+    yönlenir.
 - Proje MIT lisansıyla yayınlanıyor (`LICENSE`); Docker imajları `org.opencontainers.image.licenses=MIT` etiketini taşıyor.
 
 ### Düzeltildi
@@ -48,11 +69,16 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   gönderimi SMTP sunucusuna bağlanmadan başarısız oluyor (bildirimler kuyrukta yeniden deneniyor, e-posta ile şifre
   sıfırlama kapanıyor) ve durum loga yazılıyor. Şifre panelden yeniden girilince ya da silinince kanal çalışıyor.
   Kanal yanıtına `secret_unreadable` alanı eklendi.
-- Panel: şifresi çözülemeyen e-posta kanalı alt çubuktaki uyarı şeridinde ve Ayarlar'daki kanal kartında gösteriliyor.
+- Panel: şifresi çözülemeyen e-posta kanalı alt çubuktaki uyarı şeridinde ve Bildirim → Kanallar'daki kanal kartında
+  gösteriliyor.
 - Panel: fareli cihazlarda sekme çubuklarının sağ ucunda görünen gereksiz dikey kaydırma çubuğu kaldırıldı.
 - Panel: sunucu ayarlarındaki "Kimlik bilgisini yenile" düğmesi onay sormadan eski token/secret'ı geçersiz kılıyordu;
   artık sonucunu (agent'ın `agent.json` güncellenip yeniden başlatılana kadar bağlanamayacağını) anlatan bir onay
   penceresi açılıyor.
+- Panel: pencereler, odak pencerenin dışına düştüğünde (ör. odaktaki düğme ekrandan kalktığında) Esc ile kapanmıyordu.
+- Panel: kendi bildirim kuralı olmayan sunucu ya da organizasyonda "bildirimler yalnızca sistem sahiplerine gider"
+  yazıyordu; organizasyon ya da üst organizasyon kuralları da geçerli olduğu için yanıltıcıydı. Artık "bu sunucuya /
+  organizasyona özel ek alıcı yok" yazıyor.
 
 ## [2.0.0] - 2026-10-01
 

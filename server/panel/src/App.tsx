@@ -3,17 +3,20 @@ import { Navigate, Route, BrowserRouter, Routes, useLocation } from 'react-route
 import { AuthProvider, useAuth } from './auth/AuthContext'
 import type { Permission } from './auth/permissions'
 import { Layout } from './components/Layout'
-import { LEGACY_SETTINGS_ROUTES, SETTINGS_PATH } from './navigation'
+import { ALERT_RULES_PATH, AUDIT_PATH, HOSTS_PATH, LEGACY_SETTINGS_ROUTES, MAINTENANCE_PATH, NOTIFICATIONS_PATH, SETTINGS_PATH } from './navigation'
 import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { OrganizationsPage } from './pages/OrganizationsPage'
 import { OrganizationHostsPage } from './pages/OrganizationHostsPage'
-import { MyHostsPage } from './pages/MyHostsPage'
 import { HostDetailPage } from './pages/HostDetailPage'
 import { AlertsPage } from './pages/AlertsPage'
 import { UsersPage } from './pages/UsersPage'
 import { SettingsHubPage } from './pages/SettingsHubPage'
 import { SystemToolsPage } from './pages/SystemToolsPage'
+import { MaintenancePage } from './pages/MaintenancePage'
+import { HostsPage } from './pages/HostsPage'
+import { AlertRulesPage } from './pages/AlertRulesPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ChangePasswordPage } from './pages/ChangePasswordPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
@@ -31,9 +34,11 @@ function RequireAuth({ children }: { children: ReactElement }) {
   return children
 }
 
-function RequirePermission({ permission, children }: { permission: Permission; children: ReactElement }) {
+// permission bir listeyse içlerinden biri yeterlidir.
+function RequirePermission({ permission, children }: { permission: Permission | Permission[]; children: ReactElement }) {
   const { user, can } = useAuth()
-  if (!user || !can(permission)) return <Navigate to="/" replace />
+  const any = Array.isArray(permission) ? permission : [permission]
+  if (!user || !any.some(can)) return <Navigate to="/" replace />
   return children
 }
 
@@ -85,9 +90,38 @@ export default function App() {
                 </RequirePermission>
               }
             />
-            <Route path="/my-hosts" element={<MyHostsPage />} />
+            <Route
+              path={HOSTS_PATH}
+              element={
+                <RequirePermission permission="host.view">
+                  <HostsPage />
+                </RequirePermission>
+              }
+            />
+            {/* Operatörün eski "Sunucularım" sayfası artık herkesin Sunucular sayfasıdır. */}
+            <Route path="/my-hosts" element={<Navigate to={HOSTS_PATH} replace />} />
             <Route path="/hosts/:id" element={<HostDetailPage />} />
             <Route path="/alerts" element={<AlertsPage />} />
+            <Route
+              path={ALERT_RULES_PATH}
+              element={
+                <RequirePermission permission="threshold.view">
+                  <AlertRulesPage />
+                </RequirePermission>
+              }
+            />
+            {/* Eski Eşikler sayfası (yer imleri) artık Alert kurallarının sistem kapsamıdır. */}
+            <Route path="/thresholds" element={<Navigate to={ALERT_RULES_PATH} replace />} />
+            <Route path="/audit" element={<Navigate to={AUDIT_PATH} replace />} />
+            <Route path={MAINTENANCE_PATH} element={<MaintenancePage />} />
+            <Route
+              path={NOTIFICATIONS_PATH}
+              element={
+                <RequirePermission permission={['notification.view', 'settings.view', 'contact.view']}>
+                  <NotificationsPage />
+                </RequirePermission>
+              }
+            />
             <Route
               path="/users"
               element={

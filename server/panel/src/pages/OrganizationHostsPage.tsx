@@ -1,28 +1,25 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { hostsApi, organizationsApi } from '../api/endpoints'
 import { usePagedQuery } from '../api/usePagedQuery'
-import type { Host, Organization } from '../types/api'
+import type { Organization } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
 import { useTab } from '../components/useTab'
-import { AddHostWizard } from './AddHostWizard'
 import { hostStatusLabel } from '../labels'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
-import { SecretNotice } from '../components/SecretNotice'
 import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
 import { AgentBadge } from '../components/AgentBadge'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import { osLabel } from './inventory'
-import { BellRing, Contact, Plus, Server, Settings, SlidersHorizontal } from 'lucide-react'
+import { Contact, Plus, Server, Settings } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { OrganizationContacts } from './OrganizationContacts'
-import { NotificationRules } from './NotificationRules'
-import { OrganizationThresholds } from './OrganizationThresholds'
-import { OrganizationSettings } from './OrganizationSettings'
+import { OrganizationSettingsModal } from './OrganizationSettings'
 import { useDocumentTitle } from '../components/useDocumentTitle'
+import { addHostPath, alertRulesPath, notificationsPath } from '../navigation'
 
 const PAGE_SIZE = 20
 
@@ -35,8 +32,6 @@ export function OrganizationHostsPage() {
   const [org, setOrg] = useState<Organization | null>(null)
   const [allOrgs, setAllOrgs] = useState<Organization[]>([]) // üst zincir ve üst şirket seçimi için
   useDocumentTitle(org?.name)
-  const [wizardKey, setWizardKey] = useState(0) // sihirbazı sıfırlar (vazgeç / eklendi)
-  const [revealedHost, setRevealedHost] = useState<Host | null>(null)
 
   const {
     items: hosts,
@@ -48,7 +43,6 @@ export function OrganizationHostsPage() {
     q,
     setSearch,
     error,
-    reload,
   } = usePagedQuery(
     (p) => {
       if (!id) return Promise.resolve({ items: [], total: 0 })
@@ -65,15 +59,15 @@ export function OrganizationHostsPage() {
   }
   useEffect(loadOrg, [id])
 
-  const tabIds = ['sunucular', ...(canAddHost ? ['ekle'] : []), 'kisiler', 'bildirimler', 'esikler', ...(canSeeSettings ? ['ayarlar'] : [])]
+  const tabIds = ['sunucular', 'kisiler']
+  const [params] = useSearchParams()
+  const navigate = useNavigate()
+  // Ayarlar pencere olarak açılır; eski "Ayarlar" sekmesinin adresi (?sekme=ayarlar) pencereyi açık getirir.
+  const [settingsOpen, setSettingsOpen] = useState(() => canSeeSettings && params.get('sekme') === 'ayarlar')
   const [tab, setTab] = useTab(tabIds, 'sunucular')
   const tabItems: TabItem[] = [
     { id: 'sunucular', label: 'Sunucular', badge: total, icon: Server },
-    ...(canAddHost ? [{ id: 'ekle', label: 'Sunucu ekle', icon: Plus }] : []),
     { id: 'kisiler', label: 'İletişim kişileri', icon: Contact },
-    { id: 'bildirimler', label: 'Bildirim kuralları', icon: BellRing },
-    { id: 'esikler', label: 'Eşikler', icon: SlidersHorizontal },
-    ...(canSeeSettings ? [{ id: 'ayarlar', label: 'Ayarlar', icon: Settings }] : []),
   ]
   // Üst zincir: bu organizasyonun üst şirketleri (adları bilgi olarak görünür).
   const ancestors: Organization[] = []
@@ -83,6 +77,13 @@ export function OrganizationHostsPage() {
     ancestors.unshift(parent)
     cur = parent.parent_organization_id
   }
+
+  // Eski "Eşikler" sekmesi artık Alert kuralları sayfasında bu organizasyonun kapsamıdır.
+  if (id && params.get('sekme') === 'esikler') return <Navigate to={alertRulesPath({ kind: 'org', id })} replace />
+  // Eski "Bildirim kuralları" sekmesi artık Bildirim sayfasında bu organizasyonun kapsamıdır.
+  if (id && params.get('sekme') === 'bildirimler') return <Navigate to={notificationsPath('kurallar', { kind: 'org', id })} replace />
+  // Eski "Sunucu ekle" sekmesi artık Sunucular sayfasında, bu organizasyon seçili.
+  if (id && params.get('sekme') === 'ekle') return <Navigate to={addHostPath(id)} replace />
 
   return (
     <div>
@@ -98,23 +99,47 @@ export function OrganizationHostsPage() {
             </>
           ) : undefined
         }
+        actions={
+          id && (
+            <>
+              {canAddHost && (
+                <Link className="btn btn-sm" to={addHostPath(id)}>
+                  <Plus size={15} strokeWidth={1.9} />
+                  Sunucu ekle
+                </Link>
+              )}
+              {can('threshold.view') && (
+                <Link className="btn btn-sm" to={alertRulesPath({ kind: 'org', id })}>
+                  Alert kuralları →
+                </Link>
+              )}
+              {can('notification.view') && (
+                <Link className="btn btn-sm" to={notificationsPath('kurallar', { kind: 'org', id })}>
+                  Bildirim kuralları →
+                </Link>
+              )}
+              {canSeeSettings && org && (
+                <button type="button" className="btn btn-sm" onClick={() => setSettingsOpen(true)}>
+                  <Settings size={15} strokeWidth={1.75} />
+                  Ayarlar
+                </button>
+              )}
+            </>
+          )
+        }
+      />
+      <OrganizationSettingsModal
+        organization={settingsOpen ? org : null}
+        orgs={allOrgs}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={loadOrg}
+        onDeleted={() => navigate('/organizations')}
       />
       {error && <div className="error-banner">{error}</div>}
 
       <Tabs items={tabItems} active={tab} onChange={setTab} label="Organizasyon sunucu bölümleri" />
 
       <TabPanel id="sunucular" active={tab}>
-        {revealedHost && (
-          <SecretNotice
-            title={`${revealedHost.title} oluşturuldu — bu kimlik bilgisi bir daha gösterilmeyecek; host config dosyasına şimdi kopyalayın`}
-            text={
-              revealedHost.api_token
-                ? `host_id: ${revealedHost.id}\napi_token: ${revealedHost.api_token}`
-                : `host_id: ${revealedHost.id}\npull_secret: ${revealedHost.pull_secret}`
-            }
-            onClose={() => setRevealedHost(null)}
-          />
-        )}
         <div className="toolbar">
           <SearchInput value={q} onChange={setSearch} placeholder="Sunucu adı ya da IP ara…" />
         </div>
@@ -168,44 +193,6 @@ export function OrganizationHostsPage() {
         </TabPanel>
       )}
 
-      {id && (
-        <TabPanel id="bildirimler" active={tab}>
-          <div className="page-readable">
-            <NotificationRules scope={{ organizationId: id }} canEdit={can('notification.edit')} />
-          </div>
-        </TabPanel>
-      )}
-
-      {org && (
-        <TabPanel id="esikler" active={tab}>
-          <OrganizationThresholds organization={org} orgs={allOrgs} canEdit={can('threshold.edit')} />
-        </TabPanel>
-      )}
-
-      {org && canSeeSettings && (
-        <TabPanel id="ayarlar" active={tab}>
-          <OrganizationSettings key={org.id + org.name + (org.parent_organization_id ?? '')} organization={org} orgs={allOrgs} onChanged={loadOrg} />
-        </TabPanel>
-      )}
-
-      {id && canAddHost && (
-        <TabPanel id="ekle" active={tab} keepMounted>
-          <AddHostWizard
-            key={wizardKey}
-            organizationId={id}
-            onCancel={() => {
-              setWizardKey((k) => k + 1)
-              setTab('sunucular')
-            }}
-            onCreated={(created) => {
-              setRevealedHost(created)
-              setWizardKey((k) => k + 1)
-              setTab('sunucular')
-              reload()
-            }}
-          />
-        </TabPanel>
-      )}
     </div>
   )
 }

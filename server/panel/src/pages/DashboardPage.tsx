@@ -20,11 +20,8 @@ import type { DashboardOverview } from '../types/api'
 import { Drawer } from '../components/Drawer'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
-import { Pagination } from '../components/Pagination'
-import { SearchInput } from '../components/SearchInput'
 import { StatTile } from '../components/StatTile'
 import { StatusBadge } from '../components/StatusBadge'
-import { AgentBadge } from '../components/AgentBadge'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import { agentKind, needsUpdate } from './agentStatus'
 import { alertLevelLabel, alertLevelTone, alertMetricLabel, hostStatusLabel } from '../labels'
@@ -34,13 +31,16 @@ import {
   activeCount,
   applyFilters,
   emptyFilters,
+  filtersHref,
   parseFilters,
+  problemRows,
   pruneOrgs,
   writeFilters,
   type DashboardFilters,
 } from './dashboardFilters'
+import { HOSTS_PATH } from '../navigation'
 
-const PAGE = 10
+const PROBLEM_LIMIT = 8
 const REFRESH_MS = 60_000
 const ALERT_FEED = 8
 
@@ -52,14 +52,6 @@ export function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
-  const [search, setSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSizeState] = useState(PAGE)
-
-  function setPageSize(n: number) {
-    setPageSizeState(n)
-    setPage(1)
-  }
 
   const fetchOverview = useCallback(
     () =>
@@ -93,25 +85,15 @@ export function DashboardPage() {
   }, [params, data, organizations])
 
   function setFilters(next: DashboardFilters) {
-    setPage(1)
     setParams((prev) => writeFilters(prev, next), { replace: true })
-  }
-
-  function setSearchAndResetPage(v: string) {
-    setSearch(v)
-    setPage(1)
   }
 
   const view = useMemo(() => (data ? applyFilters(data, filters, now, agentPolicy) : null), [data, filters, now, agentPolicy])
   // Görünen sunucular arasında agent'ı güncellenmesi gerekenlerin sayısı (eski / güncelleme var / desteklenmiyor).
   const agentsToUpdate = useMemo(() => (view ? view.rows.filter((r) => needsUpdate(agentKind(r.host, agentPolicy))).length : 0), [view, agentPolicy])
-  const searched = useMemo(() => {
-    if (!view) return []
-    const q = search.trim().toLowerCase()
-    if (!q) return view.rows
-    return view.rows.filter(({ host: c }) => c.title.toLowerCase().includes(q) || c.ip.toLowerCase().includes(q))
-  }, [view, search])
-  const pageRows = useMemo(() => searched.slice((page - 1) * pageSize, page * pageSize), [searched, page, pageSize])
+  const problems = useMemo(() => (view ? problemRows(view.rows, PROBLEM_LIMIT) : []), [view])
+  // Kutucuklar Sunucular sayfasını Özet'in süzgeçlerine ek olarak kendi koşuluyla açar.
+  const hostsHref = (extra: Partial<DashboardFilters> = {}) => filtersHref(HOSTS_PATH, { ...filters, ...extra })
   const orgName = useMemo(() => new Map(organizations.map((o) => [o.id, o.name])), [organizations])
   const hostTitles = useMemo(() => new Map((data?.hosts ?? []).map((c) => [c.id, c.title])), [data])
   const filterCount = activeCount(filters)
@@ -168,104 +150,61 @@ export function DashboardPage() {
         <>
           <h2 className="section-title">Sunucular</h2>
           <div className="stat-grid">
-            <StatTile label="Toplam sunucu" value={counts.total} icon={Server} tone="accent" />
-            <StatTile label="Çevrimiçi" value={counts.online} icon={Wifi} tone="good" />
-            <StatTile label="Çevrimdışı" value={counts.offline} icon={ServerOff} tone={counts.offline > 0 ? 'critical' : undefined} />
-            <StatTile label="Agent güncellenmeli" value={agentsToUpdate} icon={CircleArrowUp} tone={agentsToUpdate > 0 ? 'warning' : undefined} />
+            <StatTile label="Toplam sunucu" value={counts.total} icon={Server} tone="accent" to={hostsHref()} />
+            <StatTile label="Çevrimiçi" value={counts.online} icon={Wifi} tone="good" to={hostsHref({ status: 'online' })} />
+            <StatTile label="Çevrimdışı" value={counts.offline} icon={ServerOff} tone={counts.offline > 0 ? 'critical' : undefined} to={hostsHref({ status: 'offline' })} />
+            <StatTile
+              label="Agent güncellenmeli"
+              value={agentsToUpdate}
+              icon={CircleArrowUp}
+              tone={agentsToUpdate > 0 ? 'warning' : undefined}
+              to={hostsHref({ agentUpdate: true })}
+            />
           </div>
           <h2 className="section-title">Açık alert’ler</h2>
           <div className="stat-grid">
-            <StatTile label="Açık alert" value={counts.alerts} icon={Bell} tone="accent" />
-            <StatTile label="Kritik" value={counts.critical} icon={ServerCrash} tone={counts.critical > 0 ? 'critical' : undefined} />
-            <StatTile label="Uyarı" value={counts.warning} icon={AlertTriangle} tone={counts.warning > 0 ? 'warning' : undefined} />
+            <StatTile label="Açık alert" value={counts.alerts} icon={Bell} tone="accent" to={hostsHref({ withAlerts: true })} />
+            <StatTile
+              label="Kritik"
+              value={counts.critical}
+              icon={ServerCrash}
+              tone={counts.critical > 0 ? 'critical' : undefined}
+              to={hostsHref({ levels: ['critical'] })}
+            />
+            <StatTile label="Uyarı" value={counts.warning} icon={AlertTriangle} tone={counts.warning > 0 ? 'warning' : undefined} to={hostsHref({ levels: ['warning'] })} />
           </div>
 
           <div className="card table-card">
             <div className="card-head">
               <h2 className="card-title">
                 <Server size={16} strokeWidth={1.75} />
-                Sunucular
-                <span className="tab-badge">{searched.length}</span>
+                Sorunlu sunucular
+                <span className="tab-badge">{problems.length}</span>
               </h2>
-              <SearchInput value={search} onChange={setSearchAndResetPage} placeholder="Sunucu adı ya da IP ara…" />
+              <Link to={hostsHref()} className="card-link">
+                Tüm sunucular
+                <ArrowRight size={14} strokeWidth={2} />
+              </Link>
             </div>
-            <Pagination page={page} pageSize={pageSize} total={searched.length} onPageChange={setPage} onPageSizeChange={setPageSize} />
-            <table className="stack">
-              <thead>
-                <tr>
-                  <th>Sunucu</th>
-                  {organizations.length > 0 && <th>Organizasyon</th>}
-                  <th>IP</th>
-                  <th>Mod</th>
-                  <th>Durum</th>
-                  <th>Agent</th>
-                  <th>Alert’ler</th>
-                  <th>Son görülme</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pageRows.map(({ host: c, critical, warning }) => (
-                  <tr key={c.id}>
-                    <td className="primary">
+            {problems.length === 0 ? (
+              <EmptyState icon={CheckCircle2}>{data.hosts.length === 0 ? 'Henüz sunucu yok.' : 'Çevrimdışı ya da açık alert’i olan sunucu yok.'}</EmptyState>
+            ) : (
+              <ul className="feed">
+                {problems.map(({ host: c, critical, warning }) => (
+                  <li key={c.id}>
+                    <StatusBadge tone={c.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(c.status)}</StatusBadge>
+                    <div className="feed-main">
                       <Link to={`/hosts/${c.id}`}>{c.title}</Link>
-                    </td>
-                    {organizations.length > 0 && (
-                      <td className="muted" data-label="Organizasyon">
-                        {orgName.get(c.organization_id) ?? '—'}
-                      </td>
-                    )}
-                    <td className="muted mono" data-label="IP">
-                      {c.ip}
-                    </td>
-                    <td className="muted" data-label="Mod">
-                      {c.mode}
-                    </td>
-                    <td data-label="Durum">
-                      <StatusBadge tone={c.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(c.status)}</StatusBadge>
-                    </td>
-                    <td data-label="Agent">
-                      <AgentBadge host={c} policy={agentPolicy} />
-                    </td>
-                    <td data-label="Alert’ler">
-                      {critical + warning === 0 ? (
-                        <span className="muted">—</span>
-                      ) : (
-                        <span className="row row-tight">
-                          {critical > 0 && <StatusBadge tone="critical">{critical} kritik</StatusBadge>}
-                          {warning > 0 && <StatusBadge tone="warning">{warning} uyarı</StatusBadge>}
-                        </span>
-                      )}
-                    </td>
-                    <td className="muted" data-label="Son görülme">
-                      {c.last_seen ? new Date(c.last_seen).toLocaleString() : '—'}
-                    </td>
-                  </tr>
+                      <span className="muted">{orgName.get(c.organization_id) ?? c.ip}</span>
+                    </div>
+                    <span className="row row-tight">
+                      {critical > 0 && <StatusBadge tone="critical">{critical} kritik</StatusBadge>}
+                      {warning > 0 && <StatusBadge tone="warning">{warning} uyarı</StatusBadge>}
+                    </span>
+                  </li>
                 ))}
-                {searched.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="empty-cell">
-                      <EmptyState icon={Server}>
-                        {data.hosts.length === 0 ? 'Henüz sunucu yok.' : 'Filtrelerle eşleşen sunucu yok.'}
-                        {data.hosts.length > 0 && (filterCount > 0 || search) && (
-                          <div style={{ marginTop: 10 }}>
-                            <button
-                              type="button"
-                              className="btn btn-sm"
-                              onClick={() => {
-                                setSearchAndResetPage('')
-                                setFilters(emptyFilters())
-                              }}
-                            >
-                              Filtreleri temizle
-                            </button>
-                          </div>
-                        )}
-                      </EmptyState>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+              </ul>
+            )}
           </div>
 
           <div className="card table-card">

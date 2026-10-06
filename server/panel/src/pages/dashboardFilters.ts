@@ -211,3 +211,19 @@ export function activeChips(f: DashboardFilters, orgName: (id: string) => string
   if (f.since) chips.push({ key: 'since', label: `Alert zamanı: ${SINCE_LABELS[f.since]}`, without: { ...f, since: '' } })
   return chips
 }
+
+// Özet'teki "Sorunlu sunucular": çevrimdışı ya da açık alert'i olanlar, en ağırdan başlayarak (kritik alert sayısı,
+// sonra çevrimdışı olmak, sonra uyarı sayısı, sonra ad).
+export function problemRows(rows: ServerRow[], limit: number): ServerRow[] {
+  const offline = (r: ServerRow) => (r.host.status === 'offline' ? 1 : 0)
+  return rows
+    .filter((r) => offline(r) === 1 || r.critical + r.warning > 0)
+    .sort((a, b) => b.critical - a.critical || offline(b) - offline(a) || b.warning - a.warning || a.host.title.localeCompare(b.host.title, 'tr'))
+    .slice(0, limit)
+}
+
+// filtersHref, süzgeçleri adreste taşıyan bir sayfa bağlantısıdır (Özet'ten Sunucular'a aynı süzgeçlerle geçmek için).
+export function filtersHref(path: string, f: DashboardFilters): string {
+  const query = writeFilters(new URLSearchParams(), f).toString()
+  return query ? `${path}?${query}` : path
+}
