@@ -180,3 +180,20 @@ func FromCapacity(c collector.CapacityStats) *Capacity {
 	return &Capacity{FileHandles: c.FileHandles, FileHandlesMax: c.FileHandlesMax, Conntrack: c.Conntrack,
 		ConntrackMax: c.ConntrackMax, Tasks: c.Tasks, PIDMax: c.PIDMax}
 }
+
+func FromTimeSync(t *collector.TimeSyncInfo) *TimeSync {
+	if t == nil {
+		return nil
+	}
+	out := &TimeSync{Enabled: t.Enabled, Synchronized: t.Synchronized, Daemon: t.Daemon, LocalRTC: t.LocalRTC,
+		Server: t.Server, ServerAddress: t.ServerAddress, ConfiguredServers: t.ConfiguredServers, Stratum: t.Stratum,
+		Leap: t.Leap, OffsetMs: t.OffsetMs, DelayMs: t.DelayMs, JitterMs: t.JitterMs, RootDistanceMs: t.RootDistanceMs,
+		PollS: t.PollS, Ignored: t.Ignored}
+	if !t.LastSync.IsZero() {
+		out.LastSync = t.LastSync.UTC().Format(time.RFC3339)
+	}
+	for _, s := range t.Sources {
+		out.Sources = append(out.Sources, TimeSource{Name: s.Name, State: s.State, Reach: s.Reach, OffsetMs: s.OffsetMs})
+	}
+	return out
+}

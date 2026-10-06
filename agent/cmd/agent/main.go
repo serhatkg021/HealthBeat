@@ -27,6 +27,7 @@ func main() {
 	configPath := flag.String("config", "config.json", "path to agent config file")
 	showVersion := flag.Bool("version", false, "print the agent version and exit")
 	printInventory := flag.Bool("print-inventory", false, "print the machine inventory this agent would report (JSON) and exit; needs no config")
+	printReport := flag.Bool("print-report", false, "print a full report as this agent would send it (JSON; takes a few seconds to measure rates) and exit; reads -config if it exists for disk_mounts")
 	checkConfig := flag.Bool("check-config", false, "validate the config file and exit (0 = valid); install.sh upgrade uses it to test an existing config against a new binary")
 	flag.Parse()
 
@@ -43,6 +44,15 @@ func main() {
 			log.Fatalf("inventory: %v", err)
 		}
 		fmt.Println(string(out))
+		return
+	}
+
+	if *printReport {
+		mounts := []string{"/"}
+		if cfg, err := config.Load(*configPath); err == nil {
+			mounts = cfg.DiskMounts
+		}
+		printFullReport(mounts)
 		return
 	}
 
@@ -63,6 +73,24 @@ func main() {
 		return
 	}
 	runPushMode(ctx, cfg)
+}
+
+// printFullReport, gönderilecek raporu yazdırır. Oranlar (disk G/Ç, ağ, swap, süreç CPU'su) iki ölçüm arasındaki farktır:
+// ilk rapordan 2 sn sonra ikinci bir rapor kurulup o yazdırılır; süreç CPU sıralaması 60 sn'lik aralık gerektirdiği için
+// burada görünmez.
+func printFullReport(mounts []string) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	builder := report.New(mounts, func() time.Duration { return 30 * time.Second })
+	builder.Start(ctx)
+	builder.WaitReady(ctx, 10*time.Second)
+	builder.Build(ctx)
+	time.Sleep(2 * time.Second)
+	out, err := json.MarshalIndent(builder.Build(ctx), "", "  ")
+	if err != nil {
+		log.Fatalf("report: %v", err)
+	}
+	fmt.Println(string(out))
 }
 
 func runPullMode(ctx context.Context, cfg *config.Config) {

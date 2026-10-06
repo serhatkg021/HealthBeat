@@ -36,6 +36,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
     listelerinin en son güncellendiği an.
   - Kapasite sınırları (`capacity`): açık dosya tanıtıcısı, bağlantı izleme tablosu ve görev sayısının sınırlarına göre
     doluluğu.
+  - Saat senkronunun ayrıntısı (`time_sync`, 5 dakikada bir): hangi daemon (systemd-timesyncd, chrony, ntpd), NTP
+    sunucusu, stratum, saat farkı, gecikme, jitter, kök mesafesi, son senkron zamanı, leap durumu ve kaynakların durumu
+    (seçili, aday, yanlış zaman veriyor, ulaşılamıyor, kullanılamaz). timesyncd ayrıntısı systemd 240+ gerektirir.
+- `--print-report`: agent'ın göndereceği tam raporu (protokol 4 alanları dahil) JSON olarak yazdırır; oranlar için iki
+  ölçüm alır (~4 sn).
 
 ### Değişti
 - **Yavaş kaynaklar arka planda toplanıyor:** Docker ve envanterin komut gerektiren alanları (saat senkronu, başarısız

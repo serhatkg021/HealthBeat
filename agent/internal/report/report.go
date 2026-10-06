@@ -25,6 +25,9 @@ const (
 	// updatesEvery: bekleyen güncellemeler saatte bir (paket listeleri zaten günde bir güncellenir).
 	updatesEvery   = time.Hour
 	updatesTimeout = 35 * time.Second
+	// timeSyncEvery: saat senkronunun ayrıntısı 5 dakikada bir (birkaç komut; NTP sorgu aralığı zaten dakikalar).
+	timeSyncEvery   = 5 * time.Minute
+	timeSyncTimeout = 10 * time.Second
 	// FirstReportWait, açılıştaki ilk raporun yavaş kaynakların ilk sonucunu en çok ne kadar beklediğidir.
 	FirstReportWait = 3 * time.Second
 )
@@ -41,6 +44,7 @@ type Builder struct {
 	svcReport  *serviceReporter
 	processes  *collector.Background[collector.ProcessSummary]
 	updates    *collector.Background[*collector.UpdatesInfo]
+	timeSync   *collector.Background[*collector.TimeSyncInfo]
 }
 
 // New, toplayıcıları kurar; interval, yavaş kaynakların her rapor aralığında toplananlarının (Docker) aralığıdır.
@@ -60,6 +64,8 @@ func New(diskMounts []string, interval func() time.Duration) *Builder {
 			collector.NewProcessCollector().Collect),
 		updates: collector.NewBackground("updates", every(updatesEvery), updatesTimeout,
 			collector.NewUpdatesCollector().Collect),
+		timeSync: collector.NewBackground("time sync", every(timeSyncEvery), timeSyncTimeout,
+			collector.NewTimeSyncCollector().Collect),
 	}
 }
 
@@ -71,6 +77,7 @@ func (b *Builder) Start(ctx context.Context) {
 	b.services.Start(ctx)
 	b.processes.Start(ctx)
 	b.updates.Start(ctx)
+	b.timeSync.Start(ctx)
 	b.host.Start(ctx)
 }
 
@@ -78,7 +85,8 @@ func (b *Builder) Start(ctx context.Context) {
 func (b *Builder) WaitReady(ctx context.Context, d time.Duration) {
 	deadline := time.Now().Add(d)
 	for _, wait := range []func(context.Context, time.Duration){
-		b.docker.WaitReady, b.services.WaitReady, b.processes.WaitReady, b.updates.WaitReady, b.host.WaitReady,
+		b.docker.WaitReady, b.services.WaitReady, b.processes.WaitReady, b.updates.WaitReady, b.timeSync.WaitReady,
+		b.host.WaitReady,
 	} {
 		left := time.Until(deadline)
 		if left <= 0 {
@@ -114,6 +122,7 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		processes = pusher.FromProcesses(p)
 	}
 	updates, _ := b.updates.Latest()
+	timeSync, _ := b.timeSync.Latest()
 	// Sıcaklık yalnızca fiziksel makinede: sanal makinelerin bildirdiği (acpitz gibi) sensörler sahte değerdir.
 	var temperatures []pusher.Temperature
 	if v := hostInfo.Virtualization; v == nil || (v.Kind != "vm" && v.Kind != "container") {
@@ -142,5 +151,6 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		Capacity:     pusher.FromCapacity(collector.ReadCapacity("")),
 		Processes:    processes,
 		Updates:      pusher.FromUpdates(updates),
+		TimeSync:     pusher.FromTimeSync(timeSync),
 	}
 }
