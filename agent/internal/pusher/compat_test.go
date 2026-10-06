@@ -43,13 +43,14 @@ func full() MetricsPayload {
 	inodes := 42.5
 	p.Disk = []DiskUsage{{Mount: "/", UsedPct: 40, Total: 100, Free: 60, InodesUsedPct: &inodes}}
 	p.HostInfo = &collector.HostInfo{Hostname: "h", OS: &collector.OSInfo{PrettyName: "Ubuntu 24.04"}}
+	withV4(&p)
 	return p
 }
 
 // hasHardware, çekirdek dışı (sonradan eklenen) herhangi bir alan varsa true: donanım özeti, envanter ya da
 // disk girdisindeki inode alanı.
 func hasHardware(p MetricsPayload) bool {
-	if p.CPUCores != 0 || p.RAMTotalMB != 0 || p.PhysicalDisks != nil || p.HostInfo != nil {
+	if p.CPUCores != 0 || p.RAMTotalMB != 0 || p.PhysicalDisks != nil || p.HostInfo != nil || hasV4(p) {
 		return true
 	}
 	for _, d := range p.Disk {
@@ -76,7 +77,7 @@ func TestCoreDropsHardwareButKeepsCoreFields(t *testing.T) {
 		t.Errorf("Core() lost core fields: %+v", core)
 	}
 	b, _ := json.Marshal(core)
-	for _, k := range []string{"cpu_cores", "ram_total_mb", "physical_disks", "host_info", "inodes_used_pct"} {
+	for _, k := range append([]string{"cpu_cores", "ram_total_mb", "physical_disks", "host_info", "inodes_used_pct"}, v4Keys...) {
 		if strings.Contains(string(b), k) {
 			t.Errorf("core JSON contains %s: %s", k, b)
 		}
@@ -214,11 +215,21 @@ func TestCompatAgainstAStrictLegacyServer(t *testing.T) {
 		Total   int64   `json:"total"`
 		Free    int64   `json:"free"`
 	}
+	// Eski server'ın bildiği container girdisi: protokol 4'ün sağlık/çıkış kodu/OOM alanları YOK.
+	type legacyContainer struct {
+		Name          string  `json:"name"`
+		Image         string  `json:"image"`
+		Status        string  `json:"status"`
+		CPUPct        float64 `json:"cpu_pct"`
+		RAMMB         float64 `json:"ram_mb"`
+		RestartCount  int     `json:"restart_count"`
+		UptimeSeconds int64   `json:"uptime_seconds"`
+	}
 	type legacyBody struct {
 		CPUUsagePct      float64           `json:"cpu_usage_pct"`
 		RAMUsagePct      float64           `json:"ram_usage_pct"`
 		Disk             []legacyDisk      `json:"disk"`
-		DockerContainers []DockerContainer `json:"docker_containers"`
+		DockerContainers []legacyContainer `json:"docker_containers"`
 	}
 	var accepted []legacyBody
 	rejected := 0
