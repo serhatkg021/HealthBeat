@@ -200,3 +200,45 @@ func TestDockerContainersStoreHealth(t *testing.T) {
 		}
 	}
 }
+
+// İzlenen servis seçimi sunucuya özeldir, tamamen değiştirilir ve raporlanmayan adları da tutar.
+func TestWatchedServices(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	hosts := store.NewHosts(pool, testdb.SecretBox(t))
+	org := testdb.Org(t, pool, "o")
+	host := testdb.PushHost(t, pool, org, "h", "x")
+	other := testdb.PushHost(t, pool, org, "other", "x")
+
+	if err := hosts.SaveServices(ctx, host, &model.Services{Full: true, Items: []model.Service{
+		{Name: "a.service", Active: "active"}, {Name: "b.service", Active: "failed"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hosts.SetWatchedServices(ctx, host, []string{"b.service", "gone.service"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := hosts.SetWatchedServices(ctx, other, []string{"a.service"}); err != nil {
+		t.Fatal(err)
+	}
+	watched, err := hosts.WatchedServices(ctx, host)
+	if err != nil || fmt.Sprint(watched) != "[b.service gone.service]" {
+		t.Fatalf("watched = %v, %v", watched, err)
+	}
+	services, err := hosts.Services(ctx, host)
+	if err != nil || len(services) != 2 || services[0].Watched || !services[1].Watched {
+		t.Fatalf("services = %+v, %v", services, err)
+	}
+
+	if err := hosts.SetWatchedServices(ctx, host, nil); err != nil {
+		t.Fatal(err)
+	}
+	if watched, err := hosts.WatchedServices(ctx, host); err != nil || len(watched) != 0 {
+		t.Fatalf("after clearing: %v, %v", watched, err)
+	}
+	if watched, _ := hosts.WatchedServices(ctx, other); fmt.Sprint(watched) != "[a.service]" {
+		t.Fatalf("other host's selection changed: %v", watched)
+	}
+	if err := hosts.SetWatchedServices(ctx, org, []string{"x"}); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("unknown host: err=%v, want ErrNotFound", err)
+	}
+}

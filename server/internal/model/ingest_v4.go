@@ -2,8 +2,12 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"math"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // Protokol 4'ün alanları: sistem sağlığı ve performans (bkz. docs/COMPATIBILITY.md §2). Hepsi isteğe bağlıdır ve
@@ -711,4 +715,47 @@ func NextSystemState(prev *SystemState, r MetricsIngestRequest, now time.Time) *
 		return nil
 	}
 	return &s
+}
+
+// ---------------------------------------------------------------- okuma ve izleme seçimi
+
+// HostService, bir sunucunun saklanan servisidir (GET /hosts/:id/services). Watched, servisin izlenen servisler
+// arasında olup olmadığıdır: izlenen servis çalışmazsa alert üretir.
+type HostService struct {
+	Name        string     `json:"name"`
+	Description string     `json:"description,omitempty"`
+	Active      string     `json:"active"`
+	Sub         string     `json:"sub,omitempty"`
+	Since       *time.Time `json:"since,omitempty"`
+	Restarts    *int       `json:"restarts,omitempty"`
+	Enabled     string     `json:"enabled,omitempty"`
+	UpdatedAt   time.Time  `json:"updated_at"` // satırın içeriğinin en son değiştiği an
+	Watched     bool       `json:"watched"`
+}
+
+const maxWatchedServices = 256
+
+// ValidateServiceList, izlenen servis seçimini denetler. Adlar agent'ın bildirdiği gibi birebir karşılaştırılır; bu
+// yüzden normalleştirme yapılmaz. Şu an raporlanmayan bir servis de seçilebilir (kaldırılmış ya da geçici olarak
+// görünmeyen servisin seçimi kaybolmasın).
+func ValidateServiceList(names []string) error {
+	if len(names) > maxWatchedServices {
+		return fmt.Errorf("en fazla %d servis izlenebilir", maxWatchedServices)
+	}
+	seen := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		switch {
+		case strings.TrimSpace(n) == "":
+			return errors.New("servis adı boş olamaz")
+		case len(n) > maxServiceText:
+			return fmt.Errorf("servis adı %d bayttan uzun olamaz", maxServiceText)
+		case strings.IndexFunc(n, unicode.IsControl) >= 0:
+			return errors.New("servis adı kontrol karakteri içeremez")
+		}
+		if _, dup := seen[n]; dup {
+			return fmt.Errorf("%q iki kez listelenmiş", n)
+		}
+		seen[n] = struct{}{}
+	}
+	return nil
 }

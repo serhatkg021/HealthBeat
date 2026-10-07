@@ -169,7 +169,7 @@ func (s *Metrics) ReplaceDockerContainers(ctx context.Context, hostID uuid.UUID,
 // Her zaman HAM satırları döndürür — hiçbir kovalama/ortalama yapmaz.
 func (s *Metrics) ListByHostAndRange(ctx context.Context, hostID uuid.UUID, from, to time.Time) ([]model.MetricPoint, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT recorded_at, cpu_usage_pct, ram_usage_pct, disk_json
+		`SELECT `+metricPointColumns+`
 		 FROM metrics
 		 WHERE host_id = $1 AND recorded_at BETWEEN $2 AND $3
 		 ORDER BY recorded_at`,
@@ -182,19 +182,31 @@ func (s *Metrics) ListByHostAndRange(ctx context.Context, hostID uuid.UUID, from
 
 	points := []model.MetricPoint{}
 	for rows.Next() {
-		var p model.MetricPoint
-		var diskJSON []byte
-		if err := rows.Scan(&p.Timestamp, &p.CPUUsagePct, &p.RAMUsagePct, &diskJSON); err != nil {
+		p, err := scanMetricPoint(rows)
+		if err != nil {
 			return nil, err
-		}
-		if len(diskJSON) > 0 {
-			if err := json.Unmarshal(diskJSON, &p.Disk); err != nil {
-				return nil, err
-			}
 		}
 		points = append(points, p)
 	}
 	return points, rows.Err()
+}
+
+const metricPointColumns = `recorded_at, cpu_usage_pct, ram_usage_pct, disk_json, system_json, disk_io_json, net_io_json`
+
+// scanMetricPoint, metricPointColumns sırasıyla bir satırı okur. Protokol 4 sütunları çözülmeden (saklandığı gibi)
+// alınır; NULL ise alan boş kalır.
+func scanMetricPoint(row interface{ Scan(...any) error }) (model.MetricPoint, error) {
+	var p model.MetricPoint
+	var diskJSON []byte
+	if err := row.Scan(&p.Timestamp, &p.CPUUsagePct, &p.RAMUsagePct, &diskJSON, &p.System, &p.DiskIO, &p.NetIO); err != nil {
+		return model.MetricPoint{}, err
+	}
+	if len(diskJSON) > 0 {
+		if err := json.Unmarshal(diskJSON, &p.Disk); err != nil {
+			return model.MetricPoint{}, err
+		}
+	}
+	return p, nil
 }
 
 // PurgeOlderThan, cutoff'tan eski metrik örneklerini en eskiden başlayarak, tek bir ifade
@@ -211,7 +223,8 @@ func (s *Metrics) PurgeOlderThan(ctx context.Context, cutoff time.Time, batchSiz
 // docs/MIMARI.md bölüm 7: GET /hosts/:id/docker).
 func (s *Metrics) LatestDockerContainers(ctx context.Context, hostID uuid.UUID) ([]model.DockerContainerReport, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT name, image, status, cpu_pct, ram_mb, restart_count, uptime_seconds
+		`SELECT name, image, status, cpu_pct, ram_mb, restart_count, uptime_seconds,
+		        COALESCE(health, ''), health_failing_streak, exit_code, oom_killed
 		 FROM docker_containers
 		 WHERE host_id = $1
 		 ORDER BY name`,
@@ -225,7 +238,8 @@ func (s *Metrics) LatestDockerContainers(ctx context.Context, hostID uuid.UUID) 
 	containers := []model.DockerContainerReport{}
 	for rows.Next() {
 		var c model.DockerContainerReport
-		if err := rows.Scan(&c.Name, &c.Image, &c.Status, &c.CPUPct, &c.RAMMB, &c.RestartCount, &c.UptimeSeconds); err != nil {
+		if err := rows.Scan(&c.Name, &c.Image, &c.Status, &c.CPUPct, &c.RAMMB, &c.RestartCount, &c.UptimeSeconds,
+			&c.Health, &c.HealthFailingStreak, &c.ExitCode, &c.OOMKilled); err != nil {
 			return nil, err
 		}
 		containers = append(containers, c)
@@ -236,24 +250,12 @@ func (s *Metrics) LatestDockerContainers(ctx context.Context, hostID uuid.UUID) 
 // Latest, host'ın en son ham metrik örneğini döndürür; hiç örnek yoksa ErrNotFound. Panelin "Genel" sekmesindeki anlık
 // kartları besler (GET /hosts/:id/metrics/latest): tek satırdır, (host_id, recorded_at) birincil anahtarından okunur.
 func (s *Metrics) Latest(ctx context.Context, hostID uuid.UUID) (model.MetricPoint, error) {
-	var p model.MetricPoint
-	var diskJSON []byte
-	err := s.pool.QueryRow(ctx,
-		`SELECT recorded_at, cpu_usage_pct, ram_usage_pct, disk_json FROM metrics
-		 WHERE host_id = $1 ORDER BY recorded_at DESC LIMIT 1`, hostID).
-		Scan(&p.Timestamp, &p.CPUUsagePct, &p.RAMUsagePct, &diskJSON)
-	if err != nil {
-		if isNoRows(err) {
-			return model.MetricPoint{}, ErrNotFound
-		}
-		return model.MetricPoint{}, err
+	p, err := scanMetricPoint(s.pool.QueryRow(ctx,
+		`SELECT `+metricPointColumns+` FROM metrics WHERE host_id = $1 ORDER BY recorded_at DESC LIMIT 1`, hostID))
+	if isNoRows(err) {
+		return model.MetricPoint{}, ErrNotFound
 	}
-	if len(diskJSON) > 0 {
-		if err := json.Unmarshal(diskJSON, &p.Disk); err != nil {
-			return model.MetricPoint{}, err
-		}
-	}
-	return p, nil
+	return p, err
 }
 
 // LatestDisks, host'ın en son raporundaki mount'ları döndürür — panelin hangi mount'ların

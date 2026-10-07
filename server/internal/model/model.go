@@ -374,6 +374,12 @@ type MetricPoint struct {
 	CPUUsagePct float64     `json:"cpu_usage_pct"`
 	RAMUsagePct float64     `json:"ram_usage_pct"`
 	Disk        []DiskUsage `json:"disk"`
+	// Protokol 4 zaman serisi (ölçüldüğü gibi): System bir SystemSample, DiskIO bir []DiskIO, NetIO bir []NetIO'dur.
+	// Saklandığı gibi (çözülmeden) döner; uzun aralıklarda binlerce satır yeniden kodlanmasın diye. Eski agent'ın
+	// satırlarında yoktur.
+	System json.RawMessage `json:"system,omitempty"`
+	DiskIO json.RawMessage `json:"disk_io,omitempty"`
+	NetIO  json.RawMessage `json:"net_io,omitempty"`
 }
 
 // AuditLog kaydedilmiş tek bir kritik eylemdir (docs/MIMARI.md bölüm 5). ActorEmail bir

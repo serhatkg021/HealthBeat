@@ -95,6 +95,8 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/hosts/{id}/disk-alerts", d.requirePermission("host.view", handle(d.handleGetDiskAlerts)))
 	mux.HandleFunc("PUT /api/v1/hosts/{id}/disk-alerts", d.requirePermission("host.update", handle(d.handleSetDiskAlerts)))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/docker", d.requirePermission("host.view", handle(d.handleGetHostDocker)))
+	mux.HandleFunc("GET /api/v1/hosts/{id}/services", d.requirePermission("host.view", handle(d.handleGetHostServices)))
+	mux.HandleFunc("PUT /api/v1/hosts/{id}/watched-services", d.requirePermission("host.update", handle(d.handleSetWatchedServices)))
 
 	mux.HandleFunc("GET /api/v1/audit-logs", d.requirePermission("audit.view", handle(d.handleListAuditLogs)))
 
