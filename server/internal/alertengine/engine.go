@@ -256,6 +256,11 @@ func (s *hostState) activeOf(alertType string) []model.Alert {
 func (e *Engine) evaluateMetrics(ctx context.Context, st *hostState, cpuPct, ramPct float64, disks []model.DiskUsage) {
 	e.evaluate(ctx, st, model.MetricTypeCPU, cpuPct)
 	e.evaluate(ctx, st, model.MetricTypeRAM, ramPct)
+	// Hiç disk eşiği kalmadıysa açık disk alert'leri kapanır, rapor disk listesi taşımasa da: başka hiçbir şey onları
+	// kapatamazdı.
+	if t := st.thresholds.Metric(model.MetricTypeDisk); t.Base == nil && len(t.PerSubject) == 0 {
+		e.resolveAll(ctx, st, model.MetricTypeDisk)
+	}
 	// BOŞ bir disk listesi hiçbir şeyi değiştirmez (bkz. evaluateDisks).
 	if len(disks) == 0 {
 		return
@@ -282,7 +287,7 @@ func (e *Engine) evaluateMetrics(ctx context.Context, st *hostState, cpuPct, ram
 func (e *Engine) evaluateDisks(ctx context.Context, st *hostState, disks []model.DiskUsage, allMounts bool, selection []string) {
 	thresholds := st.thresholds.Metric(model.MetricTypeDisk)
 	if thresholds.Base == nil && len(thresholds.PerSubject) == 0 {
-		return
+		return // açık alert'ler evaluateMetrics'te kapandı
 	}
 	var selected map[string]struct{} // nil = raporlanan tüm mount'lar
 	if !allMounts {
@@ -404,10 +409,15 @@ func (e *Engine) evaluateMissingMounts(ctx context.Context, st *hostState, disks
 	}
 }
 
+// evaluate, sunucu geneli bir metriği (cpu, ram) eşiğine göre değerlendirir. Eşik kalmadıysa açık alert kapanır
+// (çözüldü bildirimiyle): aksi halde hiçbir şey onu kapatamaz ve sonsuza dek açık görünürdü.
 func (e *Engine) evaluate(ctx context.Context, st *hostState, metricType string, value float64) {
-	if threshold := st.thresholds.Metric(metricType).Base; threshold != nil {
-		e.apply(ctx, st, metricType, "", value, *threshold)
+	threshold := st.thresholds.Metric(metricType).Base
+	if threshold == nil {
+		e.resolveAll(ctx, st, metricType)
+		return
 	}
+	e.apply(ctx, st, metricType, "", value, *threshold)
 }
 
 // EvaluateDocker, docker_restart eşiğini (container'ın kendisininki, yoksa host'ınki) raporlanan
@@ -431,11 +441,13 @@ func (e *Engine) EvaluateDocker(ctx context.Context, hostID, orgID uuid.UUID, co
 }
 
 func (e *Engine) evaluateDocker(ctx context.Context, st *hostState, containers []model.DockerContainerReport) {
-	if len(containers) == 0 {
-		return
-	}
+	// Hiç eşik kalmadıysa açık alert'ler kapanır, rapor container taşımasa da (başka hiçbir şey onları kapatamazdı).
 	thresholds := st.thresholds.Metric(model.MetricTypeDockerRestart)
 	if thresholds.Base == nil && len(thresholds.PerSubject) == 0 {
+		e.resolveAll(ctx, st, model.MetricTypeDockerRestart)
+		return
+	}
+	if len(containers) == 0 {
 		return
 	}
 
