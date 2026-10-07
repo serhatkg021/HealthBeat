@@ -180,8 +180,13 @@ func (*failingPending) MarkPending(context.Context, uuid.UUID, string, string, s
 }
 
 type fakeHosts struct {
-	host    model.Host
-	lookups int
+	host     model.Host
+	lookups  int
+	services []model.HostService
+}
+
+func (f *fakeHosts) Services(context.Context, uuid.UUID) ([]model.HostService, error) {
+	return f.services, nil
 }
 
 func (f *fakeHosts) DiskAlertMounts(context.Context, uuid.UUID) (bool, []string, error) {
@@ -193,10 +198,17 @@ func (f *fakeHosts) GetByID(context.Context, uuid.UUID) (model.Host, error) {
 	return f.host, nil
 }
 
-type fakeMetrics struct{}
+type fakeMetrics struct{ previous *[]model.DiskUsage }
 
 func (fakeMetrics) RecentReportedMounts(context.Context, uuid.UUID, int) ([]map[string]struct{}, error) {
 	return nil, nil
+}
+
+func (f fakeMetrics) PreviousDisks(context.Context, uuid.UUID) ([]model.DiskUsage, error) {
+	if f.previous == nil {
+		return nil, nil
+	}
+	return *f.previous, nil
 }
 
 type fakeOrgs struct{ org model.Organization }

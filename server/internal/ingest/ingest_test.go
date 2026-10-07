@@ -189,3 +189,96 @@ func TestRecordStoresProtocol4Report(t *testing.T) {
 		t.Fatalf("after the partial report: services = %d (failed %d), err=%v; want 3 (0)", services, failed, err)
 	}
 }
+
+// Durum kuralları açıkken v4 raporu durum alert'lerini açar; kural yoksa hiçbiri açılmaz.
+func TestRecordRaisesStatusAlerts(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	body, err := os.ReadFile("../../testdata/payloads/v4_health_performance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _, err := ingest.Decode(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := func() {
+		t.Helper()
+		time.Sleep(time.Millisecond)
+		if err := e.svc.Record(ctx, ingest.Report{HostID: e.host, OrgID: e.org, Source: ingest.SourcePush, Payload: payload,
+			Agent: model.AgentInfo{Version: "1.3.0", Protocol: 4}}); err != nil {
+			t.Fatal(err)
+		}
+		e.engine.Flush()
+	}
+	open := func() map[string]string {
+		t.Helper()
+		rows, err := e.pool.Query(ctx, `SELECT alert_type || COALESCE('/' || subject, ''), level FROM alerts WHERE host_id = $1 AND status = 'open'`, e.host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		out := map[string]string{}
+		for rows.Next() {
+			var k, l string
+			if err := rows.Scan(&k, &l); err != nil {
+				t.Fatal(err)
+			}
+			out[k] = l
+		}
+		return out
+	}
+
+	record()
+	if got := open(); len(got) != 0 {
+		t.Fatalf("alerts without any rule: %v", got)
+	}
+
+	th := store.NewThresholds(e.pool)
+	if err := th.SetStatusRules(ctx, &e.org, model.StatusRuleChanges{
+		model.RuleServiceFailed:      {Level: model.AlertLevelCritical},
+		model.RuleContainerUnhealthy: {Level: model.AlertLevelCritical},
+		model.RuleContainerOOM:       {Level: model.AlertLevelWarning},
+		model.RuleRAIDRebuilding:     {Level: model.AlertLevelWarning},
+		model.RuleSecurityUpdates:    {Level: model.AlertLevelInfo},
+		model.RuleRebootRequired:     {Level: model.AlertLevelInfo},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.hosts.SetWatchedServices(ctx, e.host, []string{"nginx.service"}); err != nil {
+		t.Fatal(err)
+	}
+	record()
+	want := map[string]string{
+		"service_failed/nginx.service": "critical", "container_unhealthy/db": "critical", "container_oom/migrate": "warning",
+		"raid_degraded/md0": "warning", "security_updates": "info",
+	}
+	got := open()
+	if len(got) != len(want) {
+		t.Fatalf("open alerts = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %q, want %q (all: %v)", k, got[k], v, got)
+		}
+	}
+
+	// OOM: sayaç artınca açılır, artmayan ilk raporda (süre yok) kapanır.
+	if err := th.SetStatusRules(ctx, &e.org, model.StatusRuleChanges{model.RuleOOMKill: {Level: model.AlertLevelWarning}}); err != nil {
+		t.Fatal(err)
+	}
+	record() // sayaç aynı (2): artış yok
+	if _, ok := open()["oom_kill"]; ok {
+		t.Fatal("oom_kill opened without an increase")
+	}
+	n := uint64(5)
+	payload.MemoryDetail.OOMKills = &n
+	record()
+	if open()["oom_kill"] != "warning" {
+		t.Fatalf("oom_kill after the counter rose: %v", open())
+	}
+	record()
+	if _, ok := open()["oom_kill"]; ok {
+		t.Fatal("oom_kill still open after a report without an increase")
+	}
+}

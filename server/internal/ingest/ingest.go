@@ -83,7 +83,9 @@ func (s *Service) Record(ctx context.Context, r Report) error {
 	if err != nil {
 		logErr("ingest: read system state", err)
 	}
-	if err := s.hosts.MarkOnline(ctx, r.HostID, p.Hardware(), r.Agent, model.NextSystemState(prev, p, time.Now())); err != nil {
+	hw := p.Hardware()
+	state := model.NextSystemState(prev, p, time.Now())
+	if err := s.hosts.MarkOnline(ctx, r.HostID, hw, r.Agent, state); err != nil {
 		logErr("ingest: mark host online", err)
 	}
 	if err := s.hosts.SaveServices(ctx, r.HostID, p.Services); err != nil {
@@ -92,6 +94,15 @@ func (s *Service) Record(ctx context.Context, r Report) error {
 
 	s.engine.EvaluateReport(ctx, r.HostID, r.OrgID, alertengine.Report{
 		CPUPct: p.CPUUsagePct, RAMPct: p.RAMUsagePct, Disks: p.Disk, Containers: p.DockerContainers,
+		State: state, OOMIncreased: oomIncreased(prev, state), HostInfo: hw.HostInfo,
 	})
 	return nil
+}
+
+// oomIncreased, OOM sayacının bu raporda arttığıdır: NextSystemState artışı gördüyse artış anını yeniler.
+func oomIncreased(prev, next *model.SystemState) bool {
+	if next == nil || next.OOMLastIncreaseAt == nil {
+		return false
+	}
+	return prev == nil || prev.OOMLastIncreaseAt == nil || !next.OOMLastIncreaseAt.Equal(*prev.OOMLastIncreaseAt)
 }

@@ -102,15 +102,22 @@ func (e *Engine) SetPanelBaseURL(url string) {
 	e.panelBaseURL.Store(&url)
 }
 
-// Report, bir agent raporunun alert motorunu ilgilendiren kısmıdır.
+// Report, bir agent raporunun alert motorunu ilgilendiren kısmıdır. Metrik satırı EvaluateReport'tan önce yazılmış
+// olmalıdır (salt okunur geçişi bir önceki raporla karşılaştırılır).
 type Report struct {
 	CPUPct, RAMPct float64
 	Disks          []model.DiskUsage
 	Containers     []model.DockerContainerReport
+	// Durum alert'leri için (status.go): bu raporla saklanan anlık durum (nil = bilinmiyor), OOM sayacının bu raporda
+	// artıp artmadığı ve makine envanteri (yeniden başlatma gerekli, saat senkronu; protokol 3 agent'larda da var).
+	State        *model.SystemState
+	OOMIncreased bool
+	HostInfo     *model.HostInfo
 }
 
 // EvaluateReport, bir alımdan sonra bütün alert denetimlerini çalıştırır: aktif host_offline alert'ini çözer, sonra
-// container'ları ve metrikleri değerlendirir. Host'un aktif alert'leri ve eşikleri rapor başına bir kez okunur.
+// container'ları, metrikleri ve durum alert'lerini değerlendirir. Host'un aktif alert'leri, eşikleri ve durum
+// kuralları rapor başına bir kez okunur.
 func (e *Engine) EvaluateReport(ctx context.Context, hostID, orgID uuid.UUID, r Report) {
 	st, ok := e.loadState(ctx, hostID, orgID)
 	if !ok {
@@ -121,6 +128,7 @@ func (e *Engine) EvaluateReport(ctx context.Context, hostID, orgID uuid.UUID, r 
 	}
 	e.evaluateDocker(ctx, st, r.Containers)
 	e.evaluateMetrics(ctx, st, r.CPUPct, r.RAMPct, r.Disks)
+	e.evaluateStatus(ctx, st, r)
 }
 
 // EvaluateMetrics, bir metrik alımından sonra cpu/ram/disk eşik denetimlerini çalıştırır.
@@ -448,7 +456,6 @@ func (e *Engine) evaluateDocker(ctx context.Context, st *hostState, containers [
 // apply, bir host+metrik+subject için alert yaşam döngüsünü çözümlenmiş bir eşiğe göre
 // çalıştırır.
 func (e *Engine) apply(ctx context.Context, st *hostState, metricType, subject string, value float64, threshold model.ThresholdConfig) {
-	hostID, orgID := st.hostID, st.orgID
 	// Aktif alert: açık ya da onaylanmış. Onay "gördüm, sustur ama izle"dir: onaylanan alert yeni bir alert/bildirim
 	// açılmasını engeller ve eşik altına inince çözülür (bkz. store: aktif alert).
 	key := alertKey{metricType, subject}
@@ -469,7 +476,7 @@ func (e *Engine) apply(ctx context.Context, st *hostState, metricType, subject s
 			// Çözülme okuması: eşiğin altına döndüğü andaki gerçek ölçüm ve uyarı eşiği — böylece
 			// e-postadaki "Değer" alert'in son yükseltildiği eski, hâlâ eşik üstü okumayı değil,
 			// artık gerçekten eşiğin altında olan güncel durumu gösterir.
-			e.resolveAndNotify(ctx, existing, orgID, &value, &threshold.WarningLevel)
+			e.resolveAndNotify(ctx, existing, st.orgID, &value, &threshold.WarningLevel)
 		}
 		return
 	}
@@ -482,46 +489,57 @@ func (e *Engine) apply(ctx context.Context, st *hostState, metricType, subject s
 	valuePtr, triggerPtr := &value, &trigger
 
 	if hasActive {
-		// Tekrar bildirimi önleme/bekleme: bu host+metrik için zaten aktif (açık ya da onaylanmış) bir alert bu
-		// olayı kapsıyor — yalnızca seviyesi değiştiyse yeniden bildirilir.
-		if existing.Level != level {
-			// Seviye değişimi (yükselme YA DA düşme) o alıcı için durumun gerçekten değiştiği
-			// anlamına gelir: uyarı mailini görüp "daha vaktim var" diyen biri kritiğe geçtiğinde,
-			// ya da tersine gereksiz yere endişelenmemesi için kritikten uyarıya düştüğünde bundan
-			// habersiz kalmamalı. Bu yüzden yeni seviyenin TÜM alıcılarına (daha önce bilgilendirilmiş
-			// olsalar bile) tekrar mail gider — açılış ve çözülme ile aynı kural. Onaylanmış bir alert
-			// YÜKSELİRSE onay da kalkar (durum ciddileşti, biri yeniden sahiplenmeli); düşüşte onay korunur.
-			reopen := reopensOnLevelChange(existing, level)
-			err := e.change(ctx, e.prepare(ctx, hostID, orgID, level), store.AlertEventLevelChanged, func(tx Tx) (model.Alert, bool, error) {
-				if err := tx.Alerts().UpdateLevel(ctx, existing.ID, level, valuePtr, triggerPtr, reopen); err != nil {
-					return model.Alert{}, false, err
-				}
-				changed := existing
-				changed.Level, changed.Value, changed.Threshold = level, valuePtr, triggerPtr
-				if reopen {
-					changed.Status, changed.AcknowledgedAt, changed.AcknowledgedBy = model.AlertStatusOpen, nil, nil
-				}
-				st.active[key] = changed
-				return changed, true, nil
-			})
-			if err != nil {
-				st.active[key] = existing
-				slog.ErrorContext(ctx, "alert engine: update alert level", "alert_id", existing.ID.String(), "err", err)
-			}
-		}
+		e.changeLevel(ctx, st, existing, level, valuePtr, triggerPtr)
 		return
 	}
-
 	// Süre koşulu: eşik kesintisiz threshold.DurationSeconds boyunca aşılmadıkça alert açılmaz (aktif alert'in seviye
 	// değişimi beklemez; yukarıda).
 	if !e.sustained(ctx, st, metricType, subject, level, durationOf(threshold.DurationSeconds)) {
 		return
 	}
 	e.clearPending(ctx, st, metricType, subject)
+	e.open(ctx, st, metricType, subject, level, valuePtr, triggerPtr)
+}
 
+// changeLevel, aktif alert'in seviyesini level yapar; seviye aynıysa hiçbir şey yapmaz (tekrar bildirimi önleme).
+//
+// Seviye değişimi (yükselme YA DA düşme) o alıcı için durumun gerçekten değiştiği anlamına gelir: uyarı mailini görüp
+// "daha vaktim var" diyen biri kritiğe geçtiğinde, ya da tersine gereksiz yere endişelenmemesi için kritikten uyarıya
+// düştüğünde bundan habersiz kalmamalı. Bu yüzden yeni seviyenin TÜM alıcılarına (daha önce bilgilendirilmiş olsalar
+// bile) tekrar mail gider — açılış ve çözülme ile aynı kural. Onaylanmış bir alert YÜKSELİRSE onay da kalkar (durum
+// ciddileşti, biri yeniden sahiplenmeli); düşüşte onay korunur.
+func (e *Engine) changeLevel(ctx context.Context, st *hostState, existing model.Alert, level string, value, threshold *float64) {
+	if existing.Level == level {
+		return
+	}
+	key := alertKey{existing.AlertType, existing.Subject}
+	reopen := reopensOnLevelChange(existing, level)
+	err := e.change(ctx, e.prepare(ctx, st.hostID, st.orgID, level), store.AlertEventLevelChanged, func(tx Tx) (model.Alert, bool, error) {
+		if err := tx.Alerts().UpdateLevel(ctx, existing.ID, level, value, threshold, reopen); err != nil {
+			return model.Alert{}, false, err
+		}
+		changed := existing
+		changed.Level, changed.Value, changed.Threshold = level, value, threshold
+		if reopen {
+			changed.Status, changed.AcknowledgedAt, changed.AcknowledgedBy = model.AlertStatusOpen, nil, nil
+		}
+		st.active[key] = changed
+		return changed, true, nil
+	})
+	if err != nil {
+		st.active[key] = existing
+		slog.ErrorContext(ctx, "alert engine: update alert level", "alert_id", existing.ID.String(), "err", err)
+	}
+}
+
+// open, yeni bir alert açar ve bildirimini kuyruğa yazar. Aynı anda başka bir değerlendirme açtıysa bildirim onundur;
+// burada yalnızca seviyenin güncel olduğundan emin olunur.
+func (e *Engine) open(ctx context.Context, st *hostState, alertType, subject, level string, value, threshold *float64) {
+	hostID := st.hostID
+	key := alertKey{alertType, subject}
 	created := false
-	err := e.change(ctx, e.prepare(ctx, hostID, orgID, level), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
-		alert, ok, err := tx.Alerts().CreateIfNoneActive(ctx, hostID, metricType, subject, level, valuePtr, triggerPtr)
+	err := e.change(ctx, e.prepare(ctx, hostID, st.orgID, level), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
+		alert, ok, err := tx.Alerts().CreateIfNoneActive(ctx, hostID, alertType, subject, level, value, threshold)
 		created = ok
 		if ok {
 			st.active[key] = alert
@@ -530,14 +548,12 @@ func (e *Engine) apply(ctx context.Context, st *hostState, metricType, subject s
 	})
 	if err != nil {
 		delete(st.active, key)
-		slog.ErrorContext(ctx, "alert engine: create alert", "host_id", hostID.String(), "metric", metricType, "subject", subject, "err", err)
+		slog.ErrorContext(ctx, "alert engine: create alert", "host_id", hostID.String(), "metric", alertType, "subject", subject, "err", err)
 		return
 	}
 	if !created {
-		// Denetimimiz ile eklememiz arasında eşzamanlı bir değerlendirme açtı. Bildirim onundur;
-		// biz yalnızca seviyesinin güncel olduğundan emin oluruz.
-		if active, err := e.alerts.GetActiveSubject(ctx, hostID, metricType, subject); err == nil && active.Level != level {
-			if err := e.alerts.UpdateLevel(ctx, active.ID, level, valuePtr, triggerPtr, reopensOnLevelChange(active, level)); err != nil {
+		if active, err := e.alerts.GetActiveSubject(ctx, hostID, alertType, subject); err == nil && active.Level != level {
+			if err := e.alerts.UpdateLevel(ctx, active.ID, level, value, threshold, reopensOnLevelChange(active, level)); err != nil {
 				slog.ErrorContext(ctx, "alert engine: update alert level", "alert_id", active.ID.String(), "err", err)
 			}
 		}

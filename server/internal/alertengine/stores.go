@@ -44,11 +44,14 @@ type PendingStore interface {
 type HostStore interface {
 	DiskAlertMounts(ctx context.Context, id uuid.UUID) (allMounts bool, mounts []string, err error)
 	GetByID(ctx context.Context, id uuid.UUID) (model.Host, error)
+	// Services, sunucunun servisleri ve izlenip izlenmedikleridir (service_failed).
+	Services(ctx context.Context, hostID uuid.UUID) ([]model.HostService, error)
 }
 
-// MetricStore, kaybolan mount denetiminin rapor geçmişidir (store.Metrics).
+// MetricStore, kaybolan mount denetiminin ve salt okunur geçişinin rapor geçmişidir (store.Metrics).
 type MetricStore interface {
 	RecentReportedMounts(ctx context.Context, hostID uuid.UUID, n int) ([]map[string]struct{}, error)
+	PreviousDisks(ctx context.Context, hostID uuid.UUID) ([]model.DiskUsage, error)
 }
 
 // OrgStore, bildirim metnindeki organizasyon adıdır (store.Organizations).

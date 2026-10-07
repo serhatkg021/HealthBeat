@@ -304,3 +304,22 @@ func (s *Metrics) RecentReportedMounts(ctx context.Context, hostID uuid.UUID, n 
 	}
 	return out, rows.Err()
 }
+
+// PreviousDisks, sunucunun bir önceki raporunun disk listesidir (son satırdan bir önceki; alert motoru son satır
+// yazıldıktan sonra çağırır). Önceki rapor yoksa boş.
+func (s *Metrics) PreviousDisks(ctx context.Context, hostID uuid.UUID) ([]model.DiskUsage, error) {
+	var raw []byte
+	err := s.pool.QueryRow(ctx,
+		`SELECT disk_json FROM metrics WHERE host_id = $1 ORDER BY recorded_at DESC LIMIT 1 OFFSET 1`, hostID).Scan(&raw)
+	if isNoRows(err) {
+		return []model.DiskUsage{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var disks []model.DiskUsage
+	if err := json.Unmarshal(raw, &disks); err != nil {
+		return nil, err
+	}
+	return disks, nil
+}
