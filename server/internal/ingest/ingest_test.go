@@ -3,8 +3,10 @@ package ingest_test
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -122,5 +124,68 @@ func TestRecordStopsWhenMetricsCannotBeStored(t *testing.T) {
 	e.engine.Flush()
 	if n := e.openAlerts(t, missing); n != 0 {
 		t.Fatalf("alerts raised despite the failed insert: %d", n)
+	}
+}
+
+// Protokol 4 raporu: zaman serisi metrik satırına (ölçüldüğü gibi), anlık durumlar host_status'a, servisler ve container
+// sağlığı kendi tablolarına yazılır; ikinci raporda OOM sayacının artışı görülür.
+func TestRecordStoresProtocol4Report(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	body, err := os.ReadFile("../../testdata/payloads/v4_health_performance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, unknown, err := ingest.Decode(body)
+	if err != nil || unknown != nil {
+		t.Fatalf("Decode: unknown=%v err=%v", unknown, err)
+	}
+	record := func(p model.MetricsIngestRequest) {
+		t.Helper()
+		if err := e.svc.Record(ctx, ingest.Report{HostID: e.host, OrgID: e.org, Source: ingest.SourcePush, Payload: p,
+			Agent: model.AgentInfo{Version: "1.3.0", Protocol: 4}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record(payload)
+
+	var iowait, await, rx string
+	if err := e.pool.QueryRow(ctx, `SELECT system_json->'cpu_detail'->>'iowait_pct', disk_io_json->0->>'await_ms', net_io_json->0->>'rx_bps'
+		FROM metrics WHERE host_id = $1`, e.host).Scan(&iowait, &await, &rx); err != nil {
+		t.Fatal(err)
+	}
+	if iowait != "0.1670843776106934" || await != "0.8333333333333334" || rx != "10458.774401897601" {
+		t.Errorf("metric row: iowait=%s await=%s rx=%s, want the values as reported", iowait, await, rx)
+	}
+
+	st, err := e.hosts.SystemState(ctx, e.host)
+	if err != nil || st == nil || *st.OOMKills != 2 || st.OOMLastIncreaseAt != nil || st.Updates.Security != 3 ||
+		st.TimeSync == nil || *st.TimeSync.OffsetMs != 2.2285 || len(st.Temperatures) != 2 {
+		t.Fatalf("system state = %+v, %v", st, err)
+	}
+
+	var services, failed int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE active = 'failed') FROM host_services WHERE host_id = $1`, e.host).
+		Scan(&services, &failed); err != nil || services != 3 || failed != 1 {
+		t.Fatalf("services = %d (failed %d), err=%v; want 3 (1)", services, failed, err)
+	}
+	var unhealthy int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM docker_containers WHERE host_id = $1 AND health = 'unhealthy' AND health_failing_streak = 3`, e.host).
+		Scan(&unhealthy); err != nil || unhealthy != 1 {
+		t.Fatalf("unhealthy containers = %d, %v", unhealthy, err)
+	}
+
+	// İkinci rapor: OOM sayacı arttı; servis listesi kısmi (yalnızca nginx düzeldi).
+	time.Sleep(time.Millisecond)
+	n := uint64(3)
+	payload.MemoryDetail.OOMKills = &n
+	payload.Services = &model.Services{Full: false, Items: []model.Service{{Name: "nginx.service", Active: "active", Sub: "running"}}}
+	record(payload)
+	if st, err := e.hosts.SystemState(ctx, e.host); err != nil || st.OOMLastIncreaseAt == nil {
+		t.Fatalf("after the counter increased: %+v, %v", st, err)
+	}
+	if err := e.pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE active = 'failed') FROM host_services WHERE host_id = $1`, e.host).
+		Scan(&services, &failed); err != nil || services != 3 || failed != 0 {
+		t.Fatalf("after the partial report: services = %d (failed %d), err=%v; want 3 (0)", services, failed, err)
 	}
 }

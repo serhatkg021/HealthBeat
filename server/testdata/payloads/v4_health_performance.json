@@ -1,0 +1,82 @@
+{
+  "cpu_usage_pct": 3.2999164578111944,
+  "ram_usage_pct": 28.787367115555895,
+  "disk": [
+    {"mount": "/", "used_pct": 17.255202827560254, "total": 489997189120, "free": 405447180288, "inodes_used_pct": 2.8733276564181014, "read_only": false},
+    {"mount": "/boot/efi", "used_pct": 0.6, "total": 1000000000, "free": 994000000, "read_only": false}
+  ],
+  "cpu_cores": 12,
+  "ram_total_mb": 15823,
+  "physical_disks": [
+    {"name": "nvme0n1", "model": "CT500P2SSD8", "size_bytes": 500107862016, "kind": "nvme", "mounts": ["/", "/boot/efi"]}
+  ],
+  "host_info": {
+    "hostname": "web-01",
+    "os": {"id": "ubuntu", "name": "Ubuntu", "pretty_name": "Ubuntu 24.04.5 LTS", "version_id": "24.04", "id_like": "debian"},
+    "kernel": {"release": "7.0.0-34-generic", "arch": "x86_64"},
+    "cpu_model": "Intel(R) Core(TM) i7-10750H CPU @ 2.60GHz",
+    "virtualization": {"kind": "physical"},
+    "machine_id_hash": "0123456789abcdef0123456789abcdef",
+    "timezone": "Europe/Istanbul",
+    "init": "systemd",
+    "security_module": "apparmor",
+    "boot_time": "2026-10-07T17:19:33Z",
+    "uptime_seconds": 5808,
+    "load_avg": [0.38, 1.4, 2.42],
+    "swap": {"total_mb": 4095, "used_mb": 0},
+    "addresses": [{"interface": "enp4s0", "address": "192.0.2.10/24"}],
+    "reboot_required": false,
+    "time_synced": true,
+    "failed_units": 1,
+    "docker_version": "29.8.1"
+  },
+  "docker_containers": [
+    {"name": "api", "image": "example/api:2.4.1", "status": "running", "cpu_pct": 0.2330116472545757, "ram_mb": 16.29296875, "restart_count": 1, "uptime_seconds": 5789, "health": "healthy", "health_failing_streak": 0},
+    {"name": "db", "image": "postgres:16-alpine", "status": "running", "cpu_pct": 0.2262, "ram_mb": 44.16796875, "restart_count": 0, "uptime_seconds": 5790, "health": "unhealthy", "health_failing_streak": 3},
+    {"name": "migrate", "image": "example/api:2.4.1", "status": "exited", "cpu_pct": 0, "ram_mb": 0, "restart_count": 0, "uptime_seconds": 0, "exit_code": 137, "oom_killed": true}
+  ],
+  "cpu_detail": {"iowait_pct": 0.1670843776106934, "steal_pct": 0, "procs_blocked": 0},
+  "memory_detail": {"available_mb": 11269, "cached_mb": 4087, "swap_in_per_s": 0, "swap_out_per_s": 0.4166666666666667, "oom_kills": 2},
+  "pressure": {
+    "cpu": {"some10": 0, "some60": 0.04},
+    "memory": {"some10": 0, "some60": 0, "full10": 0, "full60": 0},
+    "io": {"some10": 0.49, "some60": 0.14, "full10": 0.31, "full60": 0.09}
+  },
+  "disk_io": [
+    {"name": "nvme0n1", "read_iops": 0, "write_iops": 2.9746229811995453, "read_bps": 0, "write_bps": 12184.055730993337, "util_pct": 0.3470393478066136, "await_ms": 0.8333333333333334, "queue_depth": 0.0054534754655325}
+  ],
+  "net_io": [
+    {"interface": "enp4s0", "rx_bps": 10458.774401897601, "tx_bps": 10319.958662774956, "rx_errors": 0, "tx_errors": 0, "rx_drops": 0, "tx_drops": 0},
+    {"interface": "wg0", "rx_bps": 0, "tx_bps": 0, "rx_errors": 0, "tx_errors": 0, "rx_drops": 0, "tx_drops": 0}
+  ],
+  "tcp": {"retrans_pct": 0, "established": 29, "time_wait": 1},
+  "temperatures": [
+    {"sensor": "nvme/nvme0/Composite", "kind": "disk", "celsius": 32.85, "max": 69.85, "crit": 84.85},
+    {"sensor": "coretemp/Package id 0", "kind": "cpu", "celsius": 47, "max": 100, "crit": 100}
+  ],
+  "raid": [
+    {"name": "md0", "level": "raid1", "state": "recovering", "devices": 2, "active": 1, "sync_pct": 37.54}
+  ],
+  "capacity": {"file_handles": 12541, "file_handles_max": 9223372036854775807, "conntrack": 46, "conntrack_max": 262144, "tasks": 2277, "pid_max": 4194304},
+  "processes": {
+    "total": 412, "zombie": 0,
+    "top_cpu": [{"name": "postgres", "count": 26, "cpu_pct": 1.2345, "rss_mb": 323.1328125}],
+    "top_ram": [{"name": "java", "count": 1, "cpu_pct": 0.5, "rss_mb": 2390.953125}, {"name": "postgres", "count": 26, "cpu_pct": 1.2345, "rss_mb": 323.1328125}]
+  },
+  "updates": {"pending": 54, "security": 3, "lists_updated_at": "2026-10-05T16:20:48Z"},
+  "services": {
+    "full": true,
+    "items": [
+      {"name": "cron.service", "description": "Regular background program processing daemon", "active": "active", "sub": "running", "since": "2026-10-07T17:19:40Z", "restarts": 0, "enabled": "enabled"},
+      {"name": "nginx.service", "description": "A high performance web server and a reverse proxy server", "active": "failed", "sub": "failed", "since": "2026-10-07T18:02:11Z", "restarts": 5, "enabled": "enabled"},
+      {"name": "ssh.service", "description": "OpenBSD Secure Shell server", "active": "active", "sub": "running", "since": "2026-10-07T17:19:41Z", "restarts": 0, "enabled": "enabled"}
+    ]
+  },
+  "time_sync": {
+    "enabled": true, "synchronized": true, "daemon": "timesyncd", "local_rtc": false,
+    "server": "ntp.ubuntu.com", "server_address": "185.125.190.57", "configured_servers": ["ntp.ubuntu.com"],
+    "stratum": 2, "leap": "normal", "offset_ms": 2.2285, "delay_ms": 49.513, "jitter_ms": 1.62, "root_distance_ms": 4.5920000000000005,
+    "poll_s": 2048, "last_sync": "2026-10-07T18:27:53Z", "ignored": false,
+    "sources": [{"name": "185.125.190.57", "state": "selected", "offset_ms": 2.2285}]
+  }
+}

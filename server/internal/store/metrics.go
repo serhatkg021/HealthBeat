@@ -23,7 +23,9 @@ func NewMetrics(pool *pgxpool.Pool) *Metrics {
 	return &Metrics{pool: pool}
 }
 
-func (s *Metrics) Insert(ctx context.Context, hostID uuid.UUID, cpuPct, ramPct float64, disk []model.DiskUsage) error {
+// Insert, bir metrik satırı yazar. series protokol 4'ün zaman serisidir (bkz. model.MetricsIngestRequest.Series);
+// boş alanları NULL yazılır (eski agent ya da toplanamadı).
+func (s *Metrics) Insert(ctx context.Context, hostID uuid.UUID, cpuPct, ramPct float64, disk []model.DiskUsage, series model.MetricSeries) error {
 	if disk == nil {
 		disk = []model.DiskUsage{}
 	}
@@ -31,13 +33,39 @@ func (s *Metrics) Insert(ctx context.Context, hostID uuid.UUID, cpuPct, ramPct f
 	if err != nil {
 		return err
 	}
+	systemJSON, err := jsonOrNull(series.System, series.System == nil)
+	if err != nil {
+		return err
+	}
+	diskIOJSON, err := jsonOrNull(series.DiskIO, len(series.DiskIO) == 0)
+	if err != nil {
+		return err
+	}
+	netIOJSON, err := jsonOrNull(series.NetIO, len(series.NetIO) == 0)
+	if err != nil {
+		return err
+	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO metrics (host_id, cpu_usage_pct, ram_usage_pct, disk_json) VALUES ($1, $2, $3, $4)
+		`INSERT INTO metrics (host_id, cpu_usage_pct, ram_usage_pct, disk_json, system_json, disk_io_json, net_io_json)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb)
 		 ON CONFLICT (host_id, recorded_at) DO NOTHING`,
-		hostID, cpuPct, ramPct, string(diskJSON),
+		hostID, cpuPct, ramPct, string(diskJSON), systemJSON, diskIOJSON, netIOJSON,
 	)
 	return err
+}
+
+// jsonOrNull, v'yi JSONB parametresi olarak kodlar; empty ise nil (NULL) döner.
+func jsonOrNull(v any, empty bool) (*string, error) {
+	if empty {
+		return nil, nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	str := string(b)
+	return &str, nil
 }
 
 // Makul bir raporun asla aşamayacağı sınırlar; bunların dışındaki değerler hatalı ya da
@@ -68,6 +96,14 @@ func sanitizeContainer(c model.DockerContainerReport) (model.DockerContainerRepo
 	}
 	if c.UptimeSeconds < 0 {
 		c.UptimeSeconds = 0
+	}
+	// Protokol 4 alanları bilgi içindir: bilinmeyen sağlık durumu ya da negatif sayaç container'ı reddettirmez, yalnızca
+	// o alan "bilinmiyor" olur.
+	if !model.ValidDockerHealth(c.Health) {
+		c.Health = ""
+	}
+	if c.HealthFailingStreak != nil && *c.HealthFailingStreak < 0 {
+		c.HealthFailingStreak = nil
 	}
 	return c, true
 }
@@ -104,13 +140,17 @@ func (s *Metrics) ReplaceDockerContainers(ctx context.Context, hostID uuid.UUID,
 	for _, name := range names {
 		c := byName[name]
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO docker_containers (host_id, name, image, status, cpu_pct, ram_mb, restart_count, uptime_seconds, reported_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+			`INSERT INTO docker_containers (host_id, name, image, status, cpu_pct, ram_mb, restart_count, uptime_seconds,
+			                                health, health_failing_streak, exit_code, oom_killed, reported_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11, $12, now())
 			 ON CONFLICT (host_id, name) DO UPDATE SET
 			     image = EXCLUDED.image, status = EXCLUDED.status, cpu_pct = EXCLUDED.cpu_pct,
 			     ram_mb = EXCLUDED.ram_mb, restart_count = EXCLUDED.restart_count,
-			     uptime_seconds = EXCLUDED.uptime_seconds, reported_at = EXCLUDED.reported_at`,
+			     uptime_seconds = EXCLUDED.uptime_seconds, health = EXCLUDED.health,
+			     health_failing_streak = EXCLUDED.health_failing_streak, exit_code = EXCLUDED.exit_code,
+			     oom_killed = EXCLUDED.oom_killed, reported_at = EXCLUDED.reported_at`,
 			hostID, c.Name, c.Image, c.Status, c.CPUPct, c.RAMMB, c.RestartCount, c.UptimeSeconds,
+			c.Health, c.HealthFailingStreak, c.ExitCode, c.OOMKilled,
 		); err != nil {
 			return err
 		}

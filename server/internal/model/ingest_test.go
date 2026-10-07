@@ -18,10 +18,11 @@ func TestParseMetricsIngestAcceptsEveryGoldenPayload(t *testing.T) {
 		t.Fatalf("golden payloads not found in %s: %v (%d files)", payloadDir, err, len(files))
 	}
 	wantUnknown := map[string][]string{
-		"v1_legacy.json":    nil,
-		"v2_hardware.json":  nil,
-		"v3_inventory.json": nil,
-		"v99_future.json":   {"agent_notes", "gpu", "load_average"},
+		"v1_legacy.json":             nil,
+		"v2_hardware.json":           nil,
+		"v3_inventory.json":          nil,
+		"v4_health_performance.json": nil,
+		"v99_future.json":            {"agent_notes", "gpu", "load_average"},
 	}
 	for _, f := range files {
 		name := filepath.Base(f)

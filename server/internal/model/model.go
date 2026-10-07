@@ -284,6 +284,9 @@ type DiskUsage struct {
 	// InodesUsedPct, dosya sisteminin inode doluluğudur (protokol 3); nil = bilinmiyor / dosya sistemi
 	// inode sayısı bildirmiyor (ör. btrfs). Disk yüzdesinden önce dolabilir; yalnızca bilgi içindir.
 	InodesUsedPct *float64 `json:"inodes_used_pct,omitempty"`
+	// ReadOnly (protokol 4), dosya sisteminin salt okunur bağlı olup olmadığıdır (disk hatasında çekirdek böyle
+	// yapar); nil = bilinmiyor.
+	ReadOnly *bool `json:"read_only,omitempty"`
 }
 
 type DockerContainerReport struct {
@@ -294,6 +297,12 @@ type DockerContainerReport struct {
 	RAMMB         float64 `json:"ram_mb"`
 	RestartCount  int     `json:"restart_count"`
 	UptimeSeconds int64   `json:"uptime_seconds"`
+	// Protokol 4: healthcheck sonucu (healthy | unhealthy | starting; healthcheck yoksa boş), üst üste başarısız kontrol
+	// sayısı, son çıkış kodu ve bellek yetmediği için öldürülüp öldürülmediği. nil = bilinmiyor.
+	Health              string `json:"health,omitempty"`
+	HealthFailingStreak *int   `json:"health_failing_streak,omitempty"`
+	ExitCode            *int   `json:"exit_code,omitempty"`
+	OOMKilled           *bool  `json:"oom_killed,omitempty"`
 }
 
 // ValidDockerStatus, docker_containers.status üzerindeki CHECK kısıtını yansıtır.
@@ -321,6 +330,21 @@ type MetricsIngestRequest struct {
 	// HostInfo (protokol 3) isteğe bağlıdır ve aynı "son bilinen değer" kuralına uyar.
 	HostInfo         *HostInfo               `json:"host_info,omitempty"`
 	DockerContainers []DockerContainerReport `json:"docker_containers"`
+
+	// Protokol 4 (bkz. ingest_v4.go): isteğe bağlıdır; bozuk bir bölüm raporu reddettirmez, yalnızca kendisi atılır.
+	CPUDetail    *CPUDetail    `json:"cpu_detail,omitempty"`
+	MemoryDetail *MemoryDetail `json:"memory_detail,omitempty"`
+	Pressure     *Pressure     `json:"pressure,omitempty"`
+	DiskIO       []DiskIO      `json:"disk_io,omitempty"`
+	NetIO        []NetIO       `json:"net_io,omitempty"`
+	TCP          *TCP          `json:"tcp,omitempty"`
+	Temperatures []Temperature `json:"temperatures,omitempty"`
+	RAID         []RAID        `json:"raid,omitempty"`
+	Capacity     *Capacity     `json:"capacity,omitempty"`
+	Processes    *Processes    `json:"processes,omitempty"`
+	Updates      *Updates      `json:"updates,omitempty"`
+	Services     *Services     `json:"services,omitempty"`
+	TimeSync     *TimeSync     `json:"time_sync,omitempty"`
 }
 
 // Hardware, isteğin donanım bölümünü saklanacak (temizlenmiş) hâliyle döndürür.

@@ -144,10 +144,12 @@ EOF
   local av ap want_ver
   av="$(echo "$got" | json "d.get('agent_version') or ''")"; ap="$(echo "$got" | json "d.get('agent_protocol') or 0")"
   if [[ -n "$SERVER_REF" ]]; then
-    # ESKİ server: sürüm alanlarını hiç bilmez. Yeni agent tam payload'ı 400 ile reddedilince
-    # çekirdek metriklere düşmeli (Compat) ve metrikler yine de yazılmalı.
+    # ESKİ server. Liberal sözleşmeyi bilen server (yayımlanmış sürümlerin hepsi) yeni alanları 204 ile kabul edip
+    # unsupported_fields'e yazar; agent "server eski" notunu loglar. Sözleşmeden önceki katı bir server ise tam payload'ı
+    # 400 ile reddeder ve agent çekirdek metriklere düşer (Compat). İkisinde de metrikler yazılmalı (yukarıda).
     if [[ "$kind" == tree ]]; then
-      check "$name" "eski server'da çekirdek metriklere düştü (agent günlüğü)" "$(grep -q 'core metrics only' "$WORK/log-$name.txt"; echo $?)" || rc=1
+      check "$name" "eski server'a uyum: yeni alanlar yok sayıldı ya da çekirdek metriklere düşüldü (agent günlüğü)" \
+        "$(grep -qE 'older than this agent|core metrics only' "$WORK/log-$name.txt"; echo $?)" || rc=1
     fi
   elif [[ -z "$av" ]]; then
     check "$name" "sürüm bildirmiyor => protokol 1 (agent_protocol=$ap)" "$([[ "$ap" -eq 1 ]]; echo $?)" || rc=1
@@ -161,6 +163,14 @@ EOF
   if [[ "$kind" == tree && -z "$SERVER_REF" ]]; then
     hk="$(echo "$got" | json "((d.get('host_info') or {}).get('kernel') or {}).get('release') or ''")"
     check "$name" "makine envanteri (host_info) alındı (kernel: ${hk:-yok})" "$([[ -n "$hk" ]]; echo $?)" || rc=1
+    # Aynı sürümdeki agent'ın her alanını server tanımalı; protokol 4 verisi kendi sütunlarına yazılmalı.
+    local uf v4rows v4state
+    uf="$(echo "$got" | json "','.join(d.get('unsupported_fields') or [])")"
+    check "$name" "server bütün alanları tanıyor (unsupported_fields: ${uf:-yok})" "$([[ -z "$uf" ]]; echo $?)" || rc=1
+    v4rows="$(psql "$DATABASE_URL" -Atc "SELECT count(*) FROM $SCHEMA.metrics WHERE host_id = '$id' AND system_json IS NOT NULL")"
+    v4state="$(psql "$DATABASE_URL" -Atc "SELECT system_state IS NOT NULL FROM $SCHEMA.host_status WHERE host_id = '$id'")"
+    check "$name" "protokol 4 zaman serisi yazıldı ($v4rows satır)" "$([[ "$v4rows" -ge 1 ]]; echo $?)" || rc=1
+    check "$name" "protokol 4 anlık durumları yazıldı" "$([[ "$v4state" == t ]]; echo $?)" || rc=1
   fi
   echo "$got" | python3 -c "
 import sys, json

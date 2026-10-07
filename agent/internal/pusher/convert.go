@@ -51,9 +51,9 @@ func FromDockerContainers(in []collector.DockerContainer) []DockerContainer {
 	return out
 }
 
-// Protokol 4 dönüştürücüleri. Değerler ölçüldüğü gibi gönderilir: yuvarlama bir saklama kararıdır ve server'da yapılır
-// (alert'ler ham değere bakar; hassasiyet değişince agent'ı yeniden yayınlamak gerekmez). Bütün alanları bilinmeyen
-// nesne nil döner ve gönderilmez.
+// Protokol 4 dönüştürücüleri. Değerler ölçüldüğü gibi gönderilir: server da ham saklar, yuvarlama bir gösterim
+// kararıdır ve panelde yapılır (alert'ler ham değere bakar; hassasiyet değişince agent'ı yeniden yayınlamak gerekmez).
+// Bütün alanları bilinmeyen nesne nil döner ve gönderilmez.
 
 func FromCPUBreakdown(b collector.CPUBreakdown) *CPUDetail {
 	if b.IOWaitPct == nil && b.StealPct == nil && b.ProcsBlocked == nil {

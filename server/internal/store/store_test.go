@@ -1233,9 +1233,9 @@ func TestLatestDisksIsTheNewestReport(t *testing.T) {
 	if disks, err := m.LatestDisks(ctx, id); err != nil || disks == nil || len(disks) != 0 {
 		t.Fatalf("no reports yet: %#v %v, want an empty (non-nil) list", disks, err)
 	}
-	m.Insert(ctx, id, 1, 1, []model.DiskUsage{{Mount: "/", UsedPct: 10, Total: 100, Free: 90}})
+	m.Insert(ctx, id, 1, 1, []model.DiskUsage{{Mount: "/", UsedPct: 10, Total: 100, Free: 90}}, model.MetricSeries{})
 	time.Sleep(15 * time.Millisecond)
-	m.Insert(ctx, id, 1, 1, []model.DiskUsage{{Mount: "/", UsedPct: 20, Total: 100, Free: 80}, {Mount: "/data", UsedPct: 60, Total: 500, Free: 200}})
+	m.Insert(ctx, id, 1, 1, []model.DiskUsage{{Mount: "/", UsedPct: 20, Total: 100, Free: 80}, {Mount: "/data", UsedPct: 60, Total: 500, Free: 200}}, model.MetricSeries{})
 
 	disks, err := m.LatestDisks(ctx, id)
 	if err != nil || len(disks) != 2 || disks[0].UsedPct != 20 || disks[1].Mount != "/data" || disks[1].Total != 500 {
@@ -1419,11 +1419,11 @@ func TestRecentReportedMountsSkipsEmptyReportsAndOrdersNewestFirst(t *testing.T)
 		return out
 	}
 	for _, d := range [][]model.DiskUsage{disks("/", "/a"), nil, disks("/"), {}, disks("/", "/b"), disks("/c")} {
-		if err := m.Insert(ctx, c, 1, 1, d); err != nil {
+		if err := m.Insert(ctx, c, 1, 1, d, model.MetricSeries{}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := m.Insert(ctx, other, 1, 1, disks("/other")); err != nil {
+	if err := m.Insert(ctx, other, 1, 1, disks("/other"), model.MetricSeries{}); err != nil {
 		t.Fatal(err)
 	}
 

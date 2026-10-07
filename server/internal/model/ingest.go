@@ -23,10 +23,10 @@ const (
 // ParseMetricsIngest, bir metrik raporunu ayrıştırır. Bilinmeyen üst düzey alanlar hata
 // vermez; adları (sıralı, sınırlı ve temizlenmiş) ikinci değer olarak döner ki panel "bu agent
 // server'ın tanımadığı alanlar gönderiyor" diyebilsin. Yalnızca çekirdek alanların tipi bozuksa
-// ya da gövde bir JSON nesnesi değilse hata döner.
+// ya da gövde bir JSON nesnesi değilse hata döner; protokol 4 bölümlerinden bozuk olan yalnızca atılır.
 func ParseMetricsIngest(data []byte) (MetricsIngestRequest, []string, error) {
-	var req MetricsIngestRequest
-	if err := json.Unmarshal(data, &req); err != nil {
+	var wire ingestWire
+	if err := json.Unmarshal(data, &wire); err != nil {
 		return MetricsIngestRequest{}, nil, err
 	}
 	var raw map[string]json.RawMessage
@@ -34,7 +34,9 @@ func ParseMetricsIngest(data []byte) (MetricsIngestRequest, []string, error) {
 		// "null" struct'a sessizce sıfır değerler yazardı: sahte bir %0 CPU/RAM raporu olurdu.
 		return MetricsIngestRequest{}, nil, errors.New("gövde bir JSON nesnesi olmalı")
 	}
+	req := wire.request()
 	sanitizeDiskInodes(req.Disk)
+	sanitizeV4(&req)
 	return req, unknownIngestFields(raw), nil
 }
 

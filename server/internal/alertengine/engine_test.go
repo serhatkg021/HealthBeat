@@ -1099,7 +1099,7 @@ func TestMountThresholdsDoNotAffectOtherLookups(t *testing.T) {
 func (e *env) report(t *testing.T, pcts map[string]float64) {
 	t.Helper()
 	disks := mounts(pcts)
-	if err := store.NewMetrics(e.pool).Insert(e.ctx, e.host, 1, 1, disks); err != nil {
+	if err := store.NewMetrics(e.pool).Insert(e.ctx, e.host, 1, 1, disks, model.MetricSeries{}); err != nil {
 		t.Fatal(err)
 	}
 	e.engine.EvaluateMetrics(e.ctx, e.host, e.org, 1, 1, disks)

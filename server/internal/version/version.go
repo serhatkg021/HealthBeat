@@ -13,8 +13,9 @@ import (
 var Version = "2.0.0"
 
 // Protocol, server'ın anladığı en yüksek ingest protokolüdür (agent'ın version.Protocol'ü ile
-// aynı anlam): 1 = sürüm bildirmeyen eski agent'lar, 2 = donanım özeti + sürüm başlıkları, 3 = makine envanteri (host_info) + inode.
-const Protocol = 3
+// aynı anlam): 1 = sürüm bildirmeyen eski agent'lar, 2 = donanım özeti + sürüm başlıkları, 3 = makine envanteri (host_info) + inode,
+// 4 = sistem sağlığı ve performans (CPU/bellek ayrıntısı, PSI, disk/ağ G/Ç, servisler, sıcaklık, RAID, saat senkronu …).
+const Protocol = 4
 
 // Başlık adları agent ile paylaşılan sözleşmenin parçasıdır.
 const (
