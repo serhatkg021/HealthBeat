@@ -256,3 +256,19 @@ func TestV4FieldsAreKnown(t *testing.T) {
 		t.Errorf("ingestWire has %d protocol 4 sections, want 13", len(fields))
 	}
 }
+
+// Yeniden başlatma sayısı, pencere içindeki sayaç artışlarının toplamıdır.
+func TestHostServiceRestartsSince(t *testing.T) {
+	now := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	s := HostService{RestartHistory: [][3]int64{
+		{now.Add(-20 * time.Minute).Unix(), 0, 4}, // pencere dışı
+		{now.Add(-9 * time.Minute).Unix(), 4, 6},
+		{now.Add(-time.Minute).Unix(), 6, 7},
+	}}
+	if got := s.RestartsSince(now.Add(-10 * time.Minute)); got != 3 {
+		t.Errorf("restarts in 10 min = %d, want 3", got)
+	}
+	if got := (HostService{}).RestartsSince(now); got != 0 {
+		t.Errorf("no history = %d", got)
+	}
+}

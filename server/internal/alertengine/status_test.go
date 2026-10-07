@@ -12,11 +12,17 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-// ruleThresholds, yalnızca durum kuralları olan (eşiksiz) bir eşik deposudur.
-type ruleThresholds struct{ rules model.StatusRuleSet }
+// ruleThresholds, durum kuralları ve (konu bazlı dahil) eşikleri olan bir eşik deposudur.
+type ruleThresholds struct {
+	rules      model.StatusRuleSet
+	thresholds store.HostThresholds
+}
 
 func (r *ruleThresholds) ResolveHost(context.Context, uuid.UUID, uuid.UUID) (store.HostThresholds, error) {
-	return store.HostThresholds{}, nil
+	if r.thresholds == nil {
+		return store.HostThresholds{}, nil
+	}
+	return r.thresholds, nil
 }
 
 func (r *ruleThresholds) ResolveStatusRules(context.Context, uuid.UUID, uuid.UUID) (model.StatusRuleSet, error) {
@@ -63,6 +69,17 @@ func (s *statusEnv) level(alertType, subject string) string {
 		return a.Level
 	}
 	return ""
+}
+
+// alert, türün+konunun aktif alert'idir (kopya); yoksa nil.
+func (s *statusEnv) alert(alertType, subject string) *model.Alert {
+	s.alerts.mu.Lock()
+	defer s.alerts.mu.Unlock()
+	if a := s.alerts.active(s.host, alertType, subject, false); a != nil {
+		c := *a
+		return &c
+	}
+	return nil
 }
 
 func (s *statusEnv) expect(alertType, subject, want string) {
@@ -276,7 +293,10 @@ func TestTimeSync(t *testing.T) {
 	s.expect(model.AlertTypeTimeSync, model.TimeSyncSubjectUnsynced, "") // önceki rapor senkrondu: süre yeniden başladı
 	s.at(31*time.Minute, v4(ok))
 
-	// Saat farkı (offset) alert'i eşikle değerlendirilir; durum değerlendirmesi ona dokunmaz.
+	// Saat farkı (offset) alert'i eşikle değerlendirilir (numeric.go); durum değerlendirmesi ona dokunmaz. Eşik var,
+	// raporda saat farkı yok: alert olduğu gibi kalmalı.
+	offsetLevels := model.ThresholdConfig{MetricType: model.MetricTypeTimeOffset, WarningLevel: 100, CriticalLevel: 1000}
+	s.rules.thresholds = store.HostThresholds{model.MetricTypeTimeOffset: {Base: &offsetLevels}}
 	s.alerts.mu.Lock()
 	s.alerts.alerts = append(s.alerts.alerts, &model.Alert{ID: uuid.New(), HostID: s.host, AlertType: model.AlertTypeTimeSync,
 		Subject: model.TimeSyncSubjectOffset, Level: model.AlertLevelWarning, Status: model.AlertStatusOpen})

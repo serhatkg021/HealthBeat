@@ -731,6 +731,19 @@ type HostService struct {
 	Enabled     string     `json:"enabled,omitempty"`
 	UpdatedAt   time.Time  `json:"updated_at"` // satırın içeriğinin en son değiştiği an
 	Watched     bool       `json:"watched"`
+	// RestartHistory, son 1 saatteki sayaç artışlarıdır: [unix_sn, önceki, yeni] (yeniden başlatma döngüsü alert'i).
+	RestartHistory [][3]int64 `json:"-"`
+}
+
+// RestartsSince, sayacın t'den sonraki artışlarının toplamıdır (yeniden başlatma sayısı).
+func (s HostService) RestartsSince(t time.Time) int64 {
+	var n int64
+	for _, h := range s.RestartHistory {
+		if h[0] > t.Unix() && h[2] > h[1] {
+			n += h[2] - h[1]
+		}
+	}
+	return n
 }
 
 const maxWatchedServices = 256

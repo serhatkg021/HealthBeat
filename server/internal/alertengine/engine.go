@@ -113,6 +113,8 @@ type Report struct {
 	State        *model.SystemState
 	OOMIncreased bool
 	HostInfo     *model.HostInfo
+	// DiskIO, disk G/Ç'sidir (disk gecikmesi alert'i; numeric.go). Sıcaklık ve saat farkı State'tedir.
+	DiskIO []model.DiskIO
 }
 
 // EvaluateReport, bir alımdan sonra bütün alert denetimlerini çalıştırır: aktif host_offline alert'ini çözer, sonra
@@ -129,6 +131,7 @@ func (e *Engine) EvaluateReport(ctx context.Context, hostID, orgID uuid.UUID, r 
 	e.evaluateDocker(ctx, st, r.Containers)
 	e.evaluateMetrics(ctx, st, r.CPUPct, r.RAMPct, r.Disks)
 	e.evaluateStatus(ctx, st, r)
+	e.evaluateNumeric(ctx, st, r)
 }
 
 // EvaluateMetrics, bir metrik alımından sonra cpu/ram/disk eşik denetimlerini çalıştırır.
@@ -149,6 +152,9 @@ type hostState struct {
 	rules         model.StatusRuleSet
 	active        map[alertKey]model.Alert
 	pending       map[alertKey]time.Time // koşulun başladığı an
+	// serviceList, servis tablosudur; ihtiyaç olunca bir kez okunur (bkz. Engine.services).
+	serviceList    []model.HostService
+	servicesLoaded bool
 }
 
 type alertKey struct{ alertType, subject string }
@@ -453,8 +459,8 @@ func (e *Engine) evaluateDocker(ctx context.Context, st *hostState, containers [
 	}
 }
 
-// apply, bir host+metrik+subject için alert yaşam döngüsünü çözümlenmiş bir eşiğe göre
-// çalıştırır.
+// apply, bir host+alert türü+subject için alert yaşam döngüsünü çözümlenmiş bir eşiğe göre çalıştırır. Alert türü
+// çoğunlukla eşik türüyle aynıdır; service_restart eşiği service_restart_loop, time_offset eşiği time_sync alert'i üretir.
 func (e *Engine) apply(ctx context.Context, st *hostState, metricType, subject string, value float64, threshold model.ThresholdConfig) {
 	// Aktif alert: açık ya da onaylanmış. Onay "gördüm, sustur ama izle"dir: onaylanan alert yeni bir alert/bildirim
 	// açılmasını engeller ve eşik altına inince çözülür (bkz. store: aktif alert).

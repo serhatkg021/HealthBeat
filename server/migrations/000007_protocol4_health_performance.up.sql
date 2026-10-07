@@ -42,7 +42,7 @@ CREATE TABLE host_services (
     restarts    INTEGER CHECK (restarts >= 0),       -- systemd'nin otomatik yeniden başlatma sayacı
     enabled     TEXT,                                -- enabled | disabled | static …
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),  -- satırın içeriğinin en son DEĞİŞTİĞİ an (değişmeyen rapor yazılmaz)
-    restart_history JSONB,                           -- son yeniden başlatmalar ([[unix_sn, sayaç], …]; yeniden başlatma döngüsü alert'i için)
+    restart_history JSONB,                           -- son 1 saatteki sayaç artışları ([[unix_sn, önceki, yeni], …]; yeniden başlatma döngüsü alert'i)
     PRIMARY KEY (host_id, name)
 );
 

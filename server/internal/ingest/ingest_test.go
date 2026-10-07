@@ -282,3 +282,76 @@ func TestRecordRaisesStatusAlerts(t *testing.T) {
 		t.Fatal("oom_kill still open after a report without an increase")
 	}
 }
+
+// Eşik tanımlanınca v4 raporunun sayısal değerleri alert açar: disk gecikmesi, sıcaklık (konu bazlı eşik), saat farkı
+// ve izlenen servisin yeniden başlatma döngüsü (sayaç geçmişinden).
+func TestRecordRaisesNumericAlerts(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	body, err := os.ReadFile("../../testdata/payloads/v4_health_performance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _, err := ingest.Decode(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := func() {
+		t.Helper()
+		time.Sleep(time.Millisecond)
+		if err := e.svc.Record(ctx, ingest.Report{HostID: e.host, OrgID: e.org, Source: ingest.SourcePush, Payload: payload,
+			Agent: model.AgentInfo{Version: "1.3.0", Protocol: 4}}); err != nil {
+			t.Fatal(err)
+		}
+		e.engine.Flush()
+	}
+	th := store.NewThresholds(e.pool)
+	for _, p := range []store.CreateThresholdParams{
+		{OrganizationID: &e.org, MetricType: model.MetricTypeDiskLatency, WarningLevel: 0.5, CriticalLevel: 5},
+		{OrganizationID: &e.org, MetricType: model.MetricTypeTimeOffset, WarningLevel: 1, CriticalLevel: 2},
+		{OrganizationID: &e.org, MetricType: model.MetricTypeServiceRestart, WarningLevel: 2, CriticalLevel: 10},
+	} {
+		if _, err := th.Create(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := th.SetHostOverrides(ctx, e.host, model.ThresholdOverrides{}, nil, nil, model.SubjectThresholds{
+		model.MetricTypeTemperature: {"coretemp/Package id 0": {WarningLevel: 40, CriticalLevel: 45}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.hosts.SetWatchedServices(ctx, e.host, []string{"nginx.service"}); err != nil {
+		t.Fatal(err)
+	}
+
+	record() // nginx'in sayacı (5) ilk kez görülür: artış sayılmaz
+	open := func() map[string]string {
+		t.Helper()
+		rows, err := e.pool.Query(ctx, `SELECT alert_type || COALESCE('/' || subject, ''), level FROM alerts WHERE host_id = $1 AND status = 'open'`, e.host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		out := map[string]string{}
+		for rows.Next() {
+			var k, l string
+			if err := rows.Scan(&k, &l); err != nil {
+				t.Fatal(err)
+			}
+			out[k] = l
+		}
+		return out
+	}
+	want := map[string]string{"disk_latency/nvme0n1": "warning", "temperature/coretemp/Package id 0": "critical", "time_sync/offset": "critical"}
+	if got := open(); len(got) != len(want) || got["disk_latency/nvme0n1"] != "warning" ||
+		got["temperature/coretemp/Package id 0"] != "critical" || got["time_sync/offset"] != "critical" {
+		t.Fatalf("open alerts = %v, want %v", got, want)
+	}
+
+	n := 8 // nginx 3 kez daha yeniden başladı (5 → 8)
+	payload.Services = &model.Services{Items: []model.Service{{Name: "nginx.service", Active: "active", Sub: "running", Restarts: &n}}}
+	record()
+	if got := open()["service_restart_loop/nginx.service"]; got != "warning" {
+		t.Fatalf("restart loop = %q (all: %v)", got, open())
+	}
+}

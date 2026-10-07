@@ -110,9 +110,8 @@ func (e *Engine) evaluateServices(ctx context.Context, st *hostState) {
 		e.resolveAll(ctx, st, model.AlertTypeServiceFailed)
 		return
 	}
-	services, err := e.hosts.Services(ctx, st.hostID)
-	if err != nil {
-		slog.ErrorContext(ctx, "alert engine: read services", "host_id", st.hostID.String(), "err", err)
+	services, ok := e.services(ctx, st)
+	if !ok {
 		return
 	}
 	conds := map[string]condition{}

@@ -242,3 +242,62 @@ func TestWatchedServices(t *testing.T) {
 		t.Fatalf("unknown host: err=%v, want ErrNotFound", err)
 	}
 }
+
+// Servis sayacı arttıkça [an, önceki, yeni] eklenir; ilk görülen değer ve geri giden sayaç artış sayılmaz; değişmeyen
+// rapor geçmişe dokunmaz; 1 saatten eski kayıtlar sonraki artışta budanır.
+func TestServiceRestartHistory(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	hosts := store.NewHosts(pool, testdb.SecretBox(t))
+	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "o"), "h", "x")
+	save := func(restarts *int) {
+		t.Helper()
+		if err := hosts.SaveServices(ctx, host, &model.Services{Items: []model.Service{{Name: "app.service", Active: "active", Restarts: restarts}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	history := func() [][3]int64 {
+		t.Helper()
+		services, err := hosts.Services(ctx, host)
+		if err != nil || len(services) != 1 {
+			t.Fatalf("services = %+v, %v", services, err)
+		}
+		return services[0].RestartHistory
+	}
+
+	save(ptr(3))
+	if h := history(); len(h) != 0 {
+		t.Fatalf("first seen = %v, want empty (the counter may have grown before)", h)
+	}
+	save(ptr(5))
+	h := history()
+	if len(h) != 1 || h[0][1] != 3 || h[0][2] != 5 || time.Since(time.Unix(h[0][0], 0)) > time.Minute {
+		t.Fatalf("after 3→5 = %v", h)
+	}
+	save(ptr(5))
+	save(nil) // sayaç bilinmiyor: geçmiş ve son bilinen değer korunur
+	if h := history(); len(h) != 1 {
+		t.Fatalf("unchanged/unknown counter changed history: %v", h)
+	}
+	if services, _ := hosts.Services(ctx, host); services[0].Restarts == nil || *services[0].Restarts != 5 {
+		t.Fatalf("restarts after an unknown report = %v, want the last known 5", services[0].Restarts)
+	}
+	save(ptr(6))
+	if h := history(); len(h) != 2 || h[1][1] != 5 || h[1][2] != 6 {
+		t.Fatalf("after 5→6 = %v", h)
+	}
+	save(ptr(1)) // sayaç geri gitti
+	if h := history(); len(h) != 0 {
+		t.Fatalf("after the counter went back = %v, want empty", h)
+	}
+
+	// 1 saatten eski kayıt bir sonraki artışta budanır.
+	old := time.Now().Add(-2 * time.Hour).Unix()
+	if _, err := pool.Exec(ctx, `UPDATE host_services SET restart_history = jsonb_build_array(jsonb_build_array($2::bigint, 0, 1)) WHERE host_id = $1`, host, old); err != nil {
+		t.Fatal(err)
+	}
+	save(ptr(2))
+	if h := history(); len(h) != 1 || h[0][1] != 1 || h[0][2] != 2 {
+		t.Fatalf("after pruning = %v, want only the new 1→2 entry", h)
+	}
+}

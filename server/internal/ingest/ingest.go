@@ -94,7 +94,7 @@ func (s *Service) Record(ctx context.Context, r Report) error {
 
 	s.engine.EvaluateReport(ctx, r.HostID, r.OrgID, alertengine.Report{
 		CPUPct: p.CPUUsagePct, RAMPct: p.RAMUsagePct, Disks: p.Disk, Containers: p.DockerContainers,
-		State: state, OOMIncreased: oomIncreased(prev, state), HostInfo: hw.HostInfo,
+		State: state, OOMIncreased: oomIncreased(prev, state), HostInfo: hw.HostInfo, DiskIO: p.DiskIO,
 	})
 	return nil
 }
