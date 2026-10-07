@@ -83,6 +83,8 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/thresholds/{id}", d.requirePermission("threshold.view", handle(d.handleGetThreshold)))
 	mux.HandleFunc("PUT /api/v1/thresholds/{id}", d.requirePermission("threshold.edit", handle(d.handleUpdateThreshold)))
 	mux.HandleFunc("DELETE /api/v1/thresholds/{id}", d.requirePermission("threshold.edit", handle(d.handleDeleteThreshold)))
+	mux.HandleFunc("GET /api/v1/status-rules", d.requirePermission("threshold.view", handle(d.handleListStatusRules)))
+	mux.HandleFunc("PUT /api/v1/status-rules", d.requirePermission("threshold.edit", handle(d.handleSetStatusRules)))
 
 	mux.HandleFunc("GET /api/v1/alerts", d.requirePermission("alert.view", handle(d.handleListAlerts)))
 	mux.HandleFunc("POST /api/v1/alerts/{id}/acknowledge", d.requirePermission("alert.acknowledge", handle(d.handleAcknowledgeAlert)))
@@ -92,6 +94,8 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/hosts/{id}/metrics/latest", d.requirePermission("host.view", handle(d.handleGetHostLatestMetric)))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/thresholds", d.requirePermission("threshold.view", handle(d.handleGetHostThresholds)))
 	mux.HandleFunc("PUT /api/v1/hosts/{id}/thresholds", d.requirePermission("threshold.edit", handle(d.handleSetHostThresholds)))
+	mux.HandleFunc("GET /api/v1/hosts/{id}/status-rules", d.requirePermission("threshold.view", handle(d.handleGetHostStatusRules)))
+	mux.HandleFunc("PUT /api/v1/hosts/{id}/status-rules", d.requirePermission("threshold.edit", handle(d.handleSetHostStatusRules)))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/disk-alerts", d.requirePermission("host.view", handle(d.handleGetDiskAlerts)))
 	mux.HandleFunc("PUT /api/v1/hosts/{id}/disk-alerts", d.requirePermission("host.update", handle(d.handleSetDiskAlerts)))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/docker", d.requirePermission("host.view", handle(d.handleGetHostDocker)))

@@ -691,6 +691,9 @@ func TestProtocol4MigrationAndRollback(t *testing.T) {
 		`INSERT INTO docker_containers (host_id, name, image, status, cpu_pct, ram_mb, health, health_failing_streak, exit_code, oom_killed)
 		 VALUES ($1, 'api', 'i', 'running', 0, 0, 'unhealthy', 2, 137, true)`,
 		`UPDATE host_status SET system_state = '{"oom_kills": 1}' WHERE host_id = $1`,
+		`UPDATE host_services SET restart_history = '[[1, 3]]' WHERE host_id = $1`,
+		`INSERT INTO status_alert_rules (host_id, rule, level, duration_seconds) VALUES ($1, 'service_failed', 'critical', 60)`,
+		`INSERT INTO status_alert_rules (rule, level) SELECT 'reboot_required', 'off' WHERE $1::uuid IS NOT NULL`,
 	} {
 		if _, err := pool.Exec(ctx, ok, host); err != nil {
 			t.Fatalf("rejected: %s: %v", ok, err)
@@ -707,6 +710,13 @@ func TestProtocol4MigrationAndRollback(t *testing.T) {
 		`INSERT INTO docker_containers (host_id, name, image, status, cpu_pct, ram_mb, health) VALUES ($1, 'x', 'i', 'running', 0, 0, 'sick')`,
 		`INSERT INTO alert_pending (host_id, alert_type, subject, level) VALUES ($1, 'disk_latency', 'nvme0n1', 'critical')`, // aynı anahtar
 		`INSERT INTO host_services (host_id, name, active, restarts) VALUES ($1, 'x.service', 'active', -1)`,
+		`INSERT INTO status_alert_rules (host_id, rule, level) VALUES ($1, 'gpu_hot', 'info')`,
+		`INSERT INTO status_alert_rules (host_id, rule, level) VALUES ($1, 'oom_kill', 'loud')`,
+		`INSERT INTO status_alert_rules (host_id, rule, level, duration_seconds) VALUES ($1, 'fs_readonly', 'critical', 60)`,
+		`INSERT INTO status_alert_rules (host_id, rule, level, duration_seconds) VALUES ($1, 'oom_kill', 'warning', 0)`,
+		`INSERT INTO status_alert_rules (host_id, rule, level) VALUES ($1, 'service_failed', 'warning')`,           // aynı kapsam + kural
+		`INSERT INTO status_alert_rules (rule, level) SELECT 'reboot_required', 'info' WHERE $1::uuid IS NOT NULL`, // genel, ikinci kez
+		`INSERT INTO status_alert_rules (organization_id, host_id, rule, level) SELECT o.id, $1, 'oom_kill', 'info' FROM organizations o LIMIT 1`,
 	} {
 		if _, err := pool.Exec(ctx, bad, host); err == nil {
 			t.Errorf("accepted: %s", bad)
@@ -731,7 +741,7 @@ func TestProtocol4MigrationAndRollback(t *testing.T) {
 	}
 	var alerts, thresholds, tables, columns int
 	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM alerts), (SELECT count(*) FROM host_custom_thresholds) + (SELECT count(*) FROM threshold_defaults),
-		(SELECT count(*) FROM pg_tables WHERE schemaname = current_schema() AND tablename IN ('host_services', 'host_watched_services', 'alert_pending')),
+		(SELECT count(*) FROM pg_tables WHERE schemaname = current_schema() AND tablename IN ('host_services', 'host_watched_services', 'alert_pending', 'status_alert_rules')),
 		(SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema()
 		    AND column_name IN ('system_json', 'disk_io_json', 'net_io_json', 'system_state', 'health', 'health_failing_streak', 'exit_code', 'oom_killed', 'duration_seconds'))`).
 		Scan(&alerts, &thresholds, &tables, &columns); err != nil {

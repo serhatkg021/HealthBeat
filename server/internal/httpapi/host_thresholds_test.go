@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/testdb"
 )
 
@@ -32,8 +33,8 @@ func (a *api) hostThresholds(token string, id uuid.UUID) map[string]thresholdVie
 	for _, v := range resp.Thresholds {
 		out[v.MetricType] = v
 	}
-	if len(out) != 4 || len(resp.Thresholds) != 4 {
-		a.t.Fatalf("expected one entry for each of the four threshold metrics, got %+v", resp.Thresholds)
+	if len(out) != len(model.ThresholdMetricTypes) || len(resp.Thresholds) != len(model.ThresholdMetricTypes) {
+		a.t.Fatalf("expected one entry for each threshold metric, got %+v", resp.Thresholds)
 	}
 	return out
 }

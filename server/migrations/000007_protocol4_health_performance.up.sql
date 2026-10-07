@@ -1,6 +1,7 @@
 -- 000007: Protokol 4 (agent'ın sistem sağlığı ve performans verileri). Yalnızca ekleme yapılır: zaman serisi için
 -- metrics'e üç JSONB sütun, anlık durumlar için host_status.system_state, servisler ve izlenen servisler için iki tablo,
--- Docker sağlık sütunları, süre koşullu alert'ler için alert_pending ve eşiklere duration_seconds. Yeni sütunların hepsi
+-- Docker sağlık sütunları, eşiksiz alert'lerin ayarı için status_alert_rules, süre koşullu alert'ler için alert_pending
+-- ve eşiklere duration_seconds. Yeni sütunların hepsi
 -- boş bırakılabilir; eski agent'ların raporları onları boş bırakır.
 --
 -- Kısıt değişikliği: alerts.alert_type ve eşik tablolarının metric_type / subject CHECK'leri yeni türleri kabul edecek
@@ -41,6 +42,7 @@ CREATE TABLE host_services (
     restarts    INTEGER CHECK (restarts >= 0),       -- systemd'nin otomatik yeniden başlatma sayacı
     enabled     TEXT,                                -- enabled | disabled | static …
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),  -- satırın içeriğinin en son DEĞİŞTİĞİ an (değişmeyen rapor yazılmaz)
+    restart_history JSONB,                           -- son yeniden başlatmalar ([[unix_sn, sayaç], …]; yeniden başlatma döngüsü alert'i için)
     PRIMARY KEY (host_id, name)
 );
 
@@ -63,6 +65,29 @@ CREATE TABLE alert_pending (
     since      TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT alert_pending_key UNIQUE NULLS NOT DISTINCT (host_id, alert_type, subject)
 );
+
+-- Durum kuralları: eşiği olmayan alert'lerin (servis çalışmıyor, RAID bozuk …) seviyesi ve süresi. Kapsam genel (iki
+-- kimlik de NULL), organizasyon (alt dallara miras kalır) ya da tek sunucudur; en özel olan geçerlidir. Hiç satır yoksa
+-- kural kapalıdır: yeni alert türleri ancak açılınca çalışır. level 'off' üst kapsamdaki kuralı bu kapsamda kapatır.
+-- duration_seconds: koşul bu kadar sürerse alert açılır (oom_kill'de: bu kadar süre yeni artış olmazsa kapanır); NULL =
+-- hemen. Anlık olaylara (container_oom, fs_readonly, reboot_required) süre verilmez.
+CREATE TABLE status_alert_rules (
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id  UUID REFERENCES organizations (id) ON DELETE CASCADE,
+    host_id          UUID REFERENCES hosts (id) ON DELETE CASCADE,
+    rule             TEXT NOT NULL CHECK (rule IN (
+        'service_failed', 'container_unhealthy', 'container_oom', 'oom_kill', 'fs_readonly', 'raid_degraded',
+        'raid_rebuilding', 'time_unsynced', 'time_source', 'reboot_required', 'security_updates')),
+    level            TEXT NOT NULL CHECK (level IN ('off', 'info', 'warning', 'critical')),
+    duration_seconds INTEGER CHECK (duration_seconds > 0),
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT status_alert_rules_one_scope_chk CHECK (organization_id IS NULL OR host_id IS NULL),
+    CONSTRAINT status_alert_rules_duration_chk CHECK (
+        duration_seconds IS NULL OR rule NOT IN ('container_oom', 'fs_readonly', 'reboot_required')),
+    CONSTRAINT status_alert_rules_key UNIQUE NULLS NOT DISTINCT (organization_id, host_id, rule)
+);
+CREATE INDEX status_alert_rules_host_idx ON status_alert_rules (host_id) WHERE host_id IS NOT NULL;
 
 -- Eşik ancak bu kadar saniye kesintisiz aşılırsa alert açılır; NULL = hemen.
 ALTER TABLE threshold_defaults ADD COLUMN duration_seconds INTEGER CHECK (duration_seconds > 0);

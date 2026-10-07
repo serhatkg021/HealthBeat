@@ -1,6 +1,6 @@
 -- Geri alma: protokol 4 sütunları ve tabloları silinir, CHECK'ler eski hâline döner. Yeni türlerdeki alert'ler ve
--- eşikler önce silinir (eski CHECK onları kabul etmez); servis listesi, izlenen servis seçimi ve yeni zaman serisi
--- verileri kaybolur.
+-- eşikler önce silinir (eski CHECK onları kabul etmez); servis listesi, izlenen servis seçimi, durum kuralları ve yeni
+-- zaman serisi verileri kaybolur.
 DELETE FROM alerts WHERE alert_type NOT IN ('cpu', 'ram', 'disk', 'docker_restart', 'host_offline', 'disk_missing');
 DELETE FROM threshold_defaults WHERE metric_type NOT IN ('cpu', 'ram', 'disk', 'docker_restart');
 DELETE FROM host_custom_thresholds WHERE metric_type NOT IN ('cpu', 'ram', 'disk', 'docker_restart');
@@ -24,6 +24,7 @@ ALTER TABLE alerts ADD CONSTRAINT alerts_alert_type_check CHECK (
 ALTER TABLE host_custom_thresholds DROP COLUMN duration_seconds;
 ALTER TABLE threshold_defaults DROP COLUMN duration_seconds;
 DROP TABLE alert_pending;
+DROP TABLE status_alert_rules;
 DROP TABLE host_watched_services;
 DROP TABLE host_services;
 

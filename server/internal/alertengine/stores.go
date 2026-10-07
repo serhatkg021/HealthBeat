@@ -2,6 +2,7 @@ package alertengine
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -24,9 +25,19 @@ type AlertStore interface {
 	ResolveActiveByHostAndMetric(ctx context.Context, hostID uuid.UUID, alertType string) (model.Alert, error)
 }
 
-// ThresholdStore, eşik çözümlemesidir (store.Thresholds; en özel olan kazanır, bkz. docs/MIMARI.md bölüm 8).
+// ThresholdStore, eşik ve durum kuralı çözümlemesidir (store.Thresholds; en özel olan kazanır, bkz. docs/MIMARI.md
+// bölüm 8).
 type ThresholdStore interface {
 	ResolveHost(ctx context.Context, hostID, orgID uuid.UUID) (store.HostThresholds, error)
+	ResolveStatusRules(ctx context.Context, hostID, orgID uuid.UUID) (model.StatusRuleSet, error)
+}
+
+// PendingStore, süre koşulu dolmamış alert koşullarıdır (store.Alerts, alert_pending tablosu). Bildirim doğurmadığı
+// için transaction dışıdır.
+type PendingStore interface {
+	ListPending(ctx context.Context, hostID uuid.UUID) ([]store.PendingCondition, error)
+	MarkPending(ctx context.Context, hostID uuid.UUID, alertType, subject, level string, at time.Time) (time.Time, error)
+	ClearPending(ctx context.Context, hostID uuid.UUID, alertType, subject string) error
 }
 
 // HostStore, sunucunun disk alert seçimi ve bildirim metnindeki bilgileridir (store.Hosts).
@@ -74,6 +85,7 @@ type TxRunner interface {
 // bildirim doğuran her değişiklik Tx üzerinden yapılır.
 type Stores struct {
 	Alerts        AlertStore
+	Pending       PendingStore
 	Thresholds    ThresholdStore
 	Hosts         HostStore
 	Metrics       MetricStore

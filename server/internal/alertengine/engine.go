@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,6 +31,7 @@ type Engine struct {
 	thresholds    ThresholdStore
 	metrics       MetricStore
 	alerts        AlertStore
+	pending       PendingStore
 	hosts         HostStore
 	organizations OrgStore
 	notifs        RecipientStore
@@ -41,6 +43,8 @@ type Engine struct {
 	panelBaseURL atomic.Pointer[string]
 	// worker, alert bildirimlerini kuyruktan teslim eder; DB'siz testlerde nil.
 	worker *outbox.Worker
+	// now, süre koşullarının saatidir (testler değiştirir).
+	now func() time.Time
 }
 
 // New, motoru ve alert bildirimlerinin teslim işçisini kurar; teslim için RunNotifications'ı çalıştırın.
@@ -52,6 +56,7 @@ func New(pool *pgxpool.Pool, mailer *notify.Mailer, panelBaseURL string) *Engine
 		Thresholds:    store.NewThresholds(pool),
 		Metrics:       store.NewMetrics(pool),
 		Alerts:        alerts,
+		Pending:       alerts,
 		Hosts:         store.NewHosts(pool, nil), // yalnızca host adlarını okur; pull secret'lara asla dokunmaz
 		Organizations: store.NewOrganizations(pool),
 		Recipients:    store.NewNotifications(pool),
@@ -66,12 +71,14 @@ func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, 
 		thresholds:    st.Thresholds,
 		metrics:       st.Metrics,
 		alerts:        st.Alerts,
+		pending:       st.Pending,
 		hosts:         st.Hosts,
 		organizations: st.Organizations,
 		notifs:        st.Recipients,
 		tx:            st.Tx,
 		notifiers:     make(map[string]notify.Notifier, len(notifiers)),
 		worker:        worker,
+		now:           time.Now,
 	}
 	e.SetPanelBaseURL(panelBaseURL)
 	for _, n := range notifiers {
@@ -124,13 +131,16 @@ func (e *Engine) EvaluateMetrics(ctx context.Context, hostID, orgID uuid.UUID, c
 	}
 }
 
-// hostState, bir raporun değerlendirmesinde bir kez okunan durumdur: host'un aktif alert'leri ve bütün eşikleri. Her
-// kalem (metrik, mount, container) veritabanına ayrı ayrı gitmek yerine buradan okur; motorun yaptığı değişiklikler de
-// buraya yansıtılır. Aynı anda açılmaya karşı koruma yine veritabanındadır (CreateIfNoneActive).
+// hostState, bir raporun değerlendirmesinde bir kez okunan durumdur: host'un aktif alert'leri, bütün eşikleri, durum
+// kuralları ve süre koşulu bekleyen koşulları. Her kalem (metrik, mount, container) veritabanına ayrı ayrı gitmek
+// yerine buradan okur; motorun yaptığı değişiklikler de buraya yansıtılır. Aynı anda açılmaya karşı koruma yine
+// veritabanındadır (CreateIfNoneActive).
 type hostState struct {
 	hostID, orgID uuid.UUID
 	thresholds    store.HostThresholds
+	rules         model.StatusRuleSet
 	active        map[alertKey]model.Alert
+	pending       map[alertKey]time.Time // koşulun başladığı an
 }
 
 type alertKey struct{ alertType, subject string }
@@ -146,11 +156,67 @@ func (e *Engine) loadState(ctx context.Context, hostID, orgID uuid.UUID) (*hostS
 		slog.ErrorContext(ctx, "alert engine: list active alerts", "host_id", hostID.String(), "err", err)
 		return nil, false
 	}
-	st := &hostState{hostID: hostID, orgID: orgID, thresholds: thresholds, active: make(map[alertKey]model.Alert, len(active))}
+	rules, err := e.thresholds.ResolveStatusRules(ctx, hostID, orgID)
+	if err != nil {
+		slog.ErrorContext(ctx, "alert engine: resolve status rules", "host_id", hostID.String(), "err", err)
+		return nil, false
+	}
+	pending, err := e.pending.ListPending(ctx, hostID)
+	if err != nil {
+		slog.ErrorContext(ctx, "alert engine: list pending conditions", "host_id", hostID.String(), "err", err)
+		return nil, false
+	}
+	st := &hostState{hostID: hostID, orgID: orgID, thresholds: thresholds, rules: rules,
+		active: make(map[alertKey]model.Alert, len(active)), pending: make(map[alertKey]time.Time, len(pending))}
 	for _, a := range active {
 		st.active[alertKey{a.AlertType, a.Subject}] = a
 	}
+	for _, p := range pending {
+		st.pending[alertKey{p.AlertType, p.Subject}] = p.Since
+	}
 	return st, true
+}
+
+// sustained, koşulun (tür+konu) en az d süredir sürdüğünü bildirir; d sıfırsa hemen true. Koşul ilk kez görülüyorsa
+// başlangıcı now olarak kaydedilir (alert_pending): süre, server yeniden başlasa da kaldığı yerden sayılır. Kayıt
+// yazılamazsa false döner ve bir sonraki raporda yeniden denenir (alert erken açılmaz).
+func (e *Engine) sustained(ctx context.Context, st *hostState, alertType, subject, level string, d time.Duration) bool {
+	if d <= 0 {
+		return true
+	}
+	k := alertKey{alertType, subject}
+	since, ok := st.pending[k]
+	if !ok {
+		var err error
+		since, err = e.pending.MarkPending(ctx, st.hostID, alertType, subject, level, e.now())
+		if err != nil {
+			slog.ErrorContext(ctx, "alert engine: mark pending condition", "host_id", st.hostID.String(), "alert_type", alertType, "err", err)
+			return false
+		}
+		st.pending[k] = since
+	}
+	return e.now().Sub(since) >= d
+}
+
+// clearPending, koşulun bekleme kaydını siler (koşul kalktı ya da alert açıldı); kayıt yoksa hiçbir şey yapmaz.
+func (e *Engine) clearPending(ctx context.Context, st *hostState, alertType, subject string) {
+	k := alertKey{alertType, subject}
+	if _, ok := st.pending[k]; !ok {
+		return
+	}
+	if err := e.pending.ClearPending(ctx, st.hostID, alertType, subject); err != nil {
+		slog.ErrorContext(ctx, "alert engine: clear pending condition", "host_id", st.hostID.String(), "alert_type", alertType, "err", err)
+		return // kayıt kaldı: bir sonraki raporda yeniden denenir
+	}
+	delete(st.pending, k)
+}
+
+// durationOf, saniye cinsinden süreyi time.Duration'a çevirir (nil = 0, hemen).
+func durationOf(seconds *int) time.Duration {
+	if seconds == nil {
+		return 0
+	}
+	return time.Duration(*seconds) * time.Second
 }
 
 // take, bu tür+subject'in aktif alert'ini durumdan çıkarıp döndürür (çözülmek üzere).
@@ -397,6 +463,7 @@ func (e *Engine) apply(ctx context.Context, st *hostState, metricType, subject s
 	}
 
 	if level == "" {
+		e.clearPending(ctx, st, metricType, subject)
 		if hasActive {
 			delete(st.active, key)
 			// Çözülme okuması: eşiğin altına döndüğü andaki gerçek ölçüm ve uyarı eşiği — böylece
@@ -444,6 +511,13 @@ func (e *Engine) apply(ctx context.Context, st *hostState, metricType, subject s
 		}
 		return
 	}
+
+	// Süre koşulu: eşik kesintisiz threshold.DurationSeconds boyunca aşılmadıkça alert açılmaz (aktif alert'in seviye
+	// değişimi beklemez; yukarıda).
+	if !e.sustained(ctx, st, metricType, subject, level, durationOf(threshold.DurationSeconds)) {
+		return
+	}
+	e.clearPending(ctx, st, metricType, subject)
 
 	created := false
 	err := e.change(ctx, e.prepare(ctx, hostID, orgID, level), store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {

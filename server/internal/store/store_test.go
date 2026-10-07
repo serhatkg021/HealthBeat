@@ -1317,7 +1317,7 @@ func TestSetHostOverridesAppliesAllOrNothing(t *testing.T) {
 	// alınmalı; ram'in silinmesi (aralarında sıralanır) de geri alınmalı.
 	err := th.SetHostOverrides(ctx, host, model.ThresholdOverrides{
 		"cpu": {WarningLevel: 10, CriticalLevel: 20}, "ram": nil, "zzz": {WarningLevel: 1, CriticalLevel: 2},
-	}, nil, nil)
+	}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("a rejected threshold was accepted")
 	}
@@ -1326,7 +1326,7 @@ func TestSetHostOverridesAppliesAllOrNothing(t *testing.T) {
 		t.Fatalf("after the failed call: %v (err %v), want the untouched original ram 1/2", got, err)
 	}
 
-	if err := th.SetHostOverrides(ctx, uuid.New(), model.ThresholdOverrides{"cpu": {WarningLevel: 1, CriticalLevel: 2}}, nil, nil); !errors.Is(err, store.ErrNotFound) {
+	if err := th.SetHostOverrides(ctx, uuid.New(), model.ThresholdOverrides{"cpu": {WarningLevel: 1, CriticalLevel: 2}}, nil, nil, nil); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("unknown host: err=%v, want ErrNotFound", err)
 	}
 }
@@ -1380,7 +1380,7 @@ func TestSetHostOverridesWritesMountThresholdsAllOrNothing(t *testing.T) {
 	testdb.MountThreshold(t, pool, c, "/drop", 3, 4)
 
 	err := th.SetHostOverrides(ctx, c, model.ThresholdOverrides{"disk": {WarningLevel: 70, CriticalLevel: 80}},
-		model.MountThresholds{"/new": {WarningLevel: 5, CriticalLevel: 6}, "/drop": nil, "/keep": {WarningLevel: 9, CriticalLevel: 10}}, nil)
+		model.MountThresholds{"/new": {WarningLevel: 5, CriticalLevel: 6}, "/drop": nil, "/keep": {WarningLevel: 9, CriticalLevel: 10}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1394,7 +1394,7 @@ func TestSetHostOverridesWritesMountThresholdsAllOrNothing(t *testing.T) {
 
 	// Reddedilen bir yazma (bilinmeyen metrik mount'lardan önce sıralanır) her mount'u olduğu gibi bırakır.
 	err = th.SetHostOverrides(ctx, c, model.ThresholdOverrides{"zzz": {WarningLevel: 1, CriticalLevel: 2}},
-		model.MountThresholds{"/keep": nil, "/new": {WarningLevel: 50, CriticalLevel: 60}}, nil)
+		model.MountThresholds{"/keep": nil, "/new": {WarningLevel: 50, CriticalLevel: 60}}, nil, nil)
 	if err == nil {
 		t.Fatal("rejected threshold accepted")
 	}

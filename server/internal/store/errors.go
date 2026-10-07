@@ -36,6 +36,7 @@ var (
 	ErrThresholdExists        = reason(ErrConflict, "threshold already exists for this scope and metric")
 	ErrThresholdLevelsInvalid = reason(ErrConflict, "warning level exceeds critical level")
 	ErrHostThresholdInvalid   = reason(ErrConflict, "invalid host threshold")
+	ErrStatusRuleInvalid      = reason(ErrConflict, "invalid status alert rule")
 
 	ErrRouteExists        = reason(ErrConflict, "route already exists for this recipient and channel in this scope")
 	ErrRouteTargetMissing = reason(ErrNotFound, "route organization, host, user or contact does not exist")
