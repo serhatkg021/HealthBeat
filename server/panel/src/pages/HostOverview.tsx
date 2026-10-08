@@ -14,7 +14,7 @@ import { agentHint, agentKind, needsUpdate, unsupportedFieldsNotice, type AgentP
 import { formatCores, formatRamUsage } from './hardwareTotals'
 import { statusDuration } from './hostStatus'
 import { effectiveLevels, mountLevels, pctText, usageTone, TONE_LABEL } from './usage'
-import { alertLevelLabel, alertLevelTone, alertMetricLabel, hostStatusLabel } from '../labels'
+import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertSubjectText, hostStatusLabel } from '../labels'
 import { alertReading } from './alertText'
 
 // Sunucu sayfasının "Genel" sekmesi: sunucunun şu anki durumu ve açık sorunları. Yalnızca en son raporu gösterir;
@@ -247,7 +247,7 @@ function OpenIssues({ hostId, onShowAlerts }: { hostId: string; onShowAlerts: ()
               <StatusBadge tone={alertLevelTone(a.level)}>{alertLevelLabel(a.level)}</StatusBadge>
               <span>
                 {alertMetricLabel(a.alert_type)}
-                {a.subject && <span className="muted"> · {a.subject}</span>}
+                {a.subject && <span className="muted"> · {alertSubjectText(a.alert_type, a.subject)}</span>}
               </span>
               {alertReading(a) && <span className="muted tnum">{alertReading(a)}</span>}
               <span className="muted issue-age">{new Date(a.created_at).toLocaleString()}</span>

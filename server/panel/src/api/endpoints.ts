@@ -18,7 +18,12 @@ import type {
   AlertStatus,
   Host,
   HostMode,
+  HostServices,
+  HostStatusRuleView,
   HostThresholdsResponse,
+  StatusRuleChanges,
+  StatusRuleConfig,
+  SubjectThresholdOverrides,
   ContainerOverrides,
   DashboardOverview,
   DashboardSummary,
@@ -151,17 +156,35 @@ export interface CreateHostInput {
   container_thresholds?: ContainerOverrides
 }
 
+// Sunucu eşiklerinin isteğe bağlı konu bazlı kısımları; verilmeyen kısma dokunulmaz.
+export interface HostSubjectOverrides {
+  mounts?: MountOverrides
+  containers?: ContainerOverrides
+  // Protokol 4 türlerinde disk, sensör ya da servis başına ({"disk_latency": {"sda": {...}}}).
+  subjects?: SubjectThresholdOverrides
+}
+
 export const hostsApi = {
   thresholds: (id: string) => apiRequest<HostThresholdsResponse>(`/api/v1/hosts/${id}/thresholds`),
-  setThresholds: (id: string, thresholds: ThresholdOverrides, mountThresholds?: MountOverrides, containerThresholds?: ContainerOverrides) =>
+  setThresholds: (id: string, thresholds: ThresholdOverrides, parts: HostSubjectOverrides = {}) =>
     apiRequest<HostThresholdsResponse>(`/api/v1/hosts/${id}/thresholds`, {
       method: 'PUT',
       body: {
         thresholds,
-        ...(mountThresholds ? { mount_thresholds: mountThresholds } : {}),
-        ...(containerThresholds ? { container_thresholds: containerThresholds } : {}),
+        ...(parts.mounts ? { mount_thresholds: parts.mounts } : {}),
+        ...(parts.containers ? { container_thresholds: parts.containers } : {}),
+        ...(parts.subjects ? { subject_thresholds: parts.subjects } : {}),
       },
     }),
+  // Durum kuralları (servis çalışmıyor, RAID bozuk …): her kural için üst kapsamlardan gelen ve sunucunun kendi ayarı.
+  statusRules: (id: string) => apiRequest<HostStatusRuleView[]>(`/api/v1/hosts/${id}/status-rules`),
+  setStatusRules: (id: string, rules: StatusRuleChanges) =>
+    apiRequest<HostStatusRuleView[]>(`/api/v1/hosts/${id}/status-rules`, { method: 'PUT', body: { rules } }),
+  // systemd servisleri (protokol 4; eski agent'ta liste boş) ve izlenen servis seçimi.
+  services: (id: string) => apiRequest<HostServices>(`/api/v1/hosts/${id}/services`),
+  // Seçimin tamamını değiştirir; şu an raporlanmayan bir servis de seçilebilir.
+  setWatchedServices: (id: string, services: string[]) =>
+    apiRequest<HostServices>(`/api/v1/hosts/${id}/watched-services`, { method: 'PUT', body: { services } }),
   diskAlerts: (id: string) => apiRequest<DiskAlertSettings>(`/api/v1/hosts/${id}/disk-alerts`),
   setDiskAlerts: (id: string, selection: { all_mounts_alert: boolean; custom_alert_mounts: string[] }) =>
     apiRequest<DiskAlertSettings>(`/api/v1/hosts/${id}/disk-alerts`, { method: 'PUT', body: selection }),
@@ -243,14 +266,31 @@ export interface CreateThresholdInput {
   metric_type: MetricType
   warning_level: number
   critical_level: number
+  // Yalnızca protokol 4 türlerinde; verilmezse hemen.
+  duration_seconds?: number
+}
+
+// duration_seconds: verilmezse değişmez, null süreyi kaldırır (hemen).
+export interface ThresholdPatch {
+  warning_level?: number
+  critical_level?: number
+  duration_seconds?: number | null
 }
 
 export const thresholdsApi = {
   list: () => apiRequest<ThresholdConfig[]>('/api/v1/thresholds'),
   create: (input: CreateThresholdInput) => apiRequest<ThresholdConfig>('/api/v1/thresholds', { method: 'POST', body: input }),
-  update: (id: string, patch: Partial<Pick<ThresholdConfig, 'warning_level' | 'critical_level'>>) =>
-    apiRequest<ThresholdConfig>(`/api/v1/thresholds/${id}`, { method: 'PUT', body: patch }),
+  update: (id: string, patch: ThresholdPatch) => apiRequest<ThresholdConfig>(`/api/v1/thresholds/${id}`, { method: 'PUT', body: patch }),
   remove: (id: string) => apiRequest<void>(`/api/v1/thresholds/${id}`, { method: 'DELETE' }),
+}
+
+// Durum kurallarının genel ve organizasyon kapsamı (sunucununki hostsApi.statusRules'ta). Liste genel kuralları ve
+// çağıranın görebildiği organizasyonlarınkini (üst zincir dahil) döndürür; tanımlanmamış kural kapalıdır.
+export const statusRulesApi = {
+  list: () => apiRequest<StatusRuleConfig[]>('/api/v1/status-rules'),
+  // organizationId null = genel kurallar (yalnızca super_admin). Yanıt yalnızca o kapsamın satırlarıdır.
+  set: (organizationId: string | null, rules: StatusRuleChanges) =>
+    apiRequest<StatusRuleConfig[]>('/api/v1/status-rules', { method: 'PUT', body: { organization_id: organizationId, rules } }),
 }
 
 export const usersApi = {

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Info } from 'lucide-react'
 import { thresholdsApi } from '../api/endpoints'
 import type { MetricType, Organization, ThresholdConfig } from '../types/api'
-import { METRICS, defaultSource, validateDraft } from './thresholds'
+import { METRICS, defaultSource, perMetric, validateDraft } from './thresholds'
 import { parentMap } from './orgTree'
 
 interface RowDraft {
@@ -16,7 +16,7 @@ const toDraft = (t?: ThresholdConfig): RowDraft => ({ warning: t ? String(t.warn
 // varsayılandan miras alınır; alt organizasyonlar ve sunucular da buradan miras alır. Sunucuya özel değer hepsini ezer.
 export function OrganizationThresholds({ organization, orgs, canEdit }: { organization: Organization; orgs: Organization[]; canEdit: boolean }) {
   const [list, setList] = useState<ThresholdConfig[] | null>(null)
-  const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>({ cpu: toDraft(), ram: toDraft(), disk: toDraft(), docker_restart: toDraft() })
+  const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>(() => perMetric(() => toDraft()))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<MetricType | null>(null)
   const parents = useMemo(() => parentMap(orgs), [orgs])
@@ -28,7 +28,7 @@ export function OrganizationThresholds({ organization, orgs, canEdit }: { organi
       .then((all) => {
         setList(all)
         const own = (m: MetricType) => all.find((t) => t.metric_type === m && t.organization_id === organization.id)
-        setDrafts({ cpu: toDraft(own('cpu')), ram: toDraft(own('ram')), disk: toDraft(own('disk')), docker_restart: toDraft(own('docker_restart')) })
+        setDrafts(perMetric((m) => toDraft(own(m))))
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'eşikler yüklenemedi'))
   }, [organization.id])

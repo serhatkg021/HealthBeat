@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { thresholdsApi } from '../api/endpoints'
 import type { MetricType, ThresholdConfig } from '../types/api'
 import { useAuth } from '../auth/AuthContext'
-import { METRICS, validateDraft } from './thresholds'
+import { METRICS, perMetric, validateDraft } from './thresholds'
 import { Info } from 'lucide-react'
 
 interface RowDraft {
@@ -20,12 +20,7 @@ export function SystemThresholds() {
   // (organizasyonsuz) eşikleri server yalnızca super_admin'e yazdırır.
   const canEdit = can('threshold.edit') && user?.role === 'super_admin'
   const [defaults, setDefaults] = useState<Partial<Record<MetricType, ThresholdConfig>>>({})
-  const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>({
-    cpu: toDraft(),
-    ram: toDraft(),
-    disk: toDraft(),
-    docker_restart: toDraft(),
-  })
+  const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>(() => perMetric(() => toDraft()))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<MetricType | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<MetricType | null>(null)
@@ -39,12 +34,7 @@ export function SystemThresholds() {
         // kendi kapsamlarında yönetilir.
         for (const t of list) if (!t.organization_id) next[t.metric_type] = t
         setDefaults(next)
-        setDrafts({
-          cpu: toDraft(next.cpu),
-          ram: toDraft(next.ram),
-          disk: toDraft(next.disk),
-          docker_restart: toDraft(next.docker_restart),
-        })
+        setDrafts(perMetric((m) => toDraft(next[m])))
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'eşikler yüklenemedi'))
   }

@@ -97,8 +97,7 @@ export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; can
       const { thresholds, mount_thresholds, container_thresholds } = await hostsApi.setThresholds(
         hostId,
         toOverrides(draft),
-        toMountOverrides(savedMounts, draftMounts),
-        toMountOverrides(savedContainers, draftContainers),
+        { mounts: toMountOverrides(savedMounts, draftMounts), containers: toMountOverrides(savedContainers, draftContainers) },
       )
       const drafts = draftsFromServer(thresholds)
       const mounts = mountDraftsFromServer(mount_thresholds)

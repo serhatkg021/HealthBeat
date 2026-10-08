@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { alertLevelLabel, alertMetricLabel, alertStatusLabel, hostStatusLabel, containerStatusLabel } from './labels.ts'
+import { alertLevelLabel, alertMetricLabel, alertStatusLabel, alertSubjectText, hostStatusLabel, containerStatusLabel } from './labels.ts'
 
 test('known API values are shown in Turkish', () => {
   assert.equal(hostStatusLabel('online'), 'çevrimiçi')
@@ -34,4 +34,33 @@ test('alert metrics are labelled, including the ones that are not a plain metric
 test('an unknown value is shown as it is instead of an empty label', () => {
   assert.equal(hostStatusLabel('maintenance'), 'maintenance')
   assert.equal(containerStatusLabel('weird'), 'weird')
+})
+
+test('every protocol 4 alert type has a Turkish label', () => {
+  const types = [
+    'disk_latency',
+    'temperature',
+    'service_failed',
+    'service_restart_loop',
+    'container_unhealthy',
+    'container_oom',
+    'oom_kill',
+    'fs_readonly',
+    'raid_degraded',
+    'time_sync',
+    'reboot_required',
+    'security_updates',
+  ]
+  const labels = types.map(alertMetricLabel)
+  types.forEach((t, i) => assert.notEqual(labels[i], t, t))
+  assert.equal(new Set(labels).size, types.length)
+})
+
+test('time_sync subjects are shown as the reason; other subjects as they are', () => {
+  assert.equal(alertSubjectText('time_sync', 'unsynced'), 'saat senkron değil')
+  assert.equal(alertSubjectText('time_sync', 'source'), 'saat kaynağı sorunlu')
+  assert.equal(alertSubjectText('time_sync', 'offset'), 'saat farkı eşiği aştı')
+  assert.equal(alertSubjectText('time_sync', 'yeni'), 'yeni')
+  assert.equal(alertSubjectText('disk', 'unsynced'), 'unsynced')
+  assert.equal(alertSubjectText('service_failed', 'nginx.service'), 'nginx.service')
 })

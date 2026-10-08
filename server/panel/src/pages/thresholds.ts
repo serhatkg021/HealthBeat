@@ -38,6 +38,23 @@ export const METRICS: MetricInfo[] = [
 
 export const metricInfo = (type: MetricType): MetricInfo => METRICS.find((m) => m.type === type)!
 
+// Server'ın bildiği bütün eşik türleri (model.ThresholdMetricTypes sırasıyla). METRICS bunların ekranda düzenlenenleridir.
+export const METRIC_TYPES: readonly MetricType[] = [
+  'cpu',
+  'ram',
+  'disk',
+  'docker_restart',
+  'disk_latency',
+  'temperature',
+  'service_restart',
+  'time_offset',
+]
+
+// Her eşik türü için bir değer.
+export function perMetric<T>(f: (type: MetricType) => T): Record<MetricType, T> {
+  return Object.fromEntries(METRIC_TYPES.map((m) => [m, f(m)])) as Record<MetricType, T>
+}
+
 export type Mode = 'default' | 'custom'
 
 // Sayı girdileri metin olarak tutulur; böylece yarım yazılmış bir değer imlecin altında yeniden yazılmaz.
@@ -54,7 +71,7 @@ const emptyDraft = (): Draft => ({ mode: 'default', warning: '', critical: '' })
 
 // Her metrik "varsayılan"da — yeni bir sunucunun başladığı yer.
 export function defaultDrafts(): Drafts {
-  return { cpu: emptyDraft(), ram: emptyDraft(), disk: emptyDraft(), docker_restart: emptyDraft() }
+  return perMetric(emptyDraft)
 }
 
 export function draftsFromServer(views: HostThresholdView[]): Drafts {

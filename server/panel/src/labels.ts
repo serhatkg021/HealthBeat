@@ -32,6 +32,26 @@ const ALERT_METRIC: Record<string, string> = {
   docker_restart: 'Docker restart',
   host_offline: 'Sunucu çevrimdışı',
   disk_missing: 'Disk kayboldu',
+  // Protokol 4.
+  disk_latency: 'Disk gecikmesi',
+  temperature: 'Sıcaklık',
+  service_failed: 'Servis çalışmıyor',
+  service_restart_loop: 'Servis sürekli yeniden başlıyor',
+  container_unhealthy: 'Container sağlıksız',
+  container_oom: 'Container bellek yetmezliği',
+  oom_kill: 'Bellek yetmezliği (OOM)',
+  fs_readonly: 'Dosya sistemi salt okunur',
+  raid_degraded: 'RAID sorunlu',
+  time_sync: 'Saat senkronu',
+  reboot_required: 'Yeniden başlatma gerekli',
+  security_updates: 'Güvenlik güncellemesi bekliyor',
+}
+
+// time_sync alert'inin konusu bir sorun türüdür (server'ın bildirim metniyle aynı).
+const TIME_SYNC_SUBJECT: Record<string, string> = {
+  unsynced: 'saat senkron değil',
+  source: 'saat kaynağı sorunlu',
+  offset: 'saat farkı eşiği aştı',
 }
 
 // Docker Engine'in container durumları.
@@ -78,6 +98,9 @@ export const alertLevelTone = (level: string): 'neutral' | 'warning' | 'critical
 export const alertLevelLabel = (level: string): string => label(ALERT_LEVEL, level)
 export const alertStatusLabel = (status: string): string => label(ALERT_STATUS, status)
 export const alertMetricLabel = (metric: string): string => label(ALERT_METRIC, metric)
+// Alert'in konusu (mount, container, disk, sensör, servis, RAID dizisi); time_sync'te sorun türünün okunur adı.
+export const alertSubjectText = (alertType: string, subject: string): string =>
+  alertType === 'time_sync' ? label(TIME_SYNC_SUBJECT, subject) : subject
 export const containerStatusLabel = (status: string): string => label(CONTAINER_STATUS, status)
 export const notificationStatusLabel = (status: string): string => label(NOTIFICATION_STATUS, status)
 // Bildirim durumunun rozet rengi: gittiyse yeşil, bekliyorsa (yeniden denenecek) sarı, gitmediyse kırmızı.

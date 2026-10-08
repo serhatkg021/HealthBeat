@@ -10,6 +10,7 @@ import {
   alertLevelTone,
   alertMetricLabel,
   alertStatusLabel,
+  alertSubjectText,
   channelLabel,
   notificationStatusLabel,
   notificationStatusTone,
@@ -62,7 +63,7 @@ export function AlertDetail({ alert, hostTitle, onClose }: { alert: Alert | null
             </Row>
             <Row label="Metrik">
               {alertMetricLabel(alert.alert_type)}
-              {alert.subject && <span className="muted"> · {alert.subject}</span>}
+              {alert.subject && <span className="muted"> · {alertSubjectText(alert.alert_type, alert.subject)}</span>}
               {alertReading(alert) && <div className="muted tnum">{alertReading(alert)}</div>}
             </Row>
             <Row label="Seviye">
