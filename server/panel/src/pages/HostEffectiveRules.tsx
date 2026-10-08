@@ -5,7 +5,7 @@ import { hostsApi } from '../api/endpoints'
 import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../auth/AuthContext'
 import { alertRulesPath, notificationsPath } from '../navigation'
-import { diskAlertSummary, effectiveRules, type EffectiveRule, type RuleSource } from './effectiveRules'
+import { diskAlertSummary, effectiveRules, statusEffectiveRules, type EffectiveRule, type RuleSource } from './effectiveRules'
 
 const SOURCE: Record<RuleSource, { label: string; tone: 'warning' | 'neutral' }> = {
   custom: { label: 'bu sunucuya özel', tone: 'warning' },
@@ -20,6 +20,7 @@ export function HostEffectiveRules({ hostId }: { hostId: string }) {
   const { can } = useAuth()
   const [rules, setRules] = useState<EffectiveRule[] | null>(null)
   const [disks, setDisks] = useState<string | null>(null)
+  const [statusRules, setStatusRules] = useState<EffectiveRule[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -28,6 +29,10 @@ export function HostEffectiveRules({ hostId }: { hostId: string }) {
       .thresholds(hostId)
       .then((res) => !cancelled && setRules(effectiveRules(res)))
       .catch((err) => !cancelled && setError(err instanceof Error ? err.message : 'kurallar yüklenemedi'))
+    hostsApi
+      .statusRules(hostId)
+      .then((views) => !cancelled && setStatusRules(statusEffectiveRules(views)))
+      .catch(() => undefined)
     hostsApi
       .diskAlerts(hostId)
       .then((d) => !cancelled && setDisks(diskAlertSummary(d)))
@@ -68,13 +73,7 @@ export function HostEffectiveRules({ hostId }: { hostId: string }) {
           </thead>
           <tbody>
             {rules.map((r) => (
-              <tr key={r.key}>
-                <td className="primary">{r.label}</td>
-                <td className={r.value ? 'tnum' : 'muted'} data-label="Geçerli değer">
-                  {r.value ?? 'Tanımlı değil — alert üretilmez'}
-                </td>
-                <td data-label="Kaynak">{r.source === 'none' ? <span className="muted">—</span> : <StatusBadge tone={SOURCE[r.source].tone}>{SOURCE[r.source].label}</StatusBadge>}</td>
-              </tr>
+              <RuleRow key={r.key} rule={r} />
             ))}
             {disks && (
               <tr>
@@ -85,9 +84,24 @@ export function HostEffectiveRules({ hostId }: { hostId: string }) {
                 </td>
               </tr>
             )}
+            {statusRules.map((r) => (
+              <RuleRow key={r.key} rule={r} />
+            ))}
           </tbody>
         </table>
       )}
     </div>
+  )
+}
+
+function RuleRow({ rule: r }: { rule: EffectiveRule }) {
+  return (
+    <tr>
+      <td className="primary">{r.label}</td>
+      <td className={r.value ? 'tnum' : 'muted'} data-label="Geçerli değer">
+        {r.value ?? 'Tanımlı değil — alert üretilmez'}
+      </td>
+      <td data-label="Kaynak">{r.source === 'none' ? <span className="muted">—</span> : <StatusBadge tone={SOURCE[r.source].tone}>{SOURCE[r.source].label}</StatusBadge>}</td>
+    </tr>
   )
 }

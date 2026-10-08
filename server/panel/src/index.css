@@ -2556,6 +2556,31 @@ pre.secret-box {
   margin: 8px 0 0;
 }
 
+/* Durum kuralları kartı: tablo kenardan kenara, başlık, açıklama ve düğmeler kart iç boşluğuyla. */
+.status-rules-card > .card-title-row,
+.status-rules-card > .card-desc,
+.status-rules-card > .save-note,
+.status-rules-card > .muted {
+  padding: 0 18px;
+}
+
+.status-rules-card > .card-title-row {
+  padding-top: 14px;
+}
+
+.status-rules-card > .error-banner {
+  margin: 0 18px 12px;
+}
+
+.status-rules-actions {
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.status-rules-table select {
+  min-width: 150px;
+}
+
 @media (max-width: 480px) {
   .tab svg {
     display: none;

@@ -1,6 +1,7 @@
 // Sunucu sayfasındaki salt okunur "Geçerli alert kuralları"nın saf mantığı: sunucunun eşik yanıtını, her kuralın
 // geçerli değeri ve nereden geldiğiyle satırlara çevirir. React içermez; Node'un çalıştırıcısıyla birim test edilir.
-import type { HostThresholdsResponse } from '../types/api.ts'
+import type { HostStatusRuleView, HostThresholdsResponse } from '../types/api.ts'
+import { ruleInfo, settingText } from './statusRules.ts'
 import { METRICS, formatLevels, metricInfo } from './thresholds.ts'
 
 export type RuleSource = 'custom' | 'inherited' | 'none'
@@ -38,6 +39,17 @@ export function effectiveRules(res: HostThresholdsResponse): EffectiveRule[] {
     })
   }
   return rows
+}
+
+// Durum kuralı başına bir satır: sunucunun kendi ayarı devralınanı ezer; hiçbiri yoksa kural kapalıdır.
+export function statusEffectiveRules(views: HostStatusRuleView[]): EffectiveRule[] {
+  return views.map((v) => {
+    const label = ruleInfo(v.rule)?.label ?? v.rule
+    const key = `status:${v.rule}`
+    if (v.custom) return { key, label, value: settingText(v.rule, v.custom), source: 'custom' }
+    if (v.default) return { key, label, value: settingText(v.rule, v.default), source: 'inherited' }
+    return { key, label, value: null, source: 'none' }
+  })
 }
 
 // Hangi mount'ların disk alert'i üretebileceğinin tek satırlık özeti.

@@ -1,27 +1,25 @@
 import { Link, useSearchParams } from 'react-router-dom'
-import { Building2, ListPlus, Server } from 'lucide-react'
+import { Building2, Server } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
-import { ComingSoon } from '../components/ComingSoon'
 import { HostPicker, OrgPicker } from '../components/ScopePickers'
 import { useScopeData } from '../components/useScopeData'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
-import { StatusBadge } from '../components/StatusBadge'
-import { alertLevelLabel, alertLevelTone } from '../labels'
 import type { RuleScope } from '../navigation'
 import type { Organization, OverviewHost } from '../types/api'
 import { resolveScope } from './alertRules'
-import { SAMPLE_RULES } from './comingSoonSamples'
 import { DiskAlertSettings } from './DiskAlertSettings'
 import { HostThresholdSettings } from './HostThresholdSettings'
 import { OrganizationThresholds } from './OrganizationThresholds'
+import { StatusRulesCard } from './StatusRulesCard'
 import { SystemThresholds } from './SystemThresholds'
 
-// Alert kuralları: sistem varsayılanı, organizasyon ve sunucu eşikleri tek sayfada, üstteki kapsam seçiciyle. Kurallar
+// Alert kuralları: sistem varsayılanı, organizasyon ve sunucu eşikleri ile durum kuralları tek sayfada, üstteki kapsam
+// seçiciyle. Kurallar
 // sistem → organizasyon (üst şirketten alta) → sunucu sırasıyla devralınır; her kapsam kendi editörünü gösterir. Kapsam
 // adreste (`?kapsam=&id=`) tutulur, böylece organizasyon ve sunucu sayfalarından doğrudan bağlantı verilebilir.
 export function AlertRulesPage() {
-  const { can } = useAuth()
+  const { can, user } = useAuth()
   const canSeeOrgs = can('organization.view')
   const [params, setParams] = useSearchParams()
   const scope = resolveScope(params.get('kapsam'), params.get('id'), canSeeOrgs)
@@ -37,7 +35,7 @@ export function AlertRulesPage() {
 
   return (
     <div>
-      <PageHeader title="Alert kuralları" subtitle="Ne zaman alert açılacağı: sistem varsayılanı, organizasyon ve sunucu eşikleri tek yerde" />
+      <PageHeader title="Alert kuralları" subtitle="Ne zaman alert açılacağı: sistem varsayılanı, organizasyon ve sunucu eşikleri ve durum kuralları tek yerde" />
 
       <div className="toolbar" style={{ justifyContent: 'flex-start' }}>
         <div className="segmented" role="group" aria-label="Kapsam">
@@ -57,14 +55,15 @@ export function AlertRulesPage() {
         {scope.kind === 'sunucu' && <HostPicker idPrefix="rules" hosts={hosts} orgNames={orgNames} value={scope.id} onChange={(id) => select({ kind: 'sunucu', id })} />}
       </div>
 
-      {scope.kind === 'sistem' && <SystemThresholds />}
+      {scope.kind === 'sistem' && (
+        <div className="stack-col">
+          <SystemThresholds />
+          {/* Genel kuralları server yalnızca super_admin'e yazdırır (eşiklerde olduğu gibi). */}
+          <StatusRulesCard scope={{ kind: 'system' }} canEdit={can('threshold.edit') && user?.role === 'super_admin'} />
+        </div>
+      )}
       {scope.kind === 'org' && <OrgScope orgs={orgs} id={scope.id} />}
       {scope.kind === 'sunucu' && <HostScope hosts={hosts} id={scope.id} />}
-
-      {/* Editörlerin kökü kart değil (sarmalayıcı div), bu yüzden kartlar arası boşluk kendiliğinden oluşmaz. */}
-      <div style={{ marginTop: 16 }}>
-        <RulesPreview />
-      </div>
     </div>
   )
 }
@@ -79,7 +78,12 @@ function OrgScope({ orgs, id }: { orgs: Organization[]; id?: string }) {
       </div>
     )
   }
-  return <OrganizationThresholds key={org.id} organization={org} orgs={orgs} canEdit={can('threshold.edit')} />
+  return (
+    <div className="stack-col">
+      <OrganizationThresholds key={org.id} organization={org} orgs={orgs} canEdit={can('threshold.edit')} />
+      <StatusRulesCard key={`s-${org.id}`} scope={{ kind: 'org', organization: org, orgs }} canEdit={can('threshold.edit')} />
+    </div>
+  )
 }
 
 function HostScope({ hosts, id }: { hosts: OverviewHost[]; id?: string }) {
@@ -105,43 +109,9 @@ function HostScope({ hosts, id }: { hosts: OverviewHost[]; id?: string }) {
       </p>
       <div className="stack-col">
         <HostThresholdSettings key={`t-${id}`} hostId={id} canEdit={can('threshold.edit')} />
+        <StatusRulesCard key={`s-${id}`} scope={{ kind: 'host', hostId: id }} canEdit={can('threshold.edit')} />
         <DiskAlertSettings key={`d-${id}`} hostId={id} canEdit={can('host.update')} />
       </div>
     </div>
-  )
-}
-
-function RulesPreview() {
-  return (
-    <ComingSoon
-      title="Yeni kural türleri"
-      icon={ListPlus}
-      description="Servis, Docker sağlığı, disk G/Ç, sıcaklık ve sistem durumu kuralları; aynı kapsamlarla (sistem → organizasyon → sunucu) devralınacak."
-    >
-      <table>
-        <thead>
-          <tr>
-            <th>Grup</th>
-            <th>Kural</th>
-            <th>Koşul</th>
-            <th>Süre</th>
-            <th>Seviye</th>
-          </tr>
-        </thead>
-        <tbody>
-          {SAMPLE_RULES.map((r) => (
-            <tr key={r.name}>
-              <td className="muted">{r.group}</td>
-              <td>{r.name}</td>
-              <td>{r.condition}</td>
-              <td className="muted">{r.duration}</td>
-              <td>
-                <StatusBadge tone={alertLevelTone(r.level)}>{alertLevelLabel(r.level)}</StatusBadge>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </ComingSoon>
   )
 }

@@ -45,18 +45,6 @@ export const SAMPLE_PROCESSES = [
 
 export const SAMPLE_UPDATES = { total: 14, security: 3, checked: '6 sa önce' }
 
-// Alert kuralları sayfasında henüz gelmemiş kural türleri (grup, kural, örnek koşul, örnek süre, seviye).
-export const SAMPLE_RULES: { group: string; name: string; condition: string; duration: string; level: 'warning' | 'critical' | 'info' }[] = [
-  { group: 'Servis', name: 'İzlenen servis çöktü / durdu', condition: 'postgresql, nginx…', duration: '1 dk içinde dönmezse', level: 'critical' },
-  { group: 'Servis', name: 'Yeniden başlatma döngüsü', condition: '10 dk’da 5+', duration: '—', level: 'warning' },
-  { group: 'Servis', name: 'Container sağlıksız', condition: 'healthcheck başarısız', duration: '3 kontrol', level: 'critical' },
-  { group: 'Kaynak', name: 'Disk gecikmesi', condition: '> 30 ms uyarı · > 50 ms kritik', duration: '10 dk boyunca', level: 'warning' },
-  { group: 'Kaynak', name: 'Sıcaklık', condition: '> 85 °C', duration: '5 dk boyunca', level: 'warning' },
-  { group: 'Sistem', name: 'Yeniden başlatma gerekiyor', condition: 'işaret dosyası var', duration: '1 gün sonra', level: 'info' },
-  { group: 'Sistem', name: 'Saat senkronu bozuk', condition: 'NTP eşitlenmemiş', duration: '30 dk boyunca', level: 'warning' },
-  { group: 'Sistem', name: 'Güvenlik güncellemesi bekliyor', condition: '≥ 1 güvenlik paketi', duration: '7 gün sonra', level: 'info' },
-]
-
 // Bildirim sayfasında "Bu alert kime gider?" önizlemesi: tüm kurallar birleştirilince çıkan alıcılar.
 export const SAMPLE_RECIPIENTS = {
   host: 'web-01',
