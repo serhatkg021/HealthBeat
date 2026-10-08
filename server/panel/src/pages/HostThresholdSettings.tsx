@@ -1,21 +1,30 @@
 import { useEffect, useState } from 'react'
 import { hostsApi } from '../api/endpoints'
-import { ThresholdFields } from './ThresholdFields'
+import type { SubjectMetricType } from '../types/api'
+import { ThresholdFields, type SubjectsProp } from './ThresholdFields'
 import {
   containerDraftsFromServer,
   defaultsFromServer,
+  diskIONames,
   draftsFromServer,
+  emptySubjectDrafts,
   isDirty,
   isMountsDirty,
+  isSubjectsDirty,
   mountDraftsFromServer,
+  subjectDraftsFromServer,
+  temperatureNotes,
   toMountOverrides,
   toOverrides,
+  toSubjectOverrides,
   validateContainerDrafts,
   validateDrafts,
   validateMountDrafts,
+  validateSubjectDrafts,
   type Defaults,
   type Drafts,
   type MountDrafts,
+  type SubjectDrafts,
 } from './thresholds'
 import { Check, Save, SlidersHorizontal } from 'lucide-react'
 
@@ -29,6 +38,10 @@ export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; can
   const [savedContainers, setSavedContainers] = useState<MountDrafts>({})
   const [draftContainers, setDraftContainers] = useState<MountDrafts>({})
   const [containerSuggestions, setContainerSuggestions] = useState<string[]>([])
+  const [savedSubjects, setSavedSubjects] = useState<SubjectDrafts>(emptySubjectDrafts)
+  const [draftSubjects, setDraftSubjects] = useState<SubjectDrafts>(emptySubjectDrafts)
+  const [subjectSuggestions, setSubjectSuggestions] = useState<Record<SubjectMetricType, string[]>>({ disk_latency: [], temperature: [], service_restart: [] })
+  const [subjectNotes, setSubjectNotes] = useState<SubjectsProp['notes']>({})
   const [defaults, setDefaults] = useState<Defaults>({})
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -38,11 +51,14 @@ export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; can
     let cancelled = false
     hostsApi
       .thresholds(hostId)
-      .then(({ thresholds, mount_thresholds, container_thresholds }) => {
+      .then(({ thresholds, mount_thresholds, container_thresholds, subject_thresholds }) => {
         if (cancelled) return
         const drafts = draftsFromServer(thresholds)
         const mounts = mountDraftsFromServer(mount_thresholds)
         const containers = containerDraftsFromServer(container_thresholds)
+        const subjects = subjectDraftsFromServer(subject_thresholds)
+        setSavedSubjects(subjects)
+        setDraftSubjects(subjects)
         setSaved(drafts)
         setDraft(drafts)
         setSavedMounts(mounts)
@@ -68,6 +84,26 @@ export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; can
         if (!cancelled) setContainerSuggestions([...new Set(list.map((c) => c.name))].sort())
       })
       .catch(() => undefined)
+    // Protokol 4 konuları: G/Ç'si ölçülen diskler, bildirilen sensörler (donanım sınırlarıyla) ve izlenen servisler.
+    const suggest = (type: SubjectMetricType, names: string[]) => {
+      if (!cancelled) setSubjectSuggestions((prev) => ({ ...prev, [type]: names }))
+    }
+    hostsApi
+      .latestMetric(hostId)
+      .then((p) => suggest('disk_latency', diskIONames(p)))
+      .catch(() => undefined)
+    hostsApi
+      .get(hostId)
+      .then((h) => {
+        const temps = h.system_state?.temperatures ?? []
+        suggest('temperature', [...new Set(temps.map((t) => t.sensor))].sort())
+        if (!cancelled) setSubjectNotes({ temperature: temperatureNotes(temps) })
+      })
+      .catch(() => undefined)
+    hostsApi
+      .services(hostId)
+      .then((s) => suggest('service_restart', [...s.watched].sort()))
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
@@ -85,8 +121,14 @@ export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; can
     )
   }
 
-  const dirty = isDirty(draft, saved) || isMountsDirty(draftMounts, savedMounts) || isMountsDirty(draftContainers, savedContainers)
-  const problems = [...validateDrafts(draft), ...validateMountDrafts(draftMounts), ...validateContainerDrafts(draftContainers)]
+  const dirty =
+    isDirty(draft, saved) || isMountsDirty(draftMounts, savedMounts) || isMountsDirty(draftContainers, savedContainers) || isSubjectsDirty(draftSubjects, savedSubjects)
+  const problems = [
+    ...validateDrafts(draft),
+    ...validateMountDrafts(draftMounts),
+    ...validateContainerDrafts(draftContainers),
+    ...validateSubjectDrafts(draftSubjects),
+  ]
 
   async function save() {
     if (!draft) return
@@ -94,11 +136,14 @@ export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; can
     setError(null)
     setNotice(null)
     try {
-      const { thresholds, mount_thresholds, container_thresholds } = await hostsApi.setThresholds(
-        hostId,
-        toOverrides(draft),
-        { mounts: toMountOverrides(savedMounts, draftMounts), containers: toMountOverrides(savedContainers, draftContainers) },
-      )
+      const { thresholds, mount_thresholds, container_thresholds, subject_thresholds } = await hostsApi.setThresholds(hostId, toOverrides(draft), {
+        mounts: toMountOverrides(savedMounts, draftMounts),
+        containers: toMountOverrides(savedContainers, draftContainers, 'docker_restart'),
+        subjects: toSubjectOverrides(savedSubjects, draftSubjects),
+      })
+      const subjects = subjectDraftsFromServer(subject_thresholds)
+      setSavedSubjects(subjects)
+      setDraftSubjects(subjects)
       const drafts = draftsFromServer(thresholds)
       const mounts = mountDraftsFromServer(mount_thresholds)
       const containers = containerDraftsFromServer(container_thresholds)
@@ -144,6 +189,15 @@ export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; can
         }}
         containers={{ drafts: draftContainers, onChange: (c) => { setNotice(null); setDraftContainers(c) }, suggestions: containerSuggestions }}
         mounts={{ drafts: draftMounts, onChange: (m) => { setNotice(null); setDraftMounts(m) }, suggestions }}
+        subjects={{
+          drafts: draftSubjects,
+          onChange: (next) => {
+            setNotice(null)
+            setDraftSubjects(next)
+          },
+          suggestions: subjectSuggestions,
+          notes: subjectNotes,
+        }}
         disabled={!canEdit || saving}
       />
       {canEdit && (
@@ -153,7 +207,7 @@ export function HostThresholdSettings({ hostId, canEdit }: { hostId: string; can
             {saving ? 'Kaydediliyor…' : 'Kaydet'}
           </button>
           {dirty && (
-            <button className="btn" onClick={() => { setDraft(saved); setDraftMounts(savedMounts); setDraftContainers(savedContainers) }} disabled={saving}>
+            <button className="btn" onClick={() => { setDraft(saved); setDraftMounts(savedMounts); setDraftContainers(savedContainers); setDraftSubjects(savedSubjects) }} disabled={saving}>
               Vazgeç
             </button>
           )}

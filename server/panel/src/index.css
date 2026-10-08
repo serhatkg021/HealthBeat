@@ -1811,6 +1811,10 @@ input[type='checkbox'], input[type='radio'] {
   margin: 6px 0 0 24px;
 }
 
+.threshold-hint {
+  margin: 6px 0 0 24px;
+}
+
 .stepper {
   display: flex;
   gap: 6px;
@@ -2150,7 +2154,8 @@ input[type='checkbox'], input[type='radio'] {
     width: 100%;
   }
 
-  .field-error {
+  .field-error,
+  .threshold-hint {
     margin-left: 0;
   }
 
@@ -2414,6 +2419,14 @@ pre.secret-box {
   min-width: 90px;
 }
 
+.subject-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .field-error.flush {
   margin-left: 0;
 }
@@ -2526,6 +2539,21 @@ pre.secret-box {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Süre koşulu: sayı + birim (boş = hemen). */
+.duration-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.duration-field .duration-input {
+  width: 72px;
+}
+
+.notice-more {
+  margin: 8px 0 0;
 }
 
 @media (max-width: 480px) {

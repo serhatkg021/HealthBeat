@@ -17,8 +17,9 @@ import {
   withMode,
   type Drafts,
 } from './thresholds.ts'
+import { emptyDuration } from './duration.ts'
 
-const custom = (warning: string, critical: string) => ({ mode: 'custom' as const, warning, critical })
+const custom = (warning: string, critical: string) => ({ mode: 'custom' as const, warning, critical, duration: emptyDuration() })
 
 function row(metric: ThresholdConfig['metric_type'], w: number, c: number, scope: { org?: string } = {}): ThresholdConfig {
   return { id: `${metric}${scope.org ?? ''}`, metric_type: metric, warning_level: w, critical_level: c, organization_id: scope.org, created_at: '', updated_at: '' }
@@ -27,7 +28,16 @@ function row(metric: ThresholdConfig['metric_type'], w: number, c: number, scope
 test('a new server starts with every metric on default and sends nothing custom', () => {
   const d = defaultDrafts()
   assert.deepEqual(customOnly(d), {})
-  assert.deepEqual(toOverrides(d), { cpu: null, ram: null, disk: null, docker_restart: null })
+  assert.deepEqual(toOverrides(d), {
+    cpu: null,
+    ram: null,
+    disk: null,
+    docker_restart: null,
+    disk_latency: null,
+    temperature: null,
+    service_restart: null,
+    time_offset: null,
+  })
   assert.deepEqual(validateDrafts(d), [])
 })
 
@@ -38,6 +48,10 @@ test('custom values are sent as numbers, default metrics as null', () => {
     ram: null,
     disk: null,
     docker_restart: { warning_level: 2, critical_level: 5 },
+    disk_latency: null,
+    temperature: null,
+    service_restart: null,
+    time_offset: null,
   })
   assert.deepEqual(customOnly(d), { cpu: { warning_level: 70, critical_level: 85.5 }, docker_restart: { warning_level: 2, critical_level: 5 } })
 })
@@ -145,7 +159,7 @@ test('switching to custom starts from the default values, and only when nothing 
   assert.deepEqual(d.cpu, custom('80', '90'))
   assert.equal(withMode(d, 'cpu', 'custom', defaults), d, 'no change when already custom')
 
-  const typed = withMode({ ...defaultDrafts(), cpu: { mode: 'default', warning: '1', critical: '2' } }, 'cpu', 'custom', defaults)
+  const typed = withMode({ ...defaultDrafts(), cpu: { mode: 'default', warning: '1', critical: '2', duration: emptyDuration() } }, 'cpu', 'custom', defaults)
   assert.deepEqual(typed.cpu, custom('1', '2'), 'earlier input is kept, not overwritten by the default')
 
   assert.deepEqual(withMode(defaultDrafts(), 'ram', 'custom', defaults).ram, custom('', ''), 'no default to start from: empty fields')
@@ -311,4 +325,148 @@ test('more than 64 containers with their own threshold is rejected like the serv
   const many: Record<string, { warning: string; critical: string }> = {}
   for (let i = 0; i < 65; i++) many[`c${i}`] = { warning: '1', critical: '2' }
   assert.ok(validateContainerDrafts(many).length > 0)
+})
+
+// ---- protokol 4: süre koşulu ve konu eşikleri ----------------------------------------------
+
+import {
+  diskIONames,
+  draftLevels,
+  emptySubjectDrafts,
+  formatLevels,
+  isSubjectsDirty,
+  parseSubjectToAdd,
+  rowChanged,
+  rowDraft,
+  rowPayload,
+  subjectDraftsFromServer,
+  temperatureNotes,
+  toSubjectOverrides,
+  validateSubjectDrafts,
+} from './thresholds.ts'
+
+const timed = (warning: string, critical: string, value: string, unit: 'sn' | 'dk' | 'sa' = 'dk') => ({
+  mode: 'custom' as const,
+  warning,
+  critical,
+  duration: { value, unit },
+})
+
+test('protocol 4 thresholds carry their duration; instant metrics never do', () => {
+  const d: Drafts = { ...defaultDrafts(), disk_latency: timed('30', '50', '10'), temperature: timed('80', '90', ''), cpu: timed('70', '90', '5') }
+  const o = toOverrides(d)
+  assert.deepEqual(o.disk_latency, { warning_level: 30, critical_level: 50, duration_seconds: 600 })
+  assert.deepEqual(o.temperature, { warning_level: 80, critical_level: 90 }, 'empty duration = immediately')
+  assert.deepEqual(o.cpu, { warning_level: 70, critical_level: 90 }, 'cpu is evaluated instantly; a stray duration is not sent')
+  assert.deepEqual(customOnly(d).disk_latency, { warning_level: 30, critical_level: 50, duration_seconds: 600 })
+})
+
+test('protocol 4 levels are checked against their own limits and the duration is validated', () => {
+  assert.equal(validateDraft('disk_latency', timed('30', '50', '')), null)
+  assert.match(validateDraft('temperature', timed('80', '501', '')) ?? '', /500 °C/)
+  assert.match(validateDraft('disk_latency', timed('1', '600001', '')) ?? '', /600\.000 ms/)
+  assert.equal(validateDraft('time_offset', timed('100', '1000', '')), null)
+  assert.match(validateDraft('service_restart', timed('3', '5', '0')) ?? '', /pozitif/)
+  assert.equal(validateDraft('cpu', timed('70', '90', 'abc')), null, 'cpu ignores the duration field')
+})
+
+test('formatLevels and describeDraft mention the duration', () => {
+  assert.equal(formatLevels('disk_latency', { warning_level: 30, critical_level: 50, duration_seconds: 600 }), 'uyarı 30 ms / kritik 50 ms · 10 dk boyunca')
+  assert.equal(describeDraft('temperature', timed('80', '90', '90', 'sn'), {}), 'Özel: uyarı 80 °C / kritik 90 °C · 1 dk 30 sn boyunca')
+})
+
+test('switching to custom copies the inherited duration too', () => {
+  const defaults = { disk_latency: { warning_level: 30, critical_level: 50, duration_seconds: 7200 } }
+  assert.deepEqual(withMode(defaultDrafts(), 'disk_latency', 'custom', defaults).disk_latency, timed('30', '50', '2', 'sa'))
+})
+
+test('a stored duration comes back as a draft and a changed duration makes the form dirty', () => {
+  const views: HostThresholdView[] = [
+    { metric_type: 'disk_latency', default: null, custom: { warning_level: 30, critical_level: 50, duration_seconds: 600 } },
+  ]
+  const saved = draftsFromServer(views)
+  assert.deepEqual(saved.disk_latency, timed('30', '50', '10'))
+  assert.equal(isDirty(saved, { ...saved, disk_latency: timed('30', '50', '600', 'sn') }), false, '10 dk = 600 sn')
+  assert.equal(isDirty(saved, { ...saved, disk_latency: timed('30', '50', '') }), true)
+})
+
+test('the inherited value of an organization carries its duration', () => {
+  const list: ThresholdConfig[] = [{ ...row('disk_latency', 30, 50), duration_seconds: 300 }]
+  assert.deepEqual(defaultSource(list, 'o1', new Map(), 'disk_latency')?.levels, { warning_level: 30, critical_level: 50, duration_seconds: 300 })
+})
+
+test('system and organization rows: a duration metric always sends its duration, null when empty', () => {
+  assert.deepEqual(rowPayload('disk_latency', rowDraft({ warning_level: 30, critical_level: 50, duration_seconds: 120 })), {
+    warning_level: 30,
+    critical_level: 50,
+    duration_seconds: 120,
+  })
+  assert.deepEqual(rowPayload('disk_latency', { warning: '30', critical: '50', duration: emptyDuration() }), {
+    warning_level: 30,
+    critical_level: 50,
+    duration_seconds: null,
+  })
+  assert.deepEqual(rowPayload('cpu', { warning: '70', critical: '90', duration: { value: '5', unit: 'dk' } }), { warning_level: 70, critical_level: 90 })
+  const saved = { warning_level: 30, critical_level: 50, duration_seconds: 600 }
+  assert.equal(rowChanged('disk_latency', rowDraft(saved), saved), false)
+  assert.equal(rowChanged('disk_latency', { ...rowDraft(saved), duration: emptyDuration() }, saved), true)
+  assert.equal(rowChanged('cpu', { warning: '70', critical: '90', duration: { value: '5', unit: 'dk' } }, { warning_level: 70, critical_level: 90 }), false)
+  assert.equal(rowChanged('cpu', rowDraft(), undefined), false)
+})
+
+test('subject thresholds round-trip and only changed kinds are sent; removed subjects become null', () => {
+  const saved = subjectDraftsFromServer([
+    { metric_type: 'disk_latency', subject: 'sda', custom: { warning_level: 30, critical_level: 50, duration_seconds: 300 } },
+    { metric_type: 'temperature', subject: 'coretemp/Package id 0', custom: { warning_level: 85, critical_level: 100 } },
+  ])
+  assert.deepEqual(saved.disk_latency.sda, { warning: '30', critical: '50', duration: { value: '5', unit: 'dk' } })
+  assert.equal(isSubjectsDirty(saved, saved), false)
+  assert.deepEqual(toSubjectOverrides(saved, saved), {})
+
+  const draft = {
+    ...saved,
+    disk_latency: {},
+    service_restart: { 'nginx.service': { warning: '3', critical: '5', duration: emptyDuration() } },
+  }
+  assert.equal(isSubjectsDirty(saved, draft), true)
+  assert.deepEqual(toSubjectOverrides(saved, draft), {
+    disk_latency: { sda: null },
+    service_restart: { 'nginx.service': { warning_level: 3, critical_level: 5 } },
+  })
+})
+
+test('subject drafts are validated with their own type and named in the message', () => {
+  const d = emptySubjectDrafts()
+  d.temperature['cpu'] = { warning: '90', critical: '80', duration: emptyDuration() }
+  d.disk_latency['sda'] = { warning: '10', critical: '20', duration: { value: '721', unit: 'sa' } }
+  assert.deepEqual(validateSubjectDrafts(d), ['Disk gecikmesi sda: Süre en fazla 30 gün olabilir.', 'Sıcaklık cpu: Uyarı seviyesi kritik seviyeden büyük olamaz.'])
+  assert.deepEqual(validateSubjectDrafts(emptySubjectDrafts()), [])
+})
+
+test('parseSubjectToAdd checks the name like the server does', () => {
+  assert.deepEqual(parseSubjectToAdd('disk_latency', ' sdb ', {}), { mount: 'sdb' })
+  assert.ok('error' in parseSubjectToAdd('disk_latency', '', {}))
+  assert.ok('error' in parseSubjectToAdd('disk_latency', 'x'.repeat(65), {}), 'disk names are at most 64 bytes')
+  assert.deepEqual(parseSubjectToAdd('service_restart', 'x'.repeat(65), {}), { mount: 'x'.repeat(65) })
+  assert.ok('error' in parseSubjectToAdd('temperature', 'a\u0007b', {}))
+  assert.ok('error' in parseSubjectToAdd('temperature', 'cpu', { cpu: { warning: '1', critical: '2' } }))
+})
+
+test('suggestions: disks with measured I/O, sensors with their hardware limits', () => {
+  assert.deepEqual(diskIONames(null), [])
+  assert.deepEqual(
+    diskIONames({ disk_io: [{ name: 'sdb' } as never, { name: 'nvme0n1' } as never, { name: 'sdb' } as never] }),
+    ['nvme0n1', 'sdb'],
+  )
+  const notes = temperatureNotes([
+    { sensor: 'coretemp/Package id 0', celsius: 60, max: 85, crit: 100 },
+    { sensor: 'nvme/Composite', celsius: 40, crit: 84.5 },
+    { sensor: 'acpitz/temp1', celsius: 30 },
+    { sensor: 'odd', celsius: 30, max: 90, crit: 80 },
+  ])
+  assert.deepEqual(notes['coretemp/Package id 0'], { text: 'Donanım: üst sınır 85 °C · kritik 100 °C', levels: { warning_level: 85, critical_level: 100 } })
+  assert.deepEqual(notes['nvme/Composite'], { text: 'Donanım: kritik 84,5 °C' }, 'only one limit: shown, not offered')
+  assert.equal(notes['acpitz/temp1'], undefined)
+  assert.equal(notes['odd'].levels, undefined, 'an unordered pair is not offered')
+  assert.deepEqual(draftLevels('temperature', { warning: '85', critical: '100', duration: emptyDuration() }), { warning_level: 85, critical_level: 100 })
 })

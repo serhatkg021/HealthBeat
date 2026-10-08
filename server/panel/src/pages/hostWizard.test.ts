@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { buildCreateRequest, emptyWizardDraft, looksLikeIP, STEPS, summarize, validateAll, validateStep, type WizardDraft } from './hostWizard.ts'
-import { defaultDrafts } from './thresholds.ts'
+import { defaultDrafts, METRICS } from './thresholds.ts'
 
 const valid = (over: Partial<WizardDraft> = {}): WizardDraft => ({ ...emptyWizardDraft(), title: 'web-1', ip: '10.0.0.5', ...over })
 
@@ -98,7 +98,7 @@ test('summary has one section per step, in step order, with the entered values',
   assert.deepEqual(s.map((x) => x.step), ['server', 'disks', 'thresholds'])
   assert.ok(s[0].lines.some((l) => l.includes('web-1')) && s[0].lines.some((l) => l.includes('10.0.0.5')) && s[0].lines.some((l) => l.includes('Pull')))
   assert.ok(s[1].lines[0].includes('/, /data'))
-  assert.equal(s[2].lines.length, 4)
+  assert.equal(s[2].lines.length, METRICS.length)
   assert.ok(s[2].lines.find((l) => l.startsWith('CPU'))?.includes('Özel'))
   assert.ok(s[2].lines.find((l) => l.startsWith('RAM'))?.includes('Varsayılan: uyarı 80'))
   assert.ok(s[2].lines.find((l) => l.startsWith('Disk'))?.includes('alert üretilmez'), 'a metric without any default says it raises no alerts')
@@ -119,7 +119,7 @@ test('mount thresholds: validated in the thresholds step, sent with the request,
     '/': { warning_level: 70, critical_level: 90 },
   })
   const lines = summarize(d, {})[2].lines
-  assert.equal(lines.length, 6, 'four metrics plus one line per mount')
+  assert.equal(lines.length, METRICS.length + 2, 'one line per metric plus one line per mount')
   assert.ok(lines[2].startsWith('Disk —') && lines[3].startsWith('Disk / —') && lines[4].startsWith('Disk /storage —'))
 
   const broken = valid({ mountThresholds: { '/storage': { warning: '95', critical: '90' } } })
@@ -153,7 +153,7 @@ test('container thresholds: validated in the thresholds step, sent with the requ
     batch: { warning_level: 50, critical_level: 100 },
   })
   const lines = summarize(d, {})[2].lines
-  assert.equal(lines.length, 6, 'four metrics plus one line per container')
+  assert.equal(lines.length, METRICS.length + 2, 'one line per metric plus one line per container')
   assert.ok(lines[3].startsWith('Docker restart —') && lines[4].startsWith('Docker restart batch —') && lines[5].startsWith('Docker restart web —'))
 
   const broken = valid({ containerThresholds: { web: { warning: '10', critical: '3' } } })

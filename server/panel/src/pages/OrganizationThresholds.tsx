@@ -2,21 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Info } from 'lucide-react'
 import { thresholdsApi } from '../api/endpoints'
 import type { MetricType, Organization, ThresholdConfig } from '../types/api'
-import { METRICS, defaultSource, perMetric, validateDraft } from './thresholds'
+import { DURATION_HINT, METRICS, defaultSource, perMetric, rowChanged, rowDraft, rowPayload, validateDraft, type RowDraft } from './thresholds'
+import { DurationField } from './DurationField'
+import { durationText } from './duration'
 import { parentMap } from './orgTree'
-
-interface RowDraft {
-  warning: string
-  critical: string
-}
-
-const toDraft = (t?: ThresholdConfig): RowDraft => ({ warning: t ? String(t.warning_level) : '', critical: t ? String(t.critical_level) : '' })
 
 // Bir organizasyonun varsayılan eşikleri. Değer tanımlanmadıysa üst şirketten (en yakın olandan), o da yoksa genel
 // varsayılandan miras alınır; alt organizasyonlar ve sunucular da buradan miras alır. Sunucuya özel değer hepsini ezer.
 export function OrganizationThresholds({ organization, orgs, canEdit }: { organization: Organization; orgs: Organization[]; canEdit: boolean }) {
   const [list, setList] = useState<ThresholdConfig[] | null>(null)
-  const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>(() => perMetric(() => toDraft()))
+  const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>(() => perMetric(() => rowDraft()))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<MetricType | null>(null)
   const parents = useMemo(() => parentMap(orgs), [orgs])
@@ -28,7 +23,7 @@ export function OrganizationThresholds({ organization, orgs, canEdit }: { organi
       .then((all) => {
         setList(all)
         const own = (m: MetricType) => all.find((t) => t.metric_type === m && t.organization_id === organization.id)
-        setDrafts(perMetric((m) => toDraft(own(m))))
+        setDrafts(perMetric((m) => rowDraft(own(m))))
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'eşikler yüklenemedi'))
   }, [organization.id])
@@ -45,9 +40,9 @@ export function OrganizationThresholds({ organization, orgs, canEdit }: { organi
     setBusy(type)
     setError(null)
     try {
-      const levels = { warning_level: Number(draft.warning), critical_level: Number(draft.critical) }
-      if (existing) await thresholdsApi.update(existing.id, levels)
-      else await thresholdsApi.create({ organization_id: organization.id, metric_type: type, ...levels })
+      const body = rowPayload(type, draft)
+      if (existing) await thresholdsApi.update(existing.id, body)
+      else await thresholdsApi.create({ organization_id: organization.id, metric_type: type, ...body, duration_seconds: body.duration_seconds ?? undefined })
       load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'eşik kaydedilemedi')
@@ -79,6 +74,9 @@ export function OrganizationThresholds({ organization, orgs, canEdit }: { organi
         </div>
         Burada tanımladığınız değer bu organizasyon ve altındaki tüm organizasyonların sunucuları için geçerlidir. Tanımlamazsanız değer
         en yakın üst şirketten, o da yoksa genel varsayılandan miras alınır. Bir sunucunun kendi değeri her zaman önceliklidir.
+        <p className="notice-more">
+          <strong>Süre</strong> (disk gecikmesi, sıcaklık, servis yeniden başlatma, saat farkı): {DURATION_HINT}
+        </p>
       </div>
       {error && <div className="error-banner">{error}</div>}
       <div className="card table-card">
@@ -88,6 +86,7 @@ export function OrganizationThresholds({ organization, orgs, canEdit }: { organi
               <th>Metrik</th>
               <th>Uyarı</th>
               <th>Kritik</th>
+              <th>Süre</th>
               <th>Kaynak</th>
               {canEdit && <th className="actions" />}
             </tr>
@@ -97,9 +96,7 @@ export function OrganizationThresholds({ organization, orgs, canEdit }: { organi
               const own = rows.find((t) => t.metric_type === m.type && t.organization_id === organization.id)
               const inherited = defaultSource(rows, organization.id, parents, m.type)
               const draft = drafts[m.type]
-              const changed = own
-                ? draft.warning !== String(own.warning_level) || draft.critical !== String(own.critical_level)
-                : draft.warning.trim() !== '' || draft.critical.trim() !== ''
+              const changed = rowChanged(m.type, draft, own)
               // Kendi değeri yokken yer tutucu olarak miras alınan değer görünür.
               const fallback = inherited?.levels
               const source = own
@@ -140,11 +137,23 @@ export function OrganizationThresholds({ organization, orgs, canEdit }: { organi
                           <span className="muted">{m.unit}</span>
                         </span>
                       </td>
+                      <td data-label="Süre">
+                        {m.duration ? (
+                          <DurationField
+                            label={`${m.label} süresi`}
+                            value={draft.duration}
+                            onChange={(duration) => setDrafts({ ...drafts, [m.type]: { ...draft, duration } })}
+                          />
+                        ) : (
+                          <span className="muted">anlık</span>
+                        )}
+                      </td>
                     </>
                   ) : (
                     <>
                       <td className="tnum" data-label="Uyarı">{own ?? fallback ? `${(own?.warning_level ?? fallback!.warning_level)} ${m.unit}` : '—'}</td>
                       <td className="tnum" data-label="Kritik">{own ?? fallback ? `${(own?.critical_level ?? fallback!.critical_level)} ${m.unit}` : '—'}</td>
+                      <td className="muted" data-label="Süre">{own ?? fallback ? durationText(m.duration, (own ?? fallback)!.duration_seconds) : '—'}</td>
                     </>
                   )}
                   <td className="muted" data-label="Kaynak">{source}</td>

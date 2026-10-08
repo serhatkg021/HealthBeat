@@ -2,15 +2,10 @@ import { useEffect, useState } from 'react'
 import { thresholdsApi } from '../api/endpoints'
 import type { MetricType, ThresholdConfig } from '../types/api'
 import { useAuth } from '../auth/AuthContext'
-import { METRICS, perMetric, validateDraft } from './thresholds'
+import { DURATION_HINT, METRICS, perMetric, rowChanged, rowDraft, rowPayload, validateDraft, type RowDraft } from './thresholds'
+import { DurationField } from './DurationField'
+import { durationText } from './duration'
 import { Info } from 'lucide-react'
-
-interface RowDraft {
-  warning: string
-  critical: string
-}
-
-const toDraft = (t?: ThresholdConfig): RowDraft => ({ warning: t ? String(t.warning_level) : '', critical: t ? String(t.critical_level) : '' })
 
 // Alert kuralları sayfasının "Sistem varsayılanı" kapsamı: metrik başına tam bir satır; kendi değeri olmayan her
 // organizasyon ve sunucu tarafından kullanılır.
@@ -20,7 +15,7 @@ export function SystemThresholds() {
   // (organizasyonsuz) eşikleri server yalnızca super_admin'e yazdırır.
   const canEdit = can('threshold.edit') && user?.role === 'super_admin'
   const [defaults, setDefaults] = useState<Partial<Record<MetricType, ThresholdConfig>>>({})
-  const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>(() => perMetric(() => toDraft()))
+  const [drafts, setDrafts] = useState<Record<MetricType, RowDraft>>(() => perMetric(() => rowDraft()))
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<MetricType | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<MetricType | null>(null)
@@ -34,7 +29,7 @@ export function SystemThresholds() {
         // kendi kapsamlarında yönetilir.
         for (const t of list) if (!t.organization_id) next[t.metric_type] = t
         setDefaults(next)
-        setDrafts(perMetric((m) => toDraft(next[m])))
+        setDrafts(perMetric((m) => rowDraft(next[m])))
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'eşikler yüklenemedi'))
   }
@@ -51,10 +46,10 @@ export function SystemThresholds() {
     setBusy(type)
     setError(null)
     try {
-      const levels = { warning_level: Number(draft.warning), critical_level: Number(draft.critical) }
+      const body = rowPayload(type, draft)
       const existing = defaults[type]
-      if (existing) await thresholdsApi.update(existing.id, levels)
-      else await thresholdsApi.create({ metric_type: type, ...levels })
+      if (existing) await thresholdsApi.update(existing.id, body)
+      else await thresholdsApi.create({ metric_type: type, ...body, duration_seconds: body.duration_seconds ?? undefined })
       load()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'eşik kaydedilemedi')
@@ -90,6 +85,9 @@ export function SystemThresholds() {
         {can('organization.view') && ' (Kapsam › Organizasyon)'} ya da bir sunucu kendi değerini seçmedikçe (Kapsam › Sunucu)
         herkes bunu kullanır. Organizasyon değerleri alt organizasyonlara miras
         kalır. Varsayılanı olmayan bir metrik, özel değeri olmayan sunucularda alert üretmez.
+        <p className="notice-more">
+          <strong>Süre</strong> (disk gecikmesi, sıcaklık, servis yeniden başlatma, saat farkı): {DURATION_HINT}
+        </p>
       </div>
       {error && <div className="error-banner">{error}</div>}
 
@@ -100,6 +98,7 @@ export function SystemThresholds() {
               <th>Metrik</th>
               <th>Uyarı</th>
               <th>Kritik</th>
+              <th>Süre</th>
               {canEdit && <th className="actions" />}
             </tr>
           </thead>
@@ -107,9 +106,7 @@ export function SystemThresholds() {
             {METRICS.map((m) => {
               const existing = defaults[m.type]
               const draft = drafts[m.type]
-              const changed = existing
-                ? draft.warning !== String(existing.warning_level) || draft.critical !== String(existing.critical_level)
-                : draft.warning.trim() !== '' || draft.critical.trim() !== ''
+              const changed = rowChanged(m.type, draft, existing)
               return (
                 <tr key={m.type}>
                   <td className="primary">
@@ -146,6 +143,17 @@ export function SystemThresholds() {
                           <span className="muted">{m.unit}</span>
                         </span>
                       </td>
+                      <td data-label="Süre">
+                        {m.duration ? (
+                          <DurationField
+                            label={`${m.label} süresi`}
+                            value={draft.duration}
+                            onChange={(duration) => setDrafts({ ...drafts, [m.type]: { ...draft, duration } })}
+                          />
+                        ) : (
+                          <span className="muted">anlık</span>
+                        )}
+                      </td>
                       <td className="actions">
                         <button className="btn btn-sm btn-primary" onClick={() => save(m.type)} disabled={busy !== null || !changed}>
                           {existing ? 'Kaydet' : 'Tanımla'}
@@ -176,9 +184,12 @@ export function SystemThresholds() {
                       <td className="tnum" data-label="Kritik">
                         {existing.critical_level} {m.unit}
                       </td>
+                      <td className={existing.duration_seconds ? 'tnum' : 'muted'} data-label="Süre">
+                        {durationText(m.duration, existing.duration_seconds)}
+                      </td>
                     </>
                   ) : (
-                    <td colSpan={2} className="muted" data-label="Değer">
+                    <td colSpan={3} className="muted" data-label="Değer">
                       Tanımlı değil — alert üretilmez
                     </td>
                   )}
