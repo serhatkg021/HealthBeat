@@ -121,10 +121,10 @@ function CapacityCard({ state }: { state: SystemState }) {
               <div className="capacity-head">
                 <span>{r.label}</span>
                 <span className="tnum muted">
-                  {formatCount(r.used)} / {formatCount(r.max)} · {formatPct(r.pct)}
+                  {r.unlimited ? `${formatCount(r.used)} · sınır yok` : `${formatCount(r.used)} / ${formatCount(r.max)} · ${formatPct(r.pct)}`}
                 </span>
               </div>
-              <UsageBar pct={r.pct} label={r.label} size="sm" />
+              {!r.unlimited && <UsageBar pct={r.pct} label={r.label} size="sm" />}
               <div className="form-hint">{r.hint}</div>
             </div>
           ))}

@@ -15,6 +15,7 @@ import { useDocumentTitle } from './useDocumentTitle'
 import { useOpenAlertCounts } from './useOpenAlertCounts'
 import { useScrollStrips } from './useScrollStrips'
 import { useSystemNotices } from './useSystemNotices'
+import { ThemeToggle } from './ThemeToggle'
 
 const ICONS: Record<string, LucideIcon> = {
   ozet: LayoutDashboard,
@@ -202,6 +203,7 @@ export function Layout() {
             <kbd>{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
           </button>
           {counts && <AlertCounters counts={counts} />}
+          <ThemeToggle />
           <ProfileMenu />
         </header>
 

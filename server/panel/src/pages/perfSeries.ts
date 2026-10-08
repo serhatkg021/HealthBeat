@@ -2,6 +2,7 @@
 // satırları. Bir satırda olmayan değer satıra yazılmaz; çizgi orada kesilir (eski agent'ın satırları, bilinmeyen alan).
 // Yuvarlama yalnızca gösterimde (units.ts). React yok: Node'un çalıştırıcısıyla birim test edilir.
 import type { MetricPoint, NetIOSample } from '../types/api.ts'
+import { niceAxis } from './units.ts'
 
 export type Row = Record<string, number>
 
@@ -35,13 +36,12 @@ export function psiRows(points: MetricPoint[]): Row[] {
   })
 }
 
-// Üç PSI grafiğinin ortak üst sınırı: aynı ölçek karşılaştırmayı dürüst tutar. En az %5; üstü 5'in, 10'un katına yuvarlanır.
+// Üç PSI grafiğinin ortak üst sınırı: aynı ölçek karşılaştırmayı dürüst tutar. En az %5 (küçük dalgalanmalar büyümesin);
+// üstü yuvarlak bir değere çekilir (niceAxis).
 export function psiMax(rows: Row[]): number {
   let max = 0
   for (const r of rows) for (const [k, v] of Object.entries(r)) if (k !== 'ts' && v > max) max = v
-  if (max <= 5) return 5
-  if (max <= 50) return Math.ceil(max / 5) * 5
-  return Math.min(100, Math.ceil(max / 10) * 10)
+  return niceAxis(Math.max(5, max)).top
 }
 
 // Aralıkta G/Ç'si ölçülen diskler, ada göre.

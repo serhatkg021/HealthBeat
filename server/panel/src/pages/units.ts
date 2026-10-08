@@ -83,3 +83,17 @@ export function formatTick(v: number): string {
   if (Number.isInteger(v)) return v.toLocaleString('tr-TR')
   return decimal(v, Math.abs(v) < 1 ? 2 : 1).replace(/,?0+$/, '')
 }
+
+// Grafik ekseni: üst sınır ve etiketler 1, 2, 2,5, 5 × 10ⁿ adımlarıyla, en çok ~5 aralık. Örn. en yüksek değer 0,38 →
+// 0 · 0,1 · 0,2 · 0,3 · 0,4; 1,6 → 0 · 0,5 · 1 · 1,5 · 2; 54 → 0 · 20 · 40 · 60. Değer yoksa ya da sıfırsa 0–1.
+export function niceAxis(max: number): { top: number; ticks: number[] } {
+  if (!(max > 0) || !Number.isFinite(max)) return { top: 1, ticks: [0, 0.2, 0.4, 0.6, 0.8, 1] }
+  const raw = max / 5
+  const exp = 10 ** Math.floor(Math.log10(raw))
+  const step = ([1, 2, 2.5, 5, 10].find((m) => m * exp >= raw - 1e-12) ?? 10) * exp
+  const clean = (v: number) => Number(v.toPrecision(12))
+  const top = clean(Math.ceil(clean(max / step)) * step)
+  const ticks: number[] = []
+  for (let v = 0; v <= top + step / 2; v += step) ticks.push(clean(v))
+  return { top, ticks }
+}

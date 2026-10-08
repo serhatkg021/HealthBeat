@@ -49,6 +49,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - Panel: **Ctrl+K (⌘K) araması**: sunuculara (ad ya da IP), organizasyonlara ve sayfalara yazarak gidilir; yalnızca
   kullanıcının görebildikleri listelenir.
 - Panel: uzun listelerde (organizasyon, sunucu, üst şirket seçimi) yazarak aranabilen seçim kutuları.
+- Panel: **tema seçimi** (Sistem / Açık / Koyu): üst çubuktaki simge, profil menüsü ve giriş sayfaları. Seçim bu tarayıcıda
+  saklanır; "Sistem" işletim sisteminin ayarını izler ve değişince panel de değişir.
 - Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir.
 - **Protokol 4: sistem sağlığı ve performans** (agent'ın yeni sürümüyle gelir; eski agent'lar olduğu gibi çalışır). Server
   protokol 4 raporlarını kabul eder ve saklar: CPU ve bellek ayrıntısı, kaynak baskısı (PSI), disk ve ağ G/Ç'si, TCP, swap
@@ -85,7 +87,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   grafikleri. Sekmedeki bütün grafikler imleci paylaşır.
 - **Panel: Envanter:** sıcaklık (donanım sınırı ve alert eşiğiyle), kapasite sınırları, bekleyen güncellemeler, OOM, saat
   senkronu ayrıntısı (kaynaklarıyla), en çok kaynak kullanan süreçler ve yazılım RAID. **Genel:** bozuk RAID, salt okunur
-  mount ve son 24 saatteki OOM için uyarı şeridi; disk kartında fiziksel disk başına son G/Ç.
+  mount ve son 24 saatteki OOM için uyarı şeridi; disk kartında fiziksel disk başına son G/Ç. **Özet**'in alert türü
+  süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
 - **Panel: yeni düzen.** Sol menü üç gruba ayrıldı: **İzleme** (Özet, Sunucular, Alert'ler), **Alert Yönetimi** (Alert
@@ -128,6 +131,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - Bir alert türünün eşiği kaldırılınca (CPU, RAM, disk, docker restart ve yeni türler) o türün açık alert'leri sonsuza dek
   açık kalıyordu; artık sonraki raporda "çözüldü" bildirimiyle kapanıyor. Disk ve docker restart alert'leri rapor disk ya
   da container listesi taşımasa da kapanıyor.
+- Bildirimde ve panelde iki ondalıktan küçük bir eşik yuvarlanıp kayboluyordu ("eşik: 0,00 ms"); artık girildiği gibi
+  yazılıyor. Normal eşiklerin biçimi değişmedi.
 - Panel: Envanter'de eski agent için "agent 1.3.0 ya da üstü gerekir" yazıyordu; sürüm numarası depo yeniden başlatılmadan
   önceki numaralandırmadan kalmaydı. Artık "agent güncellenince görünür" yazıyor.
 - Panel: kendi bildirim kuralı olmayan sunucu ya da organizasyonda "bildirimler yalnızca sistem sahiplerine gider"

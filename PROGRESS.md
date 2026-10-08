@@ -75,9 +75,8 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 ## Doğrulanacak (protokol 4)
 
-- Uçtan uca deneme (hbe2e): yeniden derlenen server + panel ile gerçek agent; alert kurallarının açılıp kapanması ve
-  bildirimleri, panelin görsel kontrolü (açık/koyu tema, dar ekran). Özet'teki alert türü süzgecine yeni türlerin eklenip
-  eklenmeyeceği bu sırada kararlaştırılacak.
+- Uçtan uca deneme (hbe2e) yapıldı: gerçek agent, alert'lerin açılıp kapanması, süre koşulu ve bildirimler doğrulandı;
+  bulunan gösterim kusurları düzeltildi. Kalan: düzeltmelerin ve koyu temanın, dar ekranın panelde elle kontrolü.
 
 ## Sıradaki işler
 

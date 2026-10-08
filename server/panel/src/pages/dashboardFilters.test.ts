@@ -8,6 +8,8 @@ import {
   applyFilters,
   emptyFilters,
   filtersHref,
+  METRIC_GROUPS,
+  METRICS,
   parseFilters,
   problemRows,
   pruneOrgs,
@@ -217,8 +219,8 @@ test('every open filter has its own chip, and removing a chip removes only that 
       'Ara: web',
       "Yalnızca alert'i olanlar",
       'Seviye: kritik',
-      'Metrik: Disk',
-      'Metrik: CPU',
+      'Tür: Disk',
+      'Tür: CPU',
       'Alert zamanı: son 7 gün',
     ],
   )
@@ -301,4 +303,15 @@ test('a filters link carries the filters in the address; no filters means the ba
   const href = filtersHref('/hosts', { ...emptyFilters(), status: 'offline' })
   assert.ok(href.startsWith('/hosts?'))
   assert.equal(parseFilters(new URLSearchParams(href.split('?')[1])).status, 'offline')
+})
+
+test('every alert type can be filtered, each in exactly one group', () => {
+  assert.equal(METRICS.length, 18)
+  assert.equal(new Set(METRICS).size, METRICS.length)
+  assert.deepEqual(
+    METRIC_GROUPS.map((g) => g.label),
+    ['Kaynak', 'Servis ve container', 'Sistem durumu'],
+  )
+  const p = new URLSearchParams('metrik=temperature&metrik=raid_degraded&metrik=bilinmeyen')
+  assert.deepEqual(parseFilters(p).metrics, ['temperature', 'raid_degraded'])
 })

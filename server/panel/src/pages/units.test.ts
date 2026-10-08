@@ -12,6 +12,7 @@ import {
   formatPct,
   formatPerSecond,
   formatTick,
+  niceAxis,
 } from './units.ts'
 
 test('unknown values render a dash, never NaN or "undefined"', () => {
@@ -90,4 +91,15 @@ test('axis ticks: integers grouped, fractions with a comma and no trailing zeros
   assert.equal(formatTick(0.25), '0,25')
   assert.equal(formatTick(2.5), '2,5')
   assert.equal(formatTick(Number.NaN), '')
+})
+
+test('niceAxis ends on a round value with evenly spaced ticks', () => {
+  assert.deepEqual(niceAxis(0.38), { top: 0.4, ticks: [0, 0.1, 0.2, 0.3, 0.4] })
+  assert.deepEqual(niceAxis(1.6), { top: 2, ticks: [0, 0.5, 1, 1.5, 2] })
+  assert.deepEqual(niceAxis(5), { top: 5, ticks: [0, 1, 2, 3, 4, 5] })
+  assert.deepEqual(niceAxis(54.2), { top: 60, ticks: [0, 20, 40, 60] })
+  assert.deepEqual(niceAxis(100), { top: 100, ticks: [0, 20, 40, 60, 80, 100] })
+  assert.deepEqual(niceAxis(6e6), { top: 6e6, ticks: [0, 2e6, 4e6, 6e6] })
+  assert.deepEqual(niceAxis(0), { top: 1, ticks: [0, 0.2, 0.4, 0.6, 0.8, 1] })
+  assert.deepEqual(niceAxis(Number.NaN).top, 1)
 })

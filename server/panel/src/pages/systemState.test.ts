@@ -36,10 +36,18 @@ test('a sensor uses its own threshold, then the server threshold; none means neu
 test('capacity rows skip what is unknown', () => {
   assert.deepEqual(capacityRows(undefined), [])
   const rows = capacityRows({ file_handles: 1000, file_handles_max: 4000, conntrack: 10, tasks: 300, pid_max: 4194304 })
-  assert.deepEqual(rows.map((r) => [r.label, r.pct]), [
-    ['Dosya tanıtıcısı', 25],
-    ['Süreç ve iş parçacığı', (300 / 4194304) * 100],
+  assert.deepEqual(rows.map((r) => [r.label, r.pct, r.unlimited]), [
+    ['Dosya tanıtıcısı', 25, false],
+    ['Süreç ve iş parçacığı', (300 / 4194304) * 100, false],
   ])
+})
+
+test('a limit the kernel reports as "max integer" is shown as no limit', () => {
+  // /proc/sys/fs/file-nr'deki 9223372036854775807 (2^63-1) JSON'dan JavaScript'e 2^63 olarak yuvarlanıp gelir.
+  const [row] = capacityRows({ file_handles: 12977, file_handles_max: 2 ** 63 })
+  assert.equal(row.unlimited, true)
+  assert.equal(row.pct, 0)
+  assert.equal(capacityRows({ conntrack: 73, conntrack_max: 262144 })[0].unlimited, false)
 })
 
 test('RAID and time source states', () => {

@@ -66,7 +66,7 @@ test('PSI uses the 60 s averages; CPU has no full line', () => {
 test('the three PSI charts share a rounded upper bound', () => {
   assert.equal(psiMax([]), 5)
   assert.equal(psiMax([{ ts: 1, a: 0.3 }]), 5)
-  assert.equal(psiMax([{ ts: 1, a: 7.1 }]), 10)
+  assert.equal(psiMax([{ ts: 1, a: 7.1 }]), 8)
   assert.equal(psiMax(psiRows([P1])), 60)
   assert.equal(psiMax([{ ts: 1, a: 98 }]), 100)
 })

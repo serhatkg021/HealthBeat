@@ -27,6 +27,8 @@ export interface CapacityRow {
   used: number
   max: number
   pct: number
+  // Sınır pratikte yok (çekirdek "en büyük sayı"yı yazar, ör. dosya tanıtıcısında 2^63-1): doluluk anlamsızdır.
+  unlimited: boolean
   hint: string
 }
 
@@ -36,7 +38,9 @@ export function capacityRows(c: Capacity | undefined): CapacityRow[] {
   const rows: CapacityRow[] = []
   const add = (label: string, used: number | undefined, max: number | undefined, hint: string) => {
     if (used === undefined || !max) return
-    rows.push({ label, used, max, pct: (used / max) * 100, hint })
+    // JavaScript sayıları 2^53'ün üstünü tam tutamaz; o kadar büyük bir sınır zaten "sınır yok" demektir.
+    const unlimited = max > Number.MAX_SAFE_INTEGER
+    rows.push({ label, used, max, pct: unlimited ? 0 : (used / max) * 100, unlimited, hint })
   }
   add('Dosya tanıtıcısı', c.file_handles, c.file_handles_max, 'açık dosya ve soket; dolunca yeni dosya açılamaz')
   add('Bağlantı izleme (conntrack)', c.conntrack, c.conntrack_max, 'güvenlik duvarının izlediği bağlantılar; dolunca yeni bağlantı düşer')

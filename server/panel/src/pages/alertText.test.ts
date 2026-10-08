@@ -27,3 +27,9 @@ test('protocol 4 numeric alerts show their own unit', () => {
 test('status alerts have no reading', () => {
   for (const t of ['service_failed', 'raid_degraded', 'reboot_required', 'oom_kill'] as const) assert.equal(alertReading({ alert_type: t }), '')
 })
+
+test('a small threshold is not rounded away', () => {
+  assert.equal(alertReading({ alert_type: 'disk_latency', value: 1.0123, threshold: 0.002 }), '1,01 ms (eşik 0,002 ms)')
+  assert.equal(alertReading({ alert_type: 'cpu', value: 97.5, threshold: 92.5 }), '%97,5 (eşik %92,5)')
+  assert.equal(alertReading({ alert_type: 'temperature', value: 40, threshold: 38.25 }), '40,0 °C (eşik 38,25 °C)')
+})

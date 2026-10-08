@@ -124,7 +124,8 @@ export function StatusRulesCard({ scope, canEdit }: { scope: StatusRuleScope; ca
   }
 
   return (
-    <div className="card table-card status-rules-card">
+    // Genişlik kapsamın eşik kartıyla aynıdır (sistem/organizasyon tablosu ya da sunucu eşik kartı).
+    <div className={`card table-card status-rules-card${scope.kind === 'host' ? ' status-rules-wide' : ''}`}>
       <div className="card-title-row">
         <h2 className="card-title">
           <ListChecks size={16} strokeWidth={1.75} />

@@ -47,38 +47,38 @@
   --statusbar-height: 34px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #0d0f12;
-    --surface-1: #15181c;
-    --surface-2: #1c2025;
-    --surface-3: #262b31;
-    --border: #262b31;
-    --border-strong: #3a4149;
-    --text-primary: #f2f4f7;
-    --text-secondary: #b6bcc5;
-    --text-muted: #8a919b;
+/* Koyu tema: kök elemanın data-theme özniteliğiyle (public/theme.js ve src/theme.ts yazar: kullanıcının seçimi ya da
+   işletim sisteminin ayarı). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0f12;
+  --surface-1: #15181c;
+  --surface-2: #1c2025;
+  --surface-3: #262b31;
+  --border: #262b31;
+  --border-strong: #3a4149;
+  --text-primary: #f2f4f7;
+  --text-secondary: #b6bcc5;
+  --text-muted: #8a919b;
 
-    --accent: #4c8dff;
-    --accent-hover: #6ba0ff;
-    --on-accent: #0b1220;
+  --accent: #4c8dff;
+  --accent-hover: #6ba0ff;
+  --on-accent: #0b1220;
 
-    --series-cpu: #3987e5;
-    --series-ram: #d95926;
+  --series-cpu: #3987e5;
+  --series-ram: #d95926;
 
-    --status-good: #22b422;
-    --status-warning: #fab219;
-    --status-serious: #ec835a;
-    --status-critical: #e66767;
-    --status-neutral: #8a919b;
-    --status-good-text: #4cc94c;
-    --status-warning-text: #f2b53d;
-    --status-critical-text: #f08585;
+  --status-good: #22b422;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #e66767;
+  --status-neutral: #8a919b;
+  --status-good-text: #4cc94c;
+  --status-warning-text: #f2b53d;
+  --status-critical-text: #f08585;
 
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-md: 0 8px 24px rgb(0 0 0 / 0.5);
-  }
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 0.5);
 }
 
 /* ---------- Temel ---------- */
@@ -2556,6 +2556,29 @@ pre.secret-box {
   margin: 8px 0 0;
 }
 
+/* Grafiğin altındaki seri açıklaması (grafiğin dışında: üzerine gelmek araç ipucunu açmaz). */
+.chart-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-legend i {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
 /* Performans: grafik içi küçük başlıklar ve yan yana üç PSI grafiği (dar ekranda alt alta). */
 .chart-subtitle {
   margin: 10px 0 2px;
@@ -2616,7 +2639,16 @@ pre.secret-box {
   }
 }
 
-/* Durum kuralları kartı: tablo kenardan kenara, başlık, açıklama ve düğmeler kart iç boşluğuyla. */
+/* Durum kuralları kartı: tablo kenardan kenara, başlık, açıklama ve düğmeler kart iç boşluğuyla. Genişliği kapsamın eşik
+   kartıyla aynıdır (.page-readable ve .settings-card-wide). */
+.status-rules-card {
+  max-width: 1040px;
+}
+
+.status-rules-card.status-rules-wide {
+  max-width: 1100px;
+}
+
 .status-rules-card > .card-title-row,
 .status-rules-card > .card-desc,
 .status-rules-card > .save-note,
@@ -2928,6 +2960,18 @@ body.scroll-lock {
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 12px;
+}
+
+/* Alert türü süzgecinde başlık başına bir grup. */
+.filter-group + .filter-group {
+  margin-top: 8px;
+}
+
+.filter-group-label {
+  display: block;
+  margin: 4px 0 2px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .filter-search {
@@ -3956,4 +4000,37 @@ textarea {
   .sidebar-search {
     display: flex;
   }
+}
+
+/* Tema: giriş sayfalarının sağ üst köşesindeki simge ve profil menüsündeki üç seçenek. */
+.login-theme {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+}
+
+.profile-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Profil menüsünde üç seçenek menünün genişliğini eşit paylaşır (segmentin varsayılanı küçülmeyen düğmeler ve yatay
+   kaydırmadır; dar menüde "Koyu" kesilirdi). */
+.segmented.theme-choices {
+  display: flex;
+  width: 100%;
+  overflow: visible;
+}
+
+.segmented.theme-choices > button {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 6px;
 }
