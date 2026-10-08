@@ -10,7 +10,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 ## [Yayınlanmamış]
 
 ### Eklendi
-- **Protokol 4: sistem sağlığı ve performans verileri.** Hepsi yetkisiz okunur; okunamayan alan gönderilmez.
+- **Protokol 4: sistem sağlığı ve performans verileri.** Hepsi yetkisiz okunur; okunamayan alan gönderilmez. Agent ingest
+  protokolü 4 oldu. Panelde görmek ve alert almak için server'ın protokol 4'ü anlayan sürümü gerekir; yayımlanmış server'lar
+  yeni alanları yok sayar (metrik kaybolmaz, panel "Server güncellenmeli" der), bilinmeyen alanı reddeden çok eski
+  server'lara yeni alanlar çekirdek alanlarla yeniden denemede gönderilmez (`docs/COMPATIBILITY.md` §4).
   - CPU'da iowait ve steal payı, G/Ç'de takılı süreç sayısı (`cpu_detail`).
   - Bellek ayrıntısı: kullanılabilir bellek, önbellek, swap'a yazma/okuma hızı ve OOM (bellek yetmediği için öldürülen
     süreç) sayacı (`memory_detail`).

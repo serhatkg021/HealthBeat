@@ -43,6 +43,7 @@ içinde çalışan agent diskleri keşfedemeyebilir (bu durumda panel önceki bi
 9. Sorun giderme
 10. Envanter (makine bilgisi)
 11. Toplama düzeni (hangi veri ne zaman toplanır)
+12. Sistem sağlığı ve performans (protokol 4)
 
 ## 1. Hızlı başlangıç (push, önerilen yol)
 
@@ -516,7 +517,7 @@ Docker alanları yalnızca `healthbeat` kullanıcısı `docker` grubundaysa geli
 
 ## 10. Envanter (makine bilgisi)
 
-Agent 1.3.0 (protokol 3) yüzdelerin yanında makinenin **envanterini ve anlık durumunu** da bildirir; panelde sunucu
+Agent (1.0.0'dan beri, protokol 3) yüzdelerin yanında makinenin **envanterini ve anlık durumunu** da bildirir; panelde sunucu
 sayfasının **Envanter** sekmesinde (gruplanmış kartlar) görünür. Yalnızca **bilgi içindir**: alert üretmez.
 
 **Ne bildirilir** (hepsi yetkisiz okunabilen kaynaklardan):
@@ -538,9 +539,10 @@ sayfasının **Envanter** sekmesinde (gruplanmış kartlar) görünür. Yalnızc
 | Disk başına inode doluluğu | `statfs` | her raporda |
 
 **Ne bildirilmez (bilerek):** DMI seri numarası ve UUID'si (`/sys/class/dmi/id/product_serial`, `product_uuid` yalnızca root
-okur), MAC adresleri, ham `/etc/machine-id`, kullanıcı hesapları ve oturumları, süreç listesi ve komut satırları, ortam
-değişkenleri, dosya içerikleri, paket listesi, açık portlar, güvenlik duvarı kuralları, SMART disk sağlığı, bekleyen paket
-güncellemesi sayısı. Bunların çoğu root gerektirir; **envanter için servisin sandbox'ı gevşetilmez** ve `healthbeat`
+okur), MAC adresleri, ham `/etc/machine-id`, kullanıcı hesapları ve oturumları, süreçlerin komut satırları, argümanları ve
+sahipleri (protokol 4 yalnızca en çok kaynak kullanan süreçlerin **adını** gönderir, bkz. §12), ortam değişkenleri, dosya
+içerikleri, paket listesi (yalnızca bekleyen güncelleme **sayıları** gider), açık portlar, güvenlik duvarı kuralları, SMART
+disk sağlığı, log ve journal içerikleri. Bunların çoğu root gerektirir; **envanter için servisin sandbox'ı gevşetilmez** ve `healthbeat`
 kullanıcısına ek yetki verilmez. Bir alan okunamazsa "bilinmiyor" olarak boş kalır (`false`/`0` ile karıştırılmaz).
 
 **Sandbox uyumu (neden bazı yollar seçildi):** agent'ın systemd unit'i `ProtectClock`, `~@privileged` ve
@@ -573,6 +575,10 @@ Rapor (push'ta gönderilen gövde, pull'da server'a verilen yanıt; ikisi aynıd
 | Docker (container listesi, durum, CPU/RAM) | rapor aralığı | 20 sn |
 | Envanterin komut gerektiren alanları (saat senkronu, başarısız servis sayısı, yeniden başlatma gerekiyor, Docker sürümü) | 5 dk | 10 sn |
 | Envanterin kimlik alanları (işletim sistemi, kernel, CPU modeli, donanım) | saatte bir | — (dosya okuması) |
+| systemd servisleri (protokol 4) | rapor aralığı | 10 sn |
+| En çok kaynak kullanan süreçler (protokol 4) | 60 sn | 10 sn |
+| Bekleyen güncellemeler (protokol 4) | saatte bir | 35 sn |
+| Saat senkronunun ayrıntısı (protokol 4) | 5 dk | 10 sn |
 
 Bu sayede yavaş ya da takılan bir kaynak (çok container'lı bir Docker, yanıt vermeyen bir `systemctl`) raporu geciktiremez
 ve kaybettiremez; gönderimin kendi süre sınırı vardır (10 sn).
@@ -589,3 +595,37 @@ ve kaybettiremez; gönderimin kendi süre sınırı vardır (10 sn).
   ölçüm kullanılır (arka planda olduğu için raporu yine geciktirmez).
 - **Gecikme payı:** rapordaki Docker verisi en çok bir rapor aralığı eskidir.
 
+## 12. Sistem sağlığı ve performans (protokol 4)
+
+Yüzdelerin ötesinde, "makine neden yavaş / ne bozuldu" sorusunu cevaplayan veriler. Hepsi **yetkisiz** okunur ve servisin
+sandbox'ı gevşetilmeden çalışır (bütün direktiflerle doğrulandı, bkz. §8). Okunamayan alan gönderilmez; panelde "bilinmiyor"
+ya da eski agent için "agent güncellenince görünür" yazar. Değerler yuvarlanmadan gönderilir; hassasiyet panelde verilir.
+
+| Alan | Ne | Kaynak | Ne zaman |
+| --- | --- | --- | --- |
+| `cpu_detail` | iowait ve steal payı, G/Ç'de takılı süreç sayısı | `/proc/stat` | her rapor |
+| `memory_detail` | kullanılabilir bellek, önbellek, swap'a yazma/okuma (sayfa/sn), OOM sayacı | `/proc/meminfo`, `/proc/vmstat` | her rapor |
+| `pressure` | PSI: CPU, bellek ve G/Ç'de bekleme yüzdesi (10 ve 60 sn ortalaması) | `/proc/pressure/*` (çekirdek 4.20+, PSI açık) | her rapor |
+| `disk_io` | fiziksel disk başına okuma/yazma IOPS ve bayt/sn, ortalama gecikme, meşguliyet, kuyruk | `/proc/diskstats` | her rapor |
+| `net_io` | arayüz başına gelen/giden bit/sn, hata ve düşen paket (`lo`, `docker0`, `veth*`, `br-*` hariç) | `/proc/net/dev` | her rapor |
+| `tcp` | yeniden iletim oranı, kurulu bağlantı ve TIME_WAIT sayısı | `/proc/net/snmp`, `/proc/net/sockstat` | her rapor |
+| disk girdisinde `read_only` | dosya sistemi salt okunur bağlı mı (çekirdek disk hatasında böyle yapar) | `statfs` | her rapor |
+| `raid` | yazılım RAID dizisi: seviye, durum, etkin/toplam disk, senkron yüzdesi | `/proc/mdstat` | her rapor |
+| `temperatures` | CPU paketi, en sıcak çekirdek, NVMe/SATA diskler; donanımın üst ve kritik sınırı | `/sys/class/hwmon` (yalnızca fiziksel makine) | her rapor |
+| `capacity` | açık dosya tanıtıcısı, bağlantı izleme (conntrack), süreç + iş parçacığı sayısının sınırlarına göre doluluğu | `/proc/sys/fs/file-nr`, `nf_conntrack_*`, `/proc/loadavg`, `pid_max` | her rapor |
+| container'da `health` vb. | Docker healthcheck sonucu, üst üste başarısız deneme, durmuş container'ın çıkış kodu ve OOM | Docker socket (`--docker`) | Docker aralığı |
+| `services` | systemd servisleri: durum, ne zamandan beri, yeniden başlatma sayısı, açılışta etkin mi | `systemctl list-units`, `systemctl show` (D-Bus) | tam liste 5 dk'da bir; arada sorunlu ve değişen servisler |
+| `processes` | en çok CPU ve RAM kullanan 5 süreç grubu (yalnızca **ad**), toplam ve zombi sayısı | `/proc/<pid>/stat` | 60 sn |
+| `updates` | bekleyen paket ve güvenlik güncellemesi sayısı, paket listelerinin son güncellenmesi | `apt list --upgradable` (yalnızca apt ailesi) | saatte bir |
+| `time_sync` | daemon, NTP sunucusu, stratum, fark, gecikme, jitter, son senkron, leap, kaynakların durumu | `timedatectl`/`busctl` (timesyncd, systemd 240+), `chronyc`, `ntpq` (yerel) | 5 dk |
+
+- **Oranlar** (G/Ç, ağ, swap, iowait) iki rapor arasındaki farktır: agent'ın ilk raporunda ve sayaç geri gittiğinde (yeniden
+  açılış) gönderilmez.
+- **Servisler** panelde Servisler → Sistem servisleri'nde görünür; alert yalnızca **izlenen** servisler için açılır (seçim
+  sunucu sayfasında). Kurulu olmayan (`not-found`) ve `masked` servisler raporlanmaz.
+- **Alert'ler** bu verilerden server'da üretilir (disk gecikmesi, sıcaklık, servis yeniden başlatma döngüsü, saat farkı,
+  durum kuralları); hepsi varsayılanda kapalıdır ve panelde Alert kuralları'ndan açılır. Agent'ta alert ayarı yoktur.
+- **Ne gönderiyor, görmek için:** `healthbeat-agent --print-report` agent'ın göndereceği tam raporu (protokol 4 alanları
+  dahil) JSON olarak yazdırır; oranlar için iki ölçüm alır (~4 sn).
+- **Eski server:** protokol 4'ü bilmeyen bir server yeni alanları yok sayar (CPU, RAM, disk, Docker ve envanter yazılır;
+  panel "Server güncellenmeli" der). Bkz. `docs/COMPATIBILITY.md` §4.
