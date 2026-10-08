@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, BellRing, ChartLine, CircleArrowUp, Clock, Cpu, Download, HardDrive, MemoryStick, Timer, Upload, type LucideIcon } from 'lucide-react'
+import { Activity, BellRing, ChartLine, CircleArrowUp, Clock, Cpu, Download, HardDrive, MemoryStick, Timer, TriangleAlert, Upload, type LucideIcon } from 'lucide-react'
 import { alertsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import type { Alert, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
@@ -16,6 +16,7 @@ import { statusDuration } from './hostStatus'
 import { effectiveLevels, mountLevels, pctText, usageTone, TONE_LABEL } from './usage'
 import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertSubjectText, hostStatusLabel } from '../labels'
 import { alertReading } from './alertText'
+import { ioSummary, stateWarnings } from './systemState'
 
 // Sunucu sayfasının "Genel" sekmesi: sunucunun şu anki durumu ve açık sorunları. Yalnızca en son raporu gösterir;
 // geçmiş grafikleri "Performans", donanım ve envanter "Envanter" sekmesindedir.
@@ -41,6 +42,8 @@ export function HostOverview({
   const now = useNow(5000)
   const duration = statusDuration(host, now)
   const kind = agentKind(host, policy)
+  const warnings = stateWarnings(host.system_state, latest, now)
+  const io = ioSummary(latest)
 
   return (
     <div>
@@ -93,6 +96,17 @@ export function HostOverview({
         <StatTile label="Son görülme" icon={Clock} small value={host.last_seen ? new Date(host.last_seen).toLocaleString() : '—'} />
       </div>
 
+      {/* Anlık durumdan hemen bakılması gerekenler (alert kuralı kapalı olsa da görünür; ayrıntı Envanter'de). */}
+      {warnings.length > 0 && (
+        <div className="state-warnings" role="status">
+          {warnings.map((w) => (
+            <StatusBadge key={w.text} tone={w.tone}>
+              <TriangleAlert size={13} strokeWidth={2} /> {w.text}
+            </StatusBadge>
+          ))}
+        </div>
+      )}
+
       <OpenIssues hostId={host.id} onShowAlerts={onShowAlerts} />
 
       {latest ? (
@@ -144,6 +158,15 @@ export function HostOverview({
           </div>
         ) : (
           <EmptyState icon={HardDrive}>Henüz disk verisi yok.</EmptyState>
+        )}
+        {io.length > 0 && (
+          <ul className="io-lines" aria-label="Fiziksel disklerin G/Ç'si (son rapor)">
+            {io.map((d) => (
+              <li key={d.name}>
+                <span className="mono">{d.name}</span> <span className="muted tnum">{d.text}</span>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </div>

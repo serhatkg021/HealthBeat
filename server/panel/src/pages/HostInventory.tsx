@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
 import { Activity, MonitorCog, Network, ShieldCheck } from 'lucide-react'
-import type { Host } from '../types/api'
+import type { Host, HostThresholdsResponse } from '../types/api'
 import { EmptyState } from '../components/EmptyState'
 import { StatusBadge } from '../components/StatusBadge'
 import { diskKindLabel, formatBytes, formatCores } from './hardwareTotals'
-import { UpdatesPreview } from './HostComingSoon'
+import { HostSystemState } from './HostSystemState'
 import {
   SECURITY_MODULE_LABEL,
   formatUptime,
@@ -49,9 +49,10 @@ function Group({ title, icon: Icon, children }: { title: string; icon: typeof Ne
 const yesNo = (v: boolean | undefined, yes: string, no: string): ReactNode => (v === undefined ? '—' : v ? yes : no)
 
 // Sunucu sayfasının "Envanter" sekmesi: sunucunun ne olduğu (donanım, işletim sistemi, ağ, çalışma durumu). Yalnızca
-// bilgi içindir; IP uyuşmazlığı alert üretmez, ilgili satırda uyarı rozeti olarak gösterilir. Disklerin doluluğu ve
-// zamana bağlı her şey "Performans", Docker "Servisler" sekmesindedir.
-export function HostInventory({ host }: { host: Host }) {
+// bilgi içindir; IP uyuşmazlığı alert üretmez, ilgili satırda uyarı rozeti olarak gösterilir. Altında agent'ın son
+// raporundaki anlık durumlar (protokol 4: sıcaklık, süreçler, güncellemeler, kapasite, saat senkronu, RAID) durur.
+// Disklerin doluluğu ve zamana bağlı her şey "Performans", Docker ve servisler "Servisler" sekmesindedir.
+export function HostInventory({ host, thresholds }: { host: Host; thresholds: HostThresholdsResponse | null }) {
   const h = host.host_info
   const disks = host.physical_disks ?? []
   const cores = formatCores(host.cpu_cores)
@@ -148,14 +149,14 @@ export function HostInventory({ host }: { host: Host }) {
               <EmptyState icon={MonitorCog}>
                 {supportsInventory(host)
                   ? 'Sistem bilgisi henüz alınmadı.'
-                  : 'Bu agent sistem bilgisini (işletim sistemi, kernel, IP adresleri, uptime vb.) göndermiyor; agent 1.3.0 ya da üstü (protokol 3) gerekir.'}
+                  : 'Bu agent sistem bilgisini (işletim sistemi, kernel, IP adresleri, uptime vb.) göndermiyor; agent güncellenince görünür (protokol 3).'}
               </EmptyState>
             </div>
           )}
         </div>
       </div>
 
-      <UpdatesPreview />
+      <HostSystemState host={host} thresholds={thresholds} />
     </div>
   )
 }

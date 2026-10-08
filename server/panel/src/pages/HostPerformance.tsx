@@ -9,7 +9,6 @@ import { MountMeter } from '../components/MountMeter'
 import { supportsHardwareSummary } from './agentStatus'
 import { diskLayout } from './diskLayout'
 import { HostHealthCharts } from './HostHealthCharts'
-import { ProcessesPreview, TemperaturePreview } from './HostComingSoon'
 import { RANGES, cpuRamRows, diskMounts, diskRows, toInputValue, type RangeKey } from './metricHistory'
 import { mountLevels } from './usage'
 
@@ -185,10 +184,6 @@ export function HostPerformance({
         </div>
       )}
 
-      <div className="grid-2">
-        <TemperaturePreview />
-        <ProcessesPreview />
-      </div>
     </div>
   )
 }

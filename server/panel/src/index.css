@@ -2570,6 +2570,46 @@ pre.secret-box {
   gap: 12px;
 }
 
+/* Envanter: anlık durum kartlarının küçük tabloları ve kapasite satırları. */
+.compact-table {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.capacity-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.capacity-head {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+/* Genel: anlık durum uyarı şeridi ve disk kartındaki G/Ç satırları. */
+.state-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.io-lines {
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 @media (max-width: 1100px) {
   .psi-charts {
     grid-template-columns: minmax(0, 1fr);

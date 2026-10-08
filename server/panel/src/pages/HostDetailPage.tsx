@@ -113,7 +113,7 @@ export function HostDetailPage() {
       </TabPanel>
 
       <TabPanel id="envanter" active={tab}>
-        {host && <HostInventory host={host} />}
+        {host && <HostInventory host={host} thresholds={thresholds} />}
       </TabPanel>
 
       {id && (

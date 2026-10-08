@@ -155,6 +155,8 @@ export interface DiskUsage {
   free: number
   // Inode doluluğu (protokol 3); yoksa bilinmiyor (eski agent ya da inode bildirmeyen dosya sistemi).
   inodes_used_pct?: number
+  // Dosya sistemi salt okunur bağlı (protokol 4; disk hatasında çekirdek böyle yapar); yoksa bilinmiyor.
+  read_only?: boolean
 }
 
 // Agent'ın bildirdiği makine envanteri ve anlık durumu (protokol 3). Yalnızca bilgi içindir; her alan

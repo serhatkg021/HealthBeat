@@ -2,19 +2,6 @@
 // gelmez ve hiçbir gerçek hesaba (sayaç, özet, alert) girmez; yalnızca ComingSoon içinde çizilir. Özellik geldiğinde
 // ilgili örnek buradan silinir.
 
-export const SAMPLE_TEMPERATURES = [
-  { sensor: 'CPU paketi', celsius: 64, limit: 85 },
-  { sensor: 'nvme0n1', celsius: 48, limit: 70 },
-]
-
-export const SAMPLE_PROCESSES = [
-  { name: 'postgres', cpu: '38,2%', ram: '4,1 GB', count: 23 },
-  { name: 'java', cpu: '21,7%', ram: '2,8 GB', count: 1 },
-  { name: 'node', cpu: '9,4%', ram: '640 MB', count: 4 },
-]
-
-export const SAMPLE_UPDATES = { total: 14, security: 3, checked: '6 sa önce' }
-
 // Bildirim sayfasında "Bu alert kime gider?" önizlemesi: tüm kurallar birleştirilince çıkan alıcılar.
 export const SAMPLE_RECIPIENTS = {
   host: 'web-01',
