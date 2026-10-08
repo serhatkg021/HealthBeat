@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Activity, HardDrive } from 'lucide-react'
 import { hostsApi } from '../api/endpoints'
 import type { DiskUsage, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
 import { DiskGroupCard } from '../components/DiskGroupCard'
 import { EmptyState } from '../components/EmptyState'
+import { HistoryChart } from '../components/HistoryChart'
 import { MountMeter } from '../components/MountMeter'
 import { supportsHardwareSummary } from './agentStatus'
 import { diskLayout } from './diskLayout'
-import { DiskIoPreview, NetworkPreview, ProcessesPreview, TemperaturePreview } from './HostComingSoon'
-import { RANGES, cpuRamRows, diskMounts, diskRows, formatPoint, isLongSpan, toInputValue, type RangeKey } from './metricHistory'
+import { HostHealthCharts } from './HostHealthCharts'
+import { ProcessesPreview, TemperaturePreview } from './HostComingSoon'
+import { RANGES, cpuRamRows, diskMounts, diskRows, toInputValue, type RangeKey } from './metricHistory'
 import { mountLevels } from './usage'
 
 // Sabit kategorik tonlar (doğrulanmış varsayılan paletin 1. ve 2. yuvaları — bkz. dataviz
@@ -20,16 +21,10 @@ const DISK_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#00
 
 const HOUR_MS = 60 * 60 * 1000
 
-interface Series {
-  key: string
-  label: string
-  color: string
-}
-
 // Sunucu sayfasının "Performans" sekmesi: zamana bağlı her şey tek zaman seçicinin altında. Bir kez yüklenen metrik
 // noktaları hem CPU/RAM hem disk doluluğu grafiğini besler; X ekseni seçilen aralığın TAMAMINI kapsar (veri olmayan
-// kısımlar dahil), böylece verinin nerede başlayıp bittiği görülür. Altında fiziksel diskler (son rapor) ve henüz
-// gelmemiş metriklerin "Yakında" kartları durur.
+// kısımlar dahil), böylece verinin nerede başlayıp bittiği görülür. Protokol 4 grafikleri (CPU ayrıntısı, PSI, disk G/Ç,
+// ağ, swap ve TCP) aynı noktalardan çizilir ve imleci paylaşır; altında fiziksel diskler (son rapor) durur.
 export function HostPerformance({
   host,
   disk,
@@ -137,6 +132,7 @@ export function HostPerformance({
           ]}
           range={range}
           emptyIcon={Activity}
+          syncId="perf"
         />
       </div>
 
@@ -151,8 +147,11 @@ export function HostPerformance({
           series={mounts.map((m, i) => ({ key: m, label: m, color: DISK_COLORS[i % DISK_COLORS.length] }))}
           range={range}
           emptyIcon={HardDrive}
+          syncId="perf"
         />
       </div>
+
+      <HostHealthCharts host={host} points={points} range={range} loading={loading} />
 
       <h2 className="section-title">
         <HardDrive size={16} strokeWidth={1.75} />
@@ -186,68 +185,10 @@ export function HostPerformance({
         </div>
       )}
 
-      <DiskIoPreview />
       <div className="grid-2">
-        <NetworkPreview />
         <TemperaturePreview />
+        <ProcessesPreview />
       </div>
-      <ProcessesPreview />
     </div>
-  )
-}
-
-function HistoryChart({
-  loading,
-  rows,
-  series,
-  range,
-  emptyIcon,
-}: {
-  loading: boolean
-  rows: Record<string, number>[]
-  series: Series[]
-  range: { start: number; end: number }
-  emptyIcon: typeof Activity
-}) {
-  if (loading) return <div className="muted">Yükleniyor…</div>
-  if (rows.length === 0 || series.length === 0) return <EmptyState icon={emptyIcon}>Bu aralıkta metrik verisi yok.</EmptyState>
-  const span = range.end - range.start
-  const long = isLongSpan(span)
-  const labelOf = (key: string) => series.find((s) => s.key === key)?.label ?? key
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 8, left: -12 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-        <XAxis
-          dataKey="ts"
-          type="number"
-          scale="time"
-          domain={[range.start, range.end]}
-          tickFormatter={(ms: number) => formatPoint(ms, span)}
-          tick={{ fontSize: 11 }}
-          stroke="var(--text-muted)"
-          minTickGap={long ? 70 : 48}
-          angle={long ? -20 : 0}
-          textAnchor={long ? 'end' : 'middle'}
-          height={long ? 40 : 24}
-        />
-        <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke="var(--text-muted)" unit="%" />
-        <Tooltip
-          contentStyle={{
-            fontSize: 12,
-            borderRadius: 8,
-            background: 'var(--surface-1)',
-            border: '1px solid var(--border)',
-            color: 'var(--text-primary)',
-          }}
-          labelFormatter={(label) => formatPoint(Number(label), span)}
-          formatter={(value, name) => [`${value}%`, labelOf(String(name))]}
-        />
-        {series.length > 1 && <Legend formatter={(value: string) => labelOf(value)} wrapperStyle={{ fontSize: 12 }} />}
-        {series.map((s) => (
-          <Line key={s.key} type="monotone" dataKey={s.key} name={s.key} stroke={s.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
   )
 }

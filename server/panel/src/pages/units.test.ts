@@ -11,6 +11,7 @@ import {
   formatOffsetMs,
   formatPct,
   formatPerSecond,
+  formatTick,
 } from './units.ts'
 
 test('unknown values render a dash, never NaN or "undefined"', () => {
@@ -80,4 +81,13 @@ test('counts use a thousands separator', () => {
   assert.equal(formatCount(123456), '123.456')
   assert.equal(formatCount(4194304), '4.194.304')
   assert.equal(formatCount(0), '0')
+})
+
+test('axis ticks: integers grouped, fractions with a comma and no trailing zeros', () => {
+  assert.equal(formatTick(0), '0')
+  assert.equal(formatTick(12000), '12.000')
+  assert.equal(formatTick(0.5), '0,5')
+  assert.equal(formatTick(0.25), '0,25')
+  assert.equal(formatTick(2.5), '2,5')
+  assert.equal(formatTick(Number.NaN), '')
 })

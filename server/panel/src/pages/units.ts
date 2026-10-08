@@ -76,3 +76,10 @@ export function formatPerSecond(v: number | null | undefined): string {
 export function formatCount(v: number | null | undefined): string {
   return known(v) ? Math.round(v).toLocaleString('tr-TR') : DASH
 }
+
+// Eksen etiketi: tam sayı binlik ayraçlı, ara değer virgüllü ("0,5", "2,25"); birim ayrıca eklenir.
+export function formatTick(v: number): string {
+  if (!Number.isFinite(v)) return ''
+  if (Number.isInteger(v)) return v.toLocaleString('tr-TR')
+  return decimal(v, Math.abs(v) < 1 ? 2 : 1).replace(/,?0+$/, '')
+}

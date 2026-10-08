@@ -1,58 +1,10 @@
-import { Gauge, HardDriveDownload, Network, PackageOpen, Thermometer } from 'lucide-react'
+import { Gauge, PackageOpen, Thermometer } from 'lucide-react'
 import { ComingSoon } from '../components/ComingSoon'
 import { StatusBadge } from '../components/StatusBadge'
-import { SAMPLE_DISK_IO, SAMPLE_NETWORK, SAMPLE_PROCESSES, SAMPLE_TEMPERATURES, SAMPLE_UPDATES } from './comingSoonSamples'
+import { SAMPLE_PROCESSES, SAMPLE_TEMPERATURES, SAMPLE_UPDATES } from './comingSoonSamples'
 
 // Sunucu sayfasındaki "Yakında" kartları. Hepsi ÖRNEK veri çizer (comingSoonSamples.ts); gerçek özellik gelince ilgili
 // kart buradan kaldırılıp gerçek bileşen konur.
-
-const points = (values: number[]) => values.map((v, i) => `${(i * 100) / (values.length - 1)},${100 - v}`).join(' ')
-
-function Spark({ label, values, color }: { label: string; values: number[]; color: string }) {
-  return (
-    <div className="coming-soon-spark">
-      <span className="muted">{label}</span>
-      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-        <polyline points={points(values)} fill="none" stroke={color} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-      </svg>
-    </div>
-  )
-}
-
-export function DiskIoPreview() {
-  const io = SAMPLE_DISK_IO
-  return (
-    <ComingSoon
-      title="Disk G/Ç"
-      icon={HardDriveDownload}
-      description="Disk başına gecikme, okuma/yazma hızı ve IOPS; üç grafik aynı zaman eksenini paylaşır. Doluluk normalken diskin boğulduğu durumları gösterir."
-    >
-      <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
-        <span className="mono">{io.disk}</span> · gecikme {io.now.latency} · okuma {io.now.read} · yazma {io.now.write} · IOPS {io.now.iops}
-      </div>
-      <Spark label="Gecikme (ms)" values={io.latency} color="#2563eb" />
-      <Spark label="Hız (MB/sn)" values={io.throughput} color="#eb6834" />
-      <Spark label="IOPS" values={io.iops} color="#2a78d6" />
-    </ComingSoon>
-  )
-}
-
-export function NetworkPreview() {
-  return (
-    <ComingSoon title="Ağ" icon={Network} description="Arayüz başına gelen/giden trafik, hata ve düşen paket sayıları.">
-      <dl className="info-list single">
-        {SAMPLE_NETWORK.map((n) => (
-          <div className="info-row" key={n.iface}>
-            <dt className="mono">{n.iface}</dt>
-            <dd>
-              ↓ {n.rx} · ↑ {n.tx} <span className="muted">· hata/düşen {n.errors}</span>
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </ComingSoon>
-  )
-}
 
 export function TemperaturePreview() {
   return (
