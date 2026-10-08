@@ -5,6 +5,13 @@ import type { HostInfo } from '../types/api.ts'
 // Agent envanteri (host_info) protokol 3 ile gelir.
 export const supportsInventory = (c: { agent_protocol?: number | null }): boolean => (c.agent_protocol ?? 0) >= 3
 
+// Sistem sağlığı ve performans verileri (servisler, disk/ağ G/Ç, PSI, sıcaklık …) protokol 4 ile gelir.
+export const supportsHealth = (c: { agent_protocol?: number | null }): boolean => (c.agent_protocol ?? 0) >= 4
+
+// Protokol 4 verisi olmayan sunucunun boş durum metni: eski agent'ta neden yok, yenisinde henüz gelmedi.
+export const healthEmptyText = (c: { agent_protocol?: number | null }, what: string): string =>
+  supportsHealth(c) ? `${what} henüz bildirilmedi.` : `${what} bu agent sürümünde toplanmıyor; agent güncellenince görünür (protokol 4).`
+
 export function osLabel(h?: HostInfo): string {
   const os = h?.os
   if (!os) return '—'

@@ -2,22 +2,6 @@
 // gelmez ve hiçbir gerçek hesaba (sayaç, özet, alert) girmez; yalnızca ComingSoon içinde çizilir. Özellik geldiğinde
 // ilgili örnek buradan silinir.
 
-export interface SampleService {
-  name: string
-  state: 'running' | 'failed' | 'activating' | 'inactive'
-  since: string
-  restarts: string
-  watched: boolean
-}
-
-export const SAMPLE_SERVICES: SampleService[] = [
-  { name: 'postgresql.service', state: 'failed', since: '4 dk', restarts: '3 (son 10 dk)', watched: true },
-  { name: 'redis-server.service', state: 'activating', since: '12 sn', restarts: '7 (son 10 dk)', watched: true },
-  { name: 'nginx.service', state: 'running', since: '12 gün', restarts: '0', watched: true },
-  { name: 'ssh.service', state: 'running', since: '12 gün', restarts: '0', watched: false },
-  { name: 'certbot.service', state: 'inactive', since: '6 sa', restarts: '0', watched: false },
-]
-
 // Disk G/Ç: aynı zaman eksenini paylaşan üç seri (0–100 arası normalize edilmiş çizim noktaları).
 export const SAMPLE_DISK_IO = {
   disk: 'nvme0n1',

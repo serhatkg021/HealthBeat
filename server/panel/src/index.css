@@ -3574,16 +3574,6 @@ textarea {
   filter: grayscale(0.35);
 }
 
-.coming-soon-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 12px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
 .coming-soon-spark {
   display: grid;
   grid-template-columns: 110px minmax(0, 1fr);

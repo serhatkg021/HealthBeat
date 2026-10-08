@@ -33,13 +33,3 @@ export function ComingSoon({
     </section>
   )
 }
-
-// Gerçek bir bölümün içine konan tek satırlık "yakında" notu (ör. gerçek bir tabloya sahte sütun eklemek yerine).
-export function ComingSoonNote({ children }: { children: ReactNode }) {
-  return (
-    <p className="coming-soon-note">
-      <span className="coming-soon-badge">Yakında</span>
-      {children}
-    </p>
-  )
-}

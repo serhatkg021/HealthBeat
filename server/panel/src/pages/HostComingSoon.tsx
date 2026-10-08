@@ -1,52 +1,10 @@
-import { Gauge, HardDriveDownload, ListChecks, Network, PackageOpen, Thermometer } from 'lucide-react'
+import { Gauge, HardDriveDownload, Network, PackageOpen, Thermometer } from 'lucide-react'
 import { ComingSoon } from '../components/ComingSoon'
 import { StatusBadge } from '../components/StatusBadge'
-import { SAMPLE_DISK_IO, SAMPLE_NETWORK, SAMPLE_PROCESSES, SAMPLE_SERVICES, SAMPLE_TEMPERATURES, SAMPLE_UPDATES, type SampleService } from './comingSoonSamples'
+import { SAMPLE_DISK_IO, SAMPLE_NETWORK, SAMPLE_PROCESSES, SAMPLE_TEMPERATURES, SAMPLE_UPDATES } from './comingSoonSamples'
 
 // Sunucu sayfasındaki "Yakında" kartları. Hepsi ÖRNEK veri çizer (comingSoonSamples.ts); gerçek özellik gelince ilgili
 // kart buradan kaldırılıp gerçek bileşen konur.
-
-const SERVICE_STATE: Record<SampleService['state'], { label: string; tone: 'good' | 'warning' | 'critical' | 'neutral' }> = {
-  running: { label: 'çalışıyor', tone: 'good' },
-  failed: { label: 'çöktü', tone: 'critical' },
-  activating: { label: 'başlatılıyor', tone: 'warning' },
-  inactive: { label: 'durmuş', tone: 'neutral' },
-}
-
-export function ServicesPreview() {
-  return (
-    <ComingSoon
-      title="Sistem servisleri"
-      icon={ListChecks}
-      description="systemd servislerinin anlık durumu, ne zamandan beri o durumda oldukları ve yeniden başlatma sayıları. Alert için izlenecek servisler Alert kuralları’ndan seçilir."
-    >
-      <table>
-        <thead>
-          <tr>
-            <th>Servis</th>
-            <th>Durum</th>
-            <th>Ne zamandan beri</th>
-            <th>Yeniden başlatma</th>
-            <th>Alert</th>
-          </tr>
-        </thead>
-        <tbody>
-          {SAMPLE_SERVICES.map((s) => (
-            <tr key={s.name}>
-              <td className="mono">{s.name}</td>
-              <td>
-                <StatusBadge tone={SERVICE_STATE[s.state].tone}>{SERVICE_STATE[s.state].label}</StatusBadge>
-              </td>
-              <td>{s.since}</td>
-              <td>{s.restarts}</td>
-              <td className="muted">{s.watched ? 'izleniyor' : '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </ComingSoon>
-  )
-}
 
 const points = (values: number[]) => values.map((v, i) => `${(i * 100) / (values.length - 1)},${100 - v}`).join(' ')
 
