@@ -80,6 +80,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   yazıyordu; organizasyon ya da üst organizasyon kuralları da geçerli olduğu için yanıltıcıydı. Artık "bu sunucuya /
   organizasyona özel ek alıcı yok" yazıyor.
 
+### İç değişiklikler (davranış değişmedi)
+- Panel: geliştirme bağımlılığı güncellendi — `source-map-js` 1.2.2 (CVE-2026-93749; panel çıktısı değişmez).
+
 ## [2.0.0] - 2026-10-01
 
 Ayarların ve bildirim kanallarının panele taşındığı, panel gezinmesinin yenilendiği sürüm. Agent sürümü değişmedi: 1.0.0
