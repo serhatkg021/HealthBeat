@@ -4086,7 +4086,8 @@ textarea {
 .rule-rows-head,
 .rule-row {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 0.9fr) minmax(0, 1fr) minmax(96px, auto);
+  /* İşlem sütunu sabit genişliktedir: satırdaki düğme sayısı değişince diğer sütunlar kaymasın (Geri al · Düzenle · Devral). */
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 0.9fr) minmax(0, 1fr) 224px;
   gap: 12px;
   padding: 10px 18px;
   align-items: center;
