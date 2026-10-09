@@ -1,10 +1,12 @@
 // Sunucu sayfasının Performans sekmesi konuya göre: her konu (CPU, Bellek, Disk …) kendi grafiklerini, son rapordaki
 // değerlerini ve alert kurallarını bir arada gösterir. Konu kataloğu, menüdeki "şu an" değerleri, grafik yerleşim kuralı ve
 // konunun Alert kuralları karşılığı burada. React yok; Node'un çalıştırıcısıyla birim test edilir.
-import type { MetricPoint, SystemState } from '../types/api.ts'
+import type { HostInfo, MetricPoint, SystemState } from '../types/api.ts'
+import { agoText } from './cache.ts'
+import { formatBytes } from './hardwareTotals.ts'
 import { itemKey, topicInfo, topicItems, type RuleItem, type TopicId } from './ruleTopics.ts'
-import { capacityRows } from './systemState.ts'
-import { formatBitRate, formatCelsius, formatPct } from './units.ts'
+import { capacityRows, raidState } from './systemState.ts'
+import { decimal, formatBitRate, formatByteRate, formatCelsius, formatCount, formatMs, formatPct } from './units.ts'
 
 export type PerfTopicId = 'ozet' | 'cpu' | 'bellek' | 'disk' | 'ag' | 'sicaklik' | 'sinirlar'
 
@@ -108,5 +110,100 @@ export function topicNow(id: PerfTopicId, latest: MetricPoint | null, state: Sys
     }
     default:
       return ''
+  }
+}
+
+export interface PerfTile {
+  label: string
+  value: string
+  hint?: string
+  tone?: 'warning' | 'critical'
+}
+
+export interface TileContext {
+  latest: MetricPoint | null
+  state?: SystemState
+  cores?: number
+  ramTotalMB?: number
+  info?: Pick<HostInfo, 'load_avg' | 'swap'>
+  // Disk ve Ağ konularında seçili disk ve arayüz.
+  disk?: string
+  iface?: string
+  now: number
+}
+
+const DASH = '—'
+const MB = 1024 * 1024
+
+// Konunun "Şu an" kutuları: son rapordaki değerler. Bilinmeyen değer "—" olur (eski agent'ta da kutu yerinde kalır).
+// Özet, Sıcaklık ve Sistem sınırlarında kutu yoktur (içerikleri zaten son rapordur).
+export function perfTiles(id: PerfTopicId, ctx: TileContext): PerfTile[] {
+  const { latest, state } = ctx
+  const sys = latest?.system
+  switch (id) {
+    case 'cpu': {
+      const load = ctx.info?.load_avg
+      return [
+        { label: 'Kullanım', value: latest ? formatPct(latest.cpu_usage_pct) : DASH, ...(ctx.cores ? { hint: `${ctx.cores} çekirdek` } : {}) },
+        { label: 'Yük ortalaması', value: load && load.length === 3 ? load.map((v) => decimal(v, 2)).join(' · ') : DASH, hint: '1 · 5 · 15 dk' },
+        { label: 'iowait', value: formatPct(sys?.cpu_detail?.iowait_pct), hint: 'diski bekleme' },
+        { label: 'Baskı (PSI)', value: formatPct(sys?.pressure?.cpu?.some60), hint: 'some, 60 sn' },
+      ]
+    }
+    case 'bellek': {
+      const used = latest && ctx.ramTotalMB ? formatBytes((ctx.ramTotalMB * latest.ram_usage_pct * MB) / 100) : null
+      const swap = ctx.info?.swap
+      const oom = state?.oom_kills
+      return [
+        { label: 'Kullanım', value: latest ? formatPct(latest.ram_usage_pct) : DASH, ...(used ? { hint: `${used} / ${formatBytes(ctx.ramTotalMB! * MB)}` } : {}) },
+        {
+          label: 'Swap',
+          value: swap ? (swap.total_mb === 0 ? 'yok' : swap.used_mb > 0 ? formatBytes(swap.used_mb * MB) : '0') : DASH,
+          ...(swap && swap.total_mb > 0 ? { hint: `${formatBytes(swap.total_mb * MB)} içinden` } : {}),
+        },
+        {
+          label: 'Bellek yetmezliği (OOM)',
+          value: oom === undefined ? DASH : formatCount(oom),
+          hint: oom === undefined ? 'bildirilmedi' : state?.oom_last_increase_at ? `son: ${agoText(state.oom_last_increase_at, ctx.now)}` : 'açılıştan beri · görülmedi',
+          ...(oom ? { tone: 'warning' as const } : {}),
+        },
+        { label: 'Baskı (PSI)', value: formatPct(sys?.pressure?.memory?.some60), hint: 'some, 60 sn' },
+      ]
+    }
+    case 'disk': {
+      const mounts = latest?.disk ?? []
+      const fullest = mounts.length > 0 ? mounts.reduce((a, b) => (b.used_pct > a.used_pct ? b : a)) : null
+      const io = latest?.disk_io?.find((d) => d.name === ctx.disk)
+      // Agent dizi yokken alanı hiç göndermez: son rapor varsa ve alan yoksa dizi yoktur.
+      const raid = state ? (state.raid ?? []) : undefined
+      const worst = raid?.map(raidState).find((r) => r.tone === 'critical') ?? raid?.map(raidState).find((r) => r.tone === 'warning')
+      return [
+        { label: 'En dolu mount', value: fullest ? formatPct(fullest.used_pct) : DASH, ...(fullest ? { hint: fullest.mount } : {}) },
+        { label: 'Gecikme', value: io ? formatMs(io.await_ms) : DASH, hint: ctx.disk ? `${ctx.disk} · ortalama işlem` : 'ortalama işlem' },
+        { label: 'Hız', value: io ? formatByteRate(io.read_bps + io.write_bps) : DASH, ...(io ? { hint: `okuma ${formatByteRate(io.read_bps)} · yazma ${formatByteRate(io.write_bps)}` } : {}) },
+        raid === undefined
+          ? { label: 'Yazılım RAID', value: DASH, hint: 'bildirilmedi' }
+          : raid.length === 0
+            ? { label: 'Yazılım RAID', value: 'yok', hint: 'dizi bulunmadı' }
+            : {
+                label: 'Yazılım RAID',
+                value: `${raid.length} dizi`,
+                hint: worst ? worst.label : 'sağlıklı',
+                ...(worst ? { tone: worst.tone === 'critical' ? ('critical' as const) : ('warning' as const) } : {}),
+              },
+      ]
+    }
+    case 'ag': {
+      const net = latest?.net_io?.find((n) => n.interface === ctx.iface)
+      const tcp = sys?.tcp
+      return [
+        { label: 'Gelen', value: net ? formatBitRate(net.rx_bps) : DASH, ...(ctx.iface ? { hint: ctx.iface } : {}) },
+        { label: 'Giden', value: net ? formatBitRate(net.tx_bps) : DASH, ...(ctx.iface ? { hint: ctx.iface } : {}) },
+        { label: 'Kurulu TCP bağlantısı', value: tcp?.established === undefined ? DASH : formatCount(tcp.established), ...(tcp?.time_wait !== undefined ? { hint: `TIME_WAIT ${formatCount(tcp.time_wait)}` } : {}) },
+        { label: 'Yeniden iletim', value: formatPct(tcp?.retrans_pct, 2), hint: 'son rapor' },
+      ]
+    }
+    default:
+      return []
   }
 }

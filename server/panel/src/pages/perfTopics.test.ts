@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { MetricPoint, SystemState } from '../types/api.ts'
-import { PERF_TOPICS, chartLayout, perfRuleItems, resolvePerfTopic, topicNow } from './perfTopics.ts'
+import { PERF_TOPICS, chartLayout, perfRuleItems, perfTiles, resolvePerfTopic, topicNow } from './perfTopics.ts'
 import { TOPICS, itemKey, topicInfo, topicItems } from './ruleTopics.ts'
 
 test('the topic comes from the address; anything unknown is the overview', () => {
@@ -78,4 +78,54 @@ test('the menu shows the latest value per topic, or nothing when unknown', () =>
   assert.equal(topicNow('ozet', latest, state), '')
 
   for (const id of ['cpu', 'bellek', 'disk', 'ag', 'sicaklik', 'sinirlar'] as const) assert.equal(topicNow(id, null, undefined), '', id)
+})
+
+const NOW = Date.parse('2026-10-10T12:00:00Z')
+const values = (tiles: { value: string }[]) => tiles.map((t) => t.value)
+
+test('CPU and memory tiles: usage with its total, load, swap, OOM and pressure', () => {
+  const latest = point({
+    system: { cpu_detail: { iowait_pct: 1.24 }, pressure: { cpu: { some10: 0, some60: 0.3 }, memory: { some10: 0, some60: 0 } } },
+  })
+  const ctx = { latest, cores: 8, ramTotalMB: 16_000, info: { load_avg: [0.82, 0.74, 0.69], swap: { total_mb: 2048, used_mb: 0 } }, now: NOW }
+  const cpu = perfTiles('cpu', ctx)
+  assert.deepEqual(values(cpu), ['%23,4', '0,82 · 0,74 · 0,69', '%1,2', '%0,3'])
+  assert.equal(cpu[0].hint, '8 çekirdek')
+  const mem = perfTiles('bellek', { ...ctx, state: { oom_kills: 2, oom_last_increase_at: '2026-10-10T11:48:00Z' } })
+  assert.deepEqual(values(mem), ['%41,7', '0', '2', '%0,0'])
+  assert.equal(mem[0].hint, '6.5 GB / 15.6 GB')
+  assert.equal(mem[1].hint, '2 GB içinden')
+  assert.deepEqual([mem[2].hint, mem[2].tone], ['son: 12 dk önce', 'warning'])
+})
+
+test('disk and network tiles follow the chosen disk and interface; RAID shows the worst array', () => {
+  const latest = point({
+    disk: [
+      { mount: '/', used_pct: 17.8, total: 1, free: 1 },
+      { mount: '/srv', used_pct: 64.2, total: 1, free: 1 },
+    ],
+    disk_io: [{ name: 'nvme0n1', read_iops: 1, write_iops: 1, read_bps: 1024, write_bps: 2048, util_pct: 1, await_ms: 0.37, queue_depth: 0 }],
+    net_io: [{ interface: 'enp3s0', rx_bps: 2_400_000, tx_bps: 800_000, rx_errors: 0, tx_errors: 0, rx_drops: 0, tx_drops: 0 }],
+    system: { tcp: { established: 142, time_wait: 37, retrans_pct: 0.012 } },
+  })
+  const disk = perfTiles('disk', { latest, state: { raid: [{ name: 'md0', state: 'clean', devices: 2, active: 2 }, { name: 'md1', state: 'degraded', devices: 2, active: 1 }] }, disk: 'nvme0n1', now: NOW })
+  assert.deepEqual(values(disk), ['%64,2', '0,37 ms', '3,0 KB/sn', '2 dizi'])
+  assert.deepEqual([disk[3].hint, disk[3].tone], ['bozuk', 'critical'])
+  assert.deepEqual(values(perfTiles('disk', { latest, state: { raid: [] }, disk: 'sda', now: NOW })).slice(1), ['—', '—', 'yok'])
+  // Agent dizi yokken alanı göndermez; son rapor hiç yoksa bilinmiyor.
+  assert.equal(perfTiles('disk', { latest, state: {}, now: NOW })[3].value, 'yok')
+  assert.equal(perfTiles('disk', { latest, now: NOW })[3].value, '—')
+
+  const net = perfTiles('ag', { latest, iface: 'enp3s0', now: NOW })
+  assert.deepEqual(values(net), ['2,4 Mbit/sn', '800 Kbit/sn', '142', '%0,01'])
+  assert.equal(net[2].hint, 'TIME_WAIT 37')
+})
+
+test('an old agent or a missing report shows dashes instead of breaking', () => {
+  for (const id of ['cpu', 'bellek', 'disk', 'ag'] as const) {
+    const tiles = perfTiles(id, { latest: null, now: NOW })
+    assert.ok(tiles.length > 0, id)
+    assert.ok(tiles.every((t) => t.value === '—'), id)
+  }
+  assert.deepEqual(perfTiles('ozet', { latest: null, now: NOW }), [])
 })

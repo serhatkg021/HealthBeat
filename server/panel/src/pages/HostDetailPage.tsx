@@ -105,7 +105,7 @@ export function HostDetailPage() {
       </TabPanel>
 
       <TabPanel id="performans" active={tab}>
-        {host && <HostPerformance host={host} disk={latest?.disk ?? []} thresholds={thresholds} />}
+        {host && <HostPerformance host={host} latest={latest} thresholds={thresholds} />}
       </TabPanel>
 
       <TabPanel id="servisler" active={tab}>
