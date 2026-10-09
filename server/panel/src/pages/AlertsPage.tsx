@@ -103,7 +103,7 @@ export function AlertsPage() {
 
   return (
     <div>
-      <PageHeader title="Alert'ler" subtitle="Eşik aşımları ve çevrimdışı sunucular" />
+      <PageHeader title="Alert'ler" />
       {error && <div className="error-banner">{error}</div>}
 
       <div className="toolbar">

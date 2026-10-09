@@ -156,7 +156,7 @@ export function UsersPage() {
 
   return (
     <div>
-      <PageHeader title="Kullanıcılar" subtitle="Panele giriş yapabilen hesaplar ve erişim kapsamları" />
+      <PageHeader title="Kullanıcılar" />
       {error && <div className="error-banner">{error}</div>}
 
       <Tabs items={tabItems} active={tab} onChange={setTab} label="Kullanıcı bölümleri" />

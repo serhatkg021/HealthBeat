@@ -28,7 +28,7 @@ export function SystemToolsPage() {
   if (tabs.length === 0) return <Navigate to="/" replace />
   return (
     <div>
-      <PageHeader title="Sistem Araçları" subtitle="Server’ın iç durumu ve denetim kaydı; yalnızca görüntüleme" />
+      <PageHeader title="Sistem Araçları" />
       <Tabs items={tabs.map((t) => ({ ...t, icon: ICONS[t.id] }))} active={active} onChange={setActive} label="Sistem araçları" />
       <TabPanel id="kuyruk" active={active}>
         <SystemQueue />

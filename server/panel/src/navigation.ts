@@ -28,10 +28,7 @@ export interface PageTab {
   label: string
 }
 
-// Ayarlar sekmesi: description sekmenin altında tek satırlık açıklama olarak gösterilir.
-export interface SettingsTab extends PageTab {
-  description: string
-}
+export type SettingsTab = PageTab
 
 export type ToolTab = PageTab
 
@@ -103,7 +100,6 @@ export function navigation(can: Can): Navigation {
     ...tab(can('settings.view'), {
       id: 'sistem',
       label: 'Sistem Ayarları',
-      description: 'Agent sürümleri, veri saklama, oturum ve hız sınırları, panel adresi ve loglama.',
     }),
   ]
   return { groups, tools, settings, notifications }

@@ -67,9 +67,17 @@ export function HostDetailPage() {
     <div>
       <PageHeader
         back={host ? { to: `/organizations/${host.organization_id}`, label: 'Organizasyon' } : undefined}
-        title={host?.title ?? 'Sunucu'}
+        // Kayıtlı IP başlıkta, adın yanında; sayfa içinde ayrıca gösterilmez.
+        title={
+          host ? (
+            <>
+              {host.title} <span className="page-title-ip" title="Kayıtlı IP">({host.ip})</span>
+            </>
+          ) : (
+            'Sunucu'
+          )
+        }
         badge={host && <StatusBadge tone={host.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(host.status)}</StatusBadge>}
-        subtitle={host && <span className="mono">{host.ip}</span>}
       />
       {error && <div className="error-banner">{error}</div>}
       {host?.same_machine_as && host.same_machine_as.length > 0 && (

@@ -35,7 +35,7 @@ export function NotificationsPage() {
   if (tabs.length === 0) return <Navigate to="/" replace />
   return (
     <div>
-      <PageHeader title="Bildirim" subtitle="Alert’lerin kime ve hangi kanaldan gideceği" />
+      <PageHeader title="Bildirim" />
       <Tabs items={tabs.map((t) => ({ ...t, icon: ICONS[t.id] }))} active={active} onChange={setActive} label="Bildirim bölümleri" />
       <TabPanel id="kanallar" active={active}>
         <ChannelsSection canEdit={can('settings.manage')} />

@@ -118,11 +118,8 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title="Özet"
-        subtitle={
-          filterCount > 0 && counts
-            ? `Filtrelenmiş görünüm · ${counts.total} sunucu, ${counts.alerts} alert`
-            : 'Sunucuların ve açık alert’lerin anlık durumu'
-        }
+        // Açıklama yok; yalnızca süzgeç varken neyin gösterildiği yazar.
+        subtitle={filterCount > 0 && counts ? `Filtrelenmiş görünüm · ${counts.total} sunucu, ${counts.alerts} alert` : undefined}
         actions={
           <>
             {refresh}

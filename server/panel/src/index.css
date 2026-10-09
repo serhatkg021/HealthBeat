@@ -4475,3 +4475,9 @@ textarea {
   white-space: normal;
 }
 
+
+/* Sunucu sayfasının başlığında adın yanındaki kayıtlı IP. */
+.page-title-ip {
+  color: var(--text-muted);
+  font-weight: 400;
+}

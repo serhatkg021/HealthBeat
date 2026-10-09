@@ -97,7 +97,7 @@ export function OrganizationsPage() {
 
   return (
     <div>
-      <PageHeader title="Organizasyonlar" subtitle="Sunucuları ve kullanıcıları gruplayan birimler; alt organizasyonlar üst şirketin altında toplanır" />
+      <PageHeader title="Organizasyonlar" />
       {error && <div className="error-banner">{error}</div>}
 
       <Tabs items={tabItems} active={tab} onChange={setTab} label="Organizasyon bölümleri" />

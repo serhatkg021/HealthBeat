@@ -56,7 +56,7 @@ export function HostsPage() {
 
   return (
     <div>
-      <PageHeader title="Sunucular" subtitle="Görebildiğiniz tüm sunucular; organizasyona, duruma ve alert’lere göre süzülebilir" />
+      <PageHeader title="Sunucular" />
       <Tabs items={tabs} active={tab} onChange={setTab} label="Sunucu bölümleri" />
       <TabPanel id="liste" active={tab}>
         {revealed && (

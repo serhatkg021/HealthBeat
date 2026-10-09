@@ -37,7 +37,7 @@ export function AlertRulesPage() {
 
   return (
     <div>
-      <PageHeader title="Alert kuralları" subtitle="Ne zaman alert açılacağı: sistem varsayılanı, organizasyon ve sunucu eşikleri ve durum kuralları tek yerde" />
+      <PageHeader title="Alert kuralları" />
 
       <div className="toolbar" style={{ justifyContent: 'flex-start' }}>
         <div className="segmented" role="group" aria-label="Kapsam">
