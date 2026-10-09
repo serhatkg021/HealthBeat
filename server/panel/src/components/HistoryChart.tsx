@@ -1,6 +1,7 @@
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
+import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { LucideIcon } from 'lucide-react'
 import { EmptyState } from './EmptyState'
+import { splitReferences, type ChartReference } from './chartReferences'
 import { formatPoint, isLongSpan } from '../pages/metricHistory'
 import { niceAxis } from '../pages/units'
 
@@ -14,7 +15,8 @@ export interface Series {
 // tek Y ekseni vardır (iki ölçek gerekiyorsa iki grafik çizilir). Aynı syncId'yi taşıyan grafikler imleci zamana göre
 // paylaşır. Satırda olmayan değer çizgide boşluk olur. Değerler ham gelir; biçim formatter'larla verilir. Y ekseninin üst
 // sınırı (verilen ya da verinin en büyüğü) yuvarlak bir değere çekilir ve etiketler eşit aralıklıdır (niceAxis). Seri
-// açıklaması grafiğin altında HTML'dir: grafiğin içinde olsaydı üzerine gelmek araç ipucunu açık bırakıyordu.
+// açıklaması grafiğin altında HTML'dir: grafiğin içinde olsaydı üzerine gelmek araç ipucunu açık bırakıyordu. Eşik
+// çizgileri (references) kesikli çizilir; ölçeğin üstünde kalan eşik ölçeği büyütmez, grafiğin altında yazıyla belirtilir.
 export function HistoryChart({
   loading,
   rows,
@@ -28,6 +30,7 @@ export function HistoryChart({
   yWidth,
   format = (v) => `${v}%`,
   syncId,
+  references = [],
 }: {
   loading: boolean
   rows: Record<string, number>[]
@@ -43,6 +46,7 @@ export function HistoryChart({
   // Araç ipucundaki değer.
   format?: (v: number) => string
   syncId?: string
+  references?: ChartReference[]
 }) {
   if (loading) return <div className="muted">Yükleniyor…</div>
   if (rows.length === 0 || series.length === 0 || !rows.some((r) => series.some((s) => s.key in r))) {
@@ -54,6 +58,7 @@ export function HistoryChart({
   let dataMax = 0
   if (yDomain[1] === 'auto') for (const r of rows) for (const s of series) if (r[s.key] > dataMax) dataMax = r[s.key]
   const axis = niceAxis(yDomain[1] === 'auto' ? dataMax : yDomain[1])
+  const refs = splitReferences(references, axis.top)
   return (
     <>
       <ResponsiveContainer width="100%" height={height}>
@@ -84,11 +89,24 @@ export function HistoryChart({
             labelFormatter={(label) => formatPoint(Number(label), span)}
             formatter={(value, name) => [format(Number(value)), labelOf(String(name))]}
           />
+          {refs.inside.map((r) => (
+            <ReferenceLine
+              key={r.label}
+              y={r.value}
+              stroke={r.tone === 'critical' ? 'var(--status-critical)' : 'var(--status-warning)'}
+              strokeDasharray="5 4"
+              ifOverflow="discard"
+              label={{ value: r.label, position: 'insideTopRight', fontSize: 11, fill: r.tone === 'critical' ? 'var(--status-critical-text)' : 'var(--status-warning-text)' }}
+            />
+          ))}
           {series.map((s) => (
             <Line key={s.key} type="monotone" dataKey={s.key} name={s.key} stroke={s.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
           ))}
         </LineChart>
       </ResponsiveContainer>
+      {refs.above.length > 0 && (
+        <p className="chart-above">Ölçeğin üstünde: {refs.above.map((r) => r.label).join(' · ')}</p>
+      )}
       {series.length > 1 && (
         <div className="chart-legend">
           {series.map((s) => (

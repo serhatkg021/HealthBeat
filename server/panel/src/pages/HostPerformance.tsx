@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Activity, HardDrive } from 'lucide-react'
 import { hostsApi } from '../api/endpoints'
 import type { DiskUsage, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
+import { ChartCard } from '../components/ChartCard'
+import { thresholdReferences } from '../components/chartReferences'
 import { DiskGroupCard } from '../components/DiskGroupCard'
 import { EmptyState } from '../components/EmptyState'
 import { HistoryChart } from '../components/HistoryChart'
@@ -117,40 +119,39 @@ export function HostPerformance({
 
       {error && <div className="error-banner">{error}</div>}
 
-      <div className="card">
-        <h2 className="card-title">
-          <Activity size={16} strokeWidth={1.75} />
-          CPU ve RAM
-        </h2>
-        <HistoryChart
-          loading={loading}
-          rows={cpuRamRows(points)}
-          series={[
-            { key: 'cpu', label: 'CPU', color: CPU_COLOR },
-            { key: 'ram', label: 'RAM', color: RAM_COLOR },
-          ]}
-          range={range}
-          emptyIcon={Activity}
-          syncId="perf"
-        />
-      </div>
+      <ChartCard title="CPU ve RAM" icon={Activity}>
+        {(large) => (
+          <HistoryChart
+            loading={loading}
+            rows={cpuRamRows(points)}
+            series={[
+              { key: 'cpu', label: 'CPU', color: CPU_COLOR },
+              { key: 'ram', label: 'RAM', color: RAM_COLOR },
+            ]}
+            range={range}
+            emptyIcon={Activity}
+            height={large ? 460 : undefined}
+            syncId="perf"
+          />
+        )}
+      </ChartCard>
 
-      <div className="card">
-        <h2 className="card-title">
-          <HardDrive size={16} strokeWidth={1.75} />
-          Disk doluluğu
-        </h2>
-        <HistoryChart
-          loading={loading}
-          rows={diskRows(points, mounts)}
-          series={mounts.map((m, i) => ({ key: m, label: m, color: DISK_COLORS[i % DISK_COLORS.length] }))}
-          range={range}
-          emptyIcon={HardDrive}
-          syncId="perf"
-        />
-      </div>
+      <ChartCard title="Disk doluluğu" icon={HardDrive}>
+        {(large) => (
+          <HistoryChart
+            loading={loading}
+            rows={diskRows(points, mounts)}
+            series={mounts.map((m, i) => ({ key: m, label: m, color: DISK_COLORS[i % DISK_COLORS.length] }))}
+            range={range}
+            emptyIcon={HardDrive}
+            height={large ? 460 : undefined}
+            syncId="perf"
+            references={thresholdReferences(thresholds, 'disk', (v) => `%${v}`)}
+          />
+        )}
+      </ChartCard>
 
-      <HostHealthCharts host={host} points={points} range={range} loading={loading} />
+      <HostHealthCharts host={host} points={points} range={range} loading={loading} thresholds={thresholds} />
 
       <h2 className="section-title">
         <HardDrive size={16} strokeWidth={1.75} />

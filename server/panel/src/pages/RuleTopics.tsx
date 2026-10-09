@@ -1,5 +1,5 @@
-import { useEffect, type KeyboardEvent, type ReactNode } from 'react'
-import { nextTab } from '../tabs'
+import type { ReactNode } from 'react'
+import { TopicMenu } from '../components/TopicMenu'
 import type { Pill, RuleRowView, SourceKind } from './hostRuleRows'
 import type { TopicId } from './ruleTopics'
 
@@ -30,61 +30,26 @@ export function RuleTopicLayout({
   desc: string
   children: ReactNode
 }) {
-  const ids = menu.map((m) => m.id)
   const current = menu.find((m) => m.id === active)
-
-  // Dar ekranda menü yatay şerittir: adresten gelen konu şeridin dışında kalmasın.
-  useEffect(() => {
-    document.getElementById(`konu-${active}`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  }, [active])
-
-  // Hedef, odaktaki sekmeden hesaplanır (henüz çizilmemiş seçimden değil): art arda basılan oklar kaybolmaz.
-  function onKeyDown(e: KeyboardEvent<HTMLButtonElement>, from: TopicId) {
-    // Dar ekranda menü yatay şerittir; iki yönün okları da çalışır.
-    const target = nextTab(ids, from, e.key, 'vertical') ?? nextTab(ids, from, e.key)
-    if (target === null) return
-    e.preventDefault()
-    onSelect(target as TopicId)
-    document.getElementById(`konu-${target}`)?.focus()
-  }
+  const items = menu.map((m) => ({
+    id: m.id,
+    title: m.title,
+    ...(m.total > 0 ? { meta: `${m.on}/${m.total}`, metaTitle: `${m.total} kuraldan ${m.on} tanesi etkin` } : {}),
+    ...(m.changed ? { dot: { label: 'kaydedilmemiş değişiklik var' } } : {}),
+  }))
 
   return (
-    <div className="rule-topics">
-      <div className="rule-topic-menu" role="tablist" aria-orientation="vertical" aria-label="Konular">
-        {menu.map((m) => (
-          <button
-            key={m.id}
-            id={`konu-${m.id}`}
-            type="button"
-            role="tab"
-            aria-selected={m.id === active}
-            aria-controls="konu-paneli"
-            tabIndex={m.id === active ? 0 : -1}
-            className={`rule-topic${m.id === active ? ' active' : ''}`}
-            onClick={() => onSelect(m.id)}
-            onKeyDown={(e) => onKeyDown(e, m.id)}
-          >
-            <span className="rule-topic-title">{m.title}</span>
-            <span className="rule-topic-meta">
-              {m.changed && <span className="rule-topic-dot" title="Kaydedilmemiş değişiklik var" aria-label="kaydedilmemiş değişiklik var" />}
-              {m.total > 0 && (
-                <span className="rule-topic-count" title={`${m.total} kuraldan ${m.on} tanesi etkin`}>
-                  {m.on}/{m.total}
-                </span>
-              )}
-            </span>
-          </button>
-        ))}
-      </div>
+    <div className="topic-layout">
+      <TopicMenu items={items} active={active} onSelect={onSelect} panelId="konu-paneli" />
 
-      <section className="card rule-topic-panel" role="tabpanel" id="konu-paneli" aria-labelledby={`konu-${active}`}>
-        <div className="rule-topic-head">
+      <section className="card topic-panel" role="tabpanel" id="konu-paneli" aria-labelledby={`konu-${active}`}>
+        <div className="topic-head">
           <div>
-            <h2 className="rule-topic-heading">{title}</h2>
-            <p className="rule-topic-desc">{desc}</p>
+            <h2 className="topic-heading">{title}</h2>
+            <p className="topic-desc">{desc}</p>
           </div>
           {current && current.total > 0 && (
-            <span className="rule-topic-badge">
+            <span className="topic-badge">
               {current.on}/{current.total} kural etkin
             </span>
           )}

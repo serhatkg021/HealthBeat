@@ -2523,6 +2523,13 @@ pre.secret-box {
 }
 
 /* Grafiğin altındaki seri açıklaması (grafiğin dışında: üzerine gelmek araç ipucunu açmaz). */
+.chart-above {
+  margin: 0 0 2px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
 .chart-legend {
   display: flex;
   justify-content: center;
@@ -2811,6 +2818,16 @@ body.scroll-lock {
 
 .modal-sm {
   width: min(460px, 94vw);
+}
+
+.modal-lg {
+  width: min(1200px, 96vw);
+  max-height: 92vh;
+}
+
+.chart-zoom {
+  padding: 3px 6px;
+  color: var(--text-secondary);
 }
 
 .confirm-text {
@@ -3967,7 +3984,7 @@ textarea {
   padding: 4px 6px;
 }
 
-/* ---------- Alert kuralları: konu düzeni ---------- */
+/* ---------- Konu düzeni (Alert kuralları, Performans): solda dikey konu menüsü, sağda konu paneli ---------- */
 .badge-info { background: var(--accent-soft); color: var(--accent); }
 .badge-plain::before { display: none; }
 
@@ -3985,20 +4002,20 @@ textarea {
   font-size: 13px;
 }
 
-.rule-topics {
+.topic-layout {
   display: flex;
   gap: 20px;
   align-items: flex-start;
 }
 
-.rule-topic-menu {
+.topic-menu {
   flex: 0 0 220px;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.rule-topic {
+.topic-tab {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -4015,65 +4032,68 @@ textarea {
   cursor: pointer;
 }
 
-.rule-topic:hover {
+.topic-tab:hover {
   background: var(--surface-2);
   color: var(--text-primary);
 }
 
-.rule-topic.active {
+.topic-tab.active {
   background: var(--surface-1);
   color: var(--text-primary);
   font-weight: 600;
   box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px var(--border), var(--shadow-xs);
 }
 
-.rule-topic-meta {
+.topic-tab-meta {
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 
-.rule-topic-count {
+.topic-tab-count {
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 
-.rule-topic-dot {
+.topic-tab-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--accent);
 }
 
-.rule-topic-panel {
+.topic-tab-dot.warning { background: var(--status-warning); }
+.topic-tab-dot.critical { background: var(--status-critical); }
+
+.topic-panel {
   flex: 1;
   min-width: 0;
   padding: 0;
   overflow: hidden;
 }
 
-.rule-topic-head {
+.topic-head {
   display: flex;
   align-items: flex-start;
   gap: 12px;
   padding: 16px 18px 12px;
 }
 
-.rule-topic-heading {
+.topic-heading {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
 }
 
-.rule-topic-desc {
+.topic-desc {
   margin: 2px 0 0;
   color: var(--text-secondary);
   font-size: 13px;
 }
 
-.rule-topic-badge {
+.topic-badge {
   margin-left: auto;
   padding: 2px 10px;
   border-radius: 999px;
@@ -4232,29 +4252,29 @@ textarea {
 }
 
 @media (max-width: 860px) {
-  .rule-topics {
+  .topic-layout {
     flex-direction: column;
     align-items: stretch;
   }
 
   /* Dar ekranda konu menüsü üstte yatay kaydırılan bir şerittir. */
-  .rule-topic-menu {
+  .topic-menu {
     flex: none;
     flex-direction: row;
     overflow-x: auto;
     scrollbar-width: none;
   }
 
-  .rule-topic-menu::-webkit-scrollbar {
+  .topic-menu::-webkit-scrollbar {
     display: none;
   }
 
-  .rule-topic {
+  .topic-tab {
     flex: none;
     white-space: nowrap;
   }
 
-  .rule-topic.active {
+  .topic-tab.active {
     box-shadow: inset 0 -2px 0 var(--accent), 0 0 0 1px var(--border);
   }
 
