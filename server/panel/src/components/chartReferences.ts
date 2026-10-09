@@ -21,8 +21,22 @@ export function thresholdReferences(res: HostThresholdsResponse | null | undefin
   ]
 }
 
+// Eşik değeri girildiği gibi, ondalık virgülle ("0,001 ms"): yuvarlansaydı küçük eşikler "0,00 ms" olurdu.
+export const rawValue = (v: number, unit: string): string => `${String(v).replace('.', ',')} ${unit}`
+
 // Ölçeğe sığanlar çizilir; sığmayanlar ölçeği büyütmez (veri düzleşirdi), grafiğin köşesinde yazıyla belirtilir. Değer
 // eşiğe yaklaşınca ölçek büyür ve çizgi kendiliğinden görünür.
 export function splitReferences(refs: readonly ChartReference[], top: number): { inside: ChartReference[]; above: ChartReference[] } {
   return { inside: refs.filter((r) => r.value <= top), above: refs.filter((r) => r.value > top) }
+}
+
+// Çizilecek eşiklerin etiketleri: iki çizgi ölçeğin %8'inden yakınsa etiketleri üst üste binerdi; o zaman tek etikette
+// birleşir (üstteki çizgide), alttakinin etiketi boş kalır.
+export function referenceLabels(inside: readonly ChartReference[], top: number): string[] {
+  if (inside.length !== 2 || top <= 0) return inside.map((r) => r.label)
+  const [a, b] = inside
+  if (Math.abs(a.value - b.value) >= top * 0.08) return [a.label, b.label]
+  const upper = a.value >= b.value ? 0 : 1
+  const joined = `${inside[1 - upper].label} · ${inside[upper].label}`
+  return upper === 0 ? [joined, ''] : ['', joined]
 }

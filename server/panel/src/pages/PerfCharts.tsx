@@ -1,7 +1,7 @@
 import { Activity, Cpu, Gauge, HardDrive, HardDriveDownload, MemoryStick, Network } from 'lucide-react'
 import type { HostThresholdsResponse, MetricPoint } from '../types/api'
 import { ChartCard } from '../components/ChartCard'
-import { thresholdReferences } from '../components/chartReferences'
+import { rawValue, thresholdReferences } from '../components/chartReferences'
 import { HistoryChart, type Series } from '../components/HistoryChart'
 import { cpuRamRows, diskMounts, diskRows } from './metricHistory'
 import { cpuDetailRows, diskIORows, netErrorTotals, netRows, psiRows, swapRows, tcpRows } from './perfSeries'
@@ -199,7 +199,7 @@ export function DiskIOChart({
             series={[{ key: 'await', label: 'gecikme', color: C1 }]}
             yTick={(v) => `${formatTick(v)} ms`}
             format={(v) => formatMs(v)}
-            references={thresholdReferences(thresholds, 'disk_latency', (v) => formatMs(v))}
+            references={thresholdReferences(thresholds, 'disk_latency', (v) => rawValue(v, 'ms'))}
           />
         )}
       </ChartCard>

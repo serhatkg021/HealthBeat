@@ -1,7 +1,7 @@
 import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import type { LucideIcon } from 'lucide-react'
 import { EmptyState } from './EmptyState'
-import { splitReferences, type ChartReference } from './chartReferences'
+import { referenceLabels, splitReferences, type ChartReference } from './chartReferences'
 import { formatPoint, isLongSpan } from '../pages/metricHistory'
 import { niceAxis } from '../pages/units'
 
@@ -59,6 +59,7 @@ export function HistoryChart({
   if (yDomain[1] === 'auto') for (const r of rows) for (const s of series) if (r[s.key] > dataMax) dataMax = r[s.key]
   const axis = niceAxis(yDomain[1] === 'auto' ? dataMax : yDomain[1])
   const refs = splitReferences(references, axis.top)
+  const refLabels = referenceLabels(refs.inside, axis.top)
   return (
     <>
       <ResponsiveContainer width="100%" height={height}>
@@ -89,14 +90,15 @@ export function HistoryChart({
             labelFormatter={(label) => formatPoint(Number(label), span)}
             formatter={(value, name) => [format(Number(value)), labelOf(String(name))]}
           />
-          {refs.inside.map((r) => (
+          {refs.inside.map((r, i) => (
             <ReferenceLine
               key={r.label}
               y={r.value}
               stroke={r.tone === 'critical' ? 'var(--status-critical)' : 'var(--status-warning)'}
               strokeDasharray="5 4"
               ifOverflow="discard"
-              label={{ value: r.label, position: 'insideTopRight', fontSize: 11, fill: r.tone === 'critical' ? 'var(--status-critical-text)' : 'var(--status-warning-text)' }}
+              // Dibe yakın çizginin etiketi solda: sağ alttaki saat etiketiyle çakışmasın.
+              label={{ value: refLabels[i], position: r.value < axis.top * 0.1 ? 'insideTopLeft' : 'insideTopRight', fontSize: 11, fill: r.tone === 'critical' ? 'var(--status-critical-text)' : 'var(--status-warning-text)' }}
             />
           ))}
           {series.map((s) => (
