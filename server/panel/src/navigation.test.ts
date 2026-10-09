@@ -96,12 +96,15 @@ test('a group is active on its pages and their detail pages', () => {
   assert.equal(groupHasActive(izleme, '/organizations'), false)
 })
 
-test('the alert rules address carries the scope; the system scope is the bare page', () => {
+test('the alert rules address carries the scope and topic; the system scope is the bare page', () => {
   assert.equal(alertRulesPath(), '/alert-rules')
   assert.equal(alertRulesPath({ kind: 'sistem' }), '/alert-rules')
   assert.equal(alertRulesPath({ kind: 'org', id: 'o1' }), '/alert-rules?kapsam=org&id=o1')
   assert.equal(alertRulesPath({ kind: 'sunucu', id: 'h1' }), '/alert-rules?kapsam=sunucu&id=h1')
   assert.equal(alertRulesPath({ kind: 'sunucu' }), '/alert-rules?kapsam=sunucu')
+
+  assert.equal(alertRulesPath({ kind: 'sunucu', id: 'h1' }, 'disk'), '/alert-rules?kapsam=sunucu&id=h1&konu=disk')
+  assert.equal(alertRulesPath({ kind: 'sistem' }, 'saat'), '/alert-rules?konu=saat')
 })
 
 test('notification tabs follow permissions; the menu entry disappears with none', () => {

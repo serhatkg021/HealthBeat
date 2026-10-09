@@ -4,6 +4,7 @@
 // içinde sekmelerle ayrılır. Her öğe yalnızca izni olan kullanıcıya görünür; hiç öğesi
 // kalmayan grup (ve hiç sekmesi kalmayan Ayarlar ya da Sistem Araçları) gösterilmez.
 import type { Permission } from './auth/permissions.ts'
+import type { TopicId } from './pages/ruleTopics.ts'
 
 export type Can = (permission: Permission) => boolean
 
@@ -121,13 +122,17 @@ export const AUDIT_PATH = `${TOOLS_PATH}?sekme=denetim`
 // Alert kurallarının kapsamı: sistem varsayılanı, bir organizasyon ya da bir sunucu (id yoksa seçilmemiş).
 export type RuleScope = { kind: 'sistem' } | { kind: 'org'; id?: string } | { kind: 'sunucu'; id?: string }
 
-// alertRulesPath, kurallar sayfasının o kapsam seçili adresidir (organizasyon/sunucu sayfalarından ve eski eşik
-// adreslerinden gelen bağlantılar için).
-export function alertRulesPath(scope: RuleScope = { kind: 'sistem' }): string {
-  if (scope.kind === 'sistem') return ALERT_RULES_PATH
-  const params = new URLSearchParams({ kapsam: scope.kind })
-  if (scope.id) params.set('id', scope.id)
-  return `${ALERT_RULES_PATH}?${params}`
+// alertRulesPath, kurallar sayfasının o kapsam (ve verildiyse o konu) seçili adresidir (organizasyon/sunucu
+// sayfalarından ve eski eşik adreslerinden gelen bağlantılar için).
+export function alertRulesPath(scope: RuleScope = { kind: 'sistem' }, topic?: TopicId): string {
+  const params = new URLSearchParams()
+  if (scope.kind !== 'sistem') {
+    params.set('kapsam', scope.kind)
+    if (scope.id) params.set('id', scope.id)
+  }
+  if (topic) params.set('konu', topic)
+  const query = params.toString()
+  return query ? `${ALERT_RULES_PATH}?${query}` : ALERT_RULES_PATH
 }
 
 export function inSettingsArea(pathname: string): boolean {
