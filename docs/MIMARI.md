@@ -287,11 +287,15 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
 
 - **Özet ekranı:** tüm sunucuların özeti — genel sağlık, açık alert sayısı, kritik durumdaki sunucular; organizasyon, durum,
   mod, alert ve agent sürümüne göre süzülür.
-- **Sunucu sayfası** sabit altı sekmedir: **Genel** (son durum, açık sorunlar, anlık durum uyarıları), **Performans** (tek
-  zaman seçicinin altında CPU/RAM, disk doluluğu, CPU ayrıntısı, PSI, disk G/Ç, ağ, swap ve TCP grafikleri; imleç ortak;
-  fiziksel diskler), **Servisler** (Docker container'ları ve systemd servisleri, izlenen servis seçimi), **Envanter** (makine
-  bilgisi ve sıcaklık, kapasite, güncellemeler, saat senkronu, süreçler, RAID), **Alert'ler**, **Ayarlar** (bağlantı ve geçerli
-  alert kuralları, salt okunur).
+- **Sunucu sayfası** sabit altı sekmedir: **Genel** (son durum, açık sorunlar, anlık durum uyarıları), **Performans**,
+  **Servisler** (Docker container'ları ve systemd servisleri, izlenen servis seçimi), **Envanter**, **Alert'ler**, **Ayarlar**
+  (bağlantı ve geçerli alert kuralları, salt okunur).
+- **Performans** konuya göre düzenlidir (Alert kurallarıyla aynı konu menüsü): Özet, CPU, Bellek, Disk, Ağ, Sıcaklık, Sistem
+  sınırları. Bir konunun şu anki değerleri, alert kuralları, geçmiş grafikleri (tek zaman seçici, imleç ortak; ana grafikte
+  eşik çizgileri) ve son raporu (süreçler, diskler, arayüzler, sensörler, kapasite, RAID) bir aradadır. Konu kataloğu ve
+  alert türü → konu eşlemesi `server/panel/src/pages/perfTopics.ts`'tedir.
+- **Envanter** makinenin ne olduğu ve bakımıdır: Makine, İşletim sistemi ve ağ, Saat, Bakım (2×2; Saat ve Bakım'da ilgili
+  alert kuralları).
 - **Alert kuralları** sayfası eşikleri, durum kurallarını ve disk alert seçimini sistem / organizasyon / sunucu kapsamında tek
   yerde düzenler. Üç kapsamda da kurallar konuya göre gruplanır (solda konu menüsü: CPU ve bellek, Disk, Sıcaklık, Servisler,
   Container, Saat, Sistem bakımı, Erişilebilirlik); bir konunun eşiği, durum kuralı, seçimi ve konuya özel değerleri yan

@@ -96,9 +96,16 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - **Sunucular:** görülebilen tüm sunucuların süzülebilir listesi ve sunucu ekleme tek sayfada; operatörün "Sunucularım"
     sayfası bununla birleşti. **Özet** sayaçlara, sorunlu sunuculara ve açık alert'lere odaklandı; sayaçlar Sunucular'ı
     ilgili süzgeçle açar.
-  - **Sunucu sayfası** sabit altı sekme: Genel (açık sorunlar dahil), Performans (geçmiş grafikleri tek zaman seçiciyle ve
-    fiziksel diskler; eski "Detay" penceresinin yerine), Servisler (Docker ve systemd), Envanter (eski "Sistem"), Alert'ler,
-    Ayarlar.
+  - **Sunucu sayfası** sabit altı sekme: Genel (açık sorunlar dahil), Performans, Servisler (Docker ve systemd), Envanter
+    (eski "Sistem"), Alert'ler, Ayarlar. Kayıtlı IP başlıkta, adın yanında.
+  - **Performans** konuya göre: üstte tek satır zaman seçici, solda konu menüsü (Özet, CPU, Bellek, Disk, Ağ, Sıcaklık,
+    Sistem sınırları; yanında son rapor değeri, açık alert'i olan konuda seviye renginde nokta). Her konuda şu an kutuları,
+    o konunun alert kuralları (Alert kurallarında konuyu açan bağlantıyla), grafikler ve ana grafiğin yanında son rapor
+    (süreçler, fiziksel diskler, ağ arayüzleri, sensörler, kapasite, RAID). Ana grafiklerde uyarı/kritik eşikleri kesikli
+    çizgi; her grafik büyütülebilir; yan yana en çok iki grafik. Eski "Detay" penceresinin yerine.
+  - **Envanter** dört kart: Makine, İşletim sistemi ve ağ, Saat (senkron ayrıntısıyla), Bakım (güncellemeler, yeniden
+    başlatma, çalışma süresi); Saat ve Bakım'da alert kuralları. Kaynak kullanımı Performans'tadır.
+  - Sayfa başlarındaki açıklama satırları kaldırıldı; kart açıklamaları başlığın yanındaki ⓘ düğmesinde.
   - **Alert kuralları:** sistem, organizasyon ve sunucu eşikleri, durum kuralları ve disk alert seçimi tek sayfada, kapsam
     seçiciyle. Kurallar üç kapsamda da konuya göre gruplu: solda konu menüsü (CPU ve bellek, Disk, Sıcaklık, Servisler,
     Container, Saat, Sistem bakımı, Erişilebilirlik; konu başına etkin/toplam kural sayısı), sağda o konunun eşikleri,

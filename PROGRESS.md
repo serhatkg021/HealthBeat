@@ -4,7 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-10 — **Alert kuralları konuya göre** (panel): üç kapsamda da kurallar 8 konuya gruplu (solda konu
+**Son güncelleme:** 2026-10-10 — **Sunucu sayfası konuya göre** (panel): Performans 7 konuya ayrıldı (şu an kutuları, alert
+kuralları, eşik çizgili ve büyütülebilir grafikler, son rapor yan yana; menüde açık alert noktası), Envanter dört kart (Makine,
+İşletim sistemi ve ağ, Saat, Bakım); sayfa açıklamaları kaldırıldı. Aynı gün: **Alert kuralları konuya göre**: üç kapsamda da kurallar 8 konuya gruplu (solda konu
 menüsü), satırda Özelleştir / Devral / Geri al, kapsam başına tek Kaydet, devralınan değerin kaynağı yazılıyor. Önceki:
 2026-10-08 — **Protokol 4: sistem sağlığı ve performans** (agent, server ve panel birlikte). Agent CPU/bellek
 ayrıntısı, PSI, disk ve ağ G/Ç'si, TCP, systemd servisleri, sıcaklık, RAID, kapasite sınırları, süreçler, bekleyen güncellemeler
@@ -86,7 +88,8 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
    Log Analiz bir günü baştan sona tarar: çok büyük günlerde (yüzlerce MB) yavaşlar, 15 sn'de zaman aşımına uğrar.
 2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
 3. Panelde "Yakında" olarak yeri hazır olan özellikler: bakım pencereleri ve "bu alert kime gider?" önizlemesi.
-4. Panel sayfa içi yerleşim: Alert kuralları'ndaki "konuya göre grupla" ilkesi Performans ve Envanter sekmelerine (ve sunucu
-   ayarlarındaki salt okunur "Geçerli alert kuralları"na) uygulanabilir.
+4. Panel: sunucu ayarlarındaki salt okunur "Geçerli alert kuralları" da konuya göre gruplanabilir; Genel sekmesinin üstündeki
+   Mod/Aralık kutuları sadeleşebilir. Çok dar ekranda (~420 px) sunucu sayfası başlığında ad görünmüyor (durum rozeti ve
+   alert sayaçları yer kaplıyor).
 5. Server container'ında healthcheck'in bıraktığı zombi süreçler (busybox `wget` → `ssl_client`; PID 1 Go binary'si onları
    toplamıyor): imaja init (tini) ya da healthcheck'i server binary'siyle yapmak — ayrı iş.
