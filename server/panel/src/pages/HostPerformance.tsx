@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Gauge, HardDrive, Layers, Network, Thermometer } from 'lucide-react'
-import { alertsApi, hostsApi, organizationsApi, statusRulesApi, thresholdsApi } from '../api/endpoints'
+import { alertsApi, hostsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
-import type { Alert, Host, HostStatusRuleView, HostThresholdsResponse, MetricPoint } from '../types/api'
+import type { Alert, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
 import { alertRulesPath } from '../navigation'
 import { DiskGroupCard } from '../components/DiskGroupCard'
 import { EmptyState } from '../components/EmptyState'
@@ -29,9 +29,7 @@ import {
   type ChartProps,
 } from './PerfCharts'
 import { CapacityList, InterfacesTable, PanelCard, ProcessList, RaidTable, RuleList, SensorsTable } from './PerfPanels'
-import { hostRow, hostRuleState } from './hostRuleRows'
-import { parentMap } from './orgTree'
-import { hostSources, type RuleSources } from './scopeRules'
+import { useHostRules } from './useHostRules'
 import {
   PERF_TOPICS,
   chartLayout,
@@ -40,7 +38,6 @@ import {
   perfTiles,
   perfTopicInfo,
   resolvePerfTopic,
-  ruleLine,
   topicNow,
   type PerfTopicId,
 } from './perfTopics'
@@ -78,35 +75,9 @@ export function HostPerformance({ host, latest, thresholds }: { host: Host; late
   const [loading, setLoading] = useState(false)
   const now = useNow(60_000)
   const { can } = useAuth()
-  const canSeeRules = can('threshold.view')
   const canSeeAlerts = can('alert.view')
-  const canSeeOrgs = can('organization.view')
-  const [statusRules, setStatusRules] = useState<HostStatusRuleView[] | null>(null)
-  const [sources, setSources] = useState<RuleSources | undefined>(undefined)
+  const rules = useHostRules(host, thresholds)
   const [openAlerts, setOpenAlerts] = useState<Alert[]>([])
-
-  // Konuların alert kuralları şeridi: durum kuralları, ve organizasyonları görebilene devralınan değerin kaynağı.
-  // Okunamazlarsa şerit yalnızca eşikleri ya da hiç kaynak adı göstermez.
-  useEffect(() => {
-    if (!canSeeRules) return
-    let cancelled = false
-    hostsApi
-      .statusRules(host.id)
-      .then((r) => !cancelled && setStatusRules(r))
-      .catch(() => undefined)
-    if (canSeeOrgs) {
-      Promise.all([organizationsApi.list(), thresholdsApi.list(), statusRulesApi.list()])
-        .then(([orgs, t, s]) => {
-          if (cancelled) return
-          const nameOf = (id: string) => orgs.find((o) => o.id === id)?.name ?? 'üst şirket'
-          setSources(hostSources(t, s, host.organization_id, parentMap(orgs), nameOf))
-        })
-        .catch(() => undefined)
-    }
-    return () => {
-      cancelled = true
-    }
-  }, [host.id, host.organization_id, canSeeRules, canSeeOrgs])
 
   // Menüdeki açık alert noktaları.
   useEffect(() => {
@@ -206,14 +177,8 @@ export function HostPerformance({ host, latest, thresholds }: { host: Host; late
       ...(open ? { dot: { label: `${open.count} açık alert`, tone: open.level === 'critical' ? ('critical' as const) : open.level === 'warning' ? ('warning' as const) : ('accent' as const) } } : {}),
     }
   })
-  // Konunun alert kuralları (eşikler sayfada yüklü; durum kuralları ayrı okunur).
-  const ruleItems = perfRuleItems(topic)
-  const ruleState = canSeeRules && thresholds && ruleItems.length > 0 ? hostRuleState(thresholds, statusRules ?? [], null, null) : null
-  const ruleLines = ruleState
-    ? ruleItems
-        .filter((item) => item.kind === 'threshold' || statusRules !== null)
-        .map((item) => ruleLine(hostRow(item, ruleState), item.kind === 'threshold' ? sources?.thresholds[item.metric] : sources?.status[item.rule]))
-    : []
+  // Konunun alert kuralları.
+  const ruleLines = rules.linesFor(perfRuleItems(topic))
   const ruleTopic = info.rules?.topic
   const stateMissing = (what: string) => (
     <p className="form-hint">{healthEmptyText(host, what)}</p>
@@ -372,7 +337,7 @@ export function HostPerformance({ host, latest, thresholds }: { host: Host; late
             </div>
           )}
           {ruleLines.length > 0 && ruleTopic && (
-            <RuleList lines={ruleLines} to={alertRulesPath({ kind: 'sunucu', id: host.id }, ruleTopic)} canEdit={can('threshold.edit')} />
+            <RuleList lines={ruleLines} to={alertRulesPath({ kind: 'sunucu', id: host.id }, ruleTopic)} canEdit={rules.canEdit} />
           )}
           <div className="perf-grid">
             {list.map((b, i) => (

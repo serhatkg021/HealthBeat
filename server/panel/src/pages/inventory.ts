@@ -59,18 +59,6 @@ export function formatUptime(seconds?: number): string {
   return mins > 0 ? `${mins} dk` : `${s} sn`
 }
 
-export function loadText(h?: HostInfo): string {
-  const la = h?.load_avg
-  if (!la || la.length !== 3) return '—'
-  return `${la.map((v) => v.toFixed(2)).join(' · ')} (1 / 5 / 15 dk)`
-}
-
-export function swapText(h?: HostInfo): string {
-  const s = h?.swap
-  if (!s) return 'Yok'
-  return `${s.used_mb} / ${s.total_mb} MB`
-}
-
 // Adresi ön eksiz ve karşılaştırılabilir hâle getirir (IPv6'da büyük/küçük harf ve sıfır sıkıştırması).
 export function normalizeIP(addr: string): string {
   const bare = addr.trim().split('/')[0].toLowerCase()

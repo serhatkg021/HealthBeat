@@ -4481,3 +4481,61 @@ textarea {
   color: var(--text-muted);
   font-weight: 400;
 }
+
+/* Dar ekranda üst çubukta yer yok: IP gizlenir, ad görünür kalır (IP Envanter'de ve Ayarlar'da). */
+@media (max-width: 860px) {
+  .page-title-ip {
+    display: none;
+  }
+}
+
+/* ---------- Envanter: 2×2 kart ---------- */
+/* Aynı satırdaki iki kart aynı yükseklikte (stretch); alert kuralları listesi kartın dibine yaslanır. */
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.inventory-grid > .card {
+  margin-top: 0;
+}
+
+.inventory-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-card-footer {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.perf-rules.embedded {
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.inventory-details summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.inventory-details[open] summary {
+  margin-bottom: 6px;
+}
+
+.inventory-link {
+  margin-left: 10px;
+  font-size: 12.5px;
+}
+
+@media (max-width: 1100px) {
+  .inventory-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

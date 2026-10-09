@@ -1,8 +1,9 @@
 // Sunucu sayfasının Performans sekmesi konuya göre: her konu (CPU, Bellek, Disk …) kendi grafiklerini, son rapordaki
 // değerlerini ve alert kurallarını bir arada gösterir. Konu kataloğu, menüdeki "şu an" değerleri, grafik yerleşim kuralı ve
 // konunun Alert kuralları karşılığı burada. React yok; Node'un çalıştırıcısıyla birim test edilir.
-import type { Alert, AlertLevel, AlertType, HostInfo, MetricPoint, SystemState } from '../types/api.ts'
-import type { RuleRowView } from './hostRuleRows.ts'
+import type { Alert, AlertLevel, AlertType, HostInfo, HostStatusRuleView, HostThresholdsResponse, MetricPoint, SystemState } from '../types/api.ts'
+import { hostRow, hostRuleState, type RuleRowView } from './hostRuleRows.ts'
+import type { RuleSources } from './scopeRules.ts'
 import { agoText } from './cache.ts'
 import { formatBytes } from './hardwareTotals.ts'
 import { itemKey, topicInfo, topicItems, type RuleItem, type TopicId } from './ruleTopics.ts'
@@ -237,6 +238,21 @@ export function ruleLine(row: RuleRowView, from?: string): RuleLine {
     on: row.on,
     tone: row.kind === 'durum' && row.on ? (row.pills[0]?.tone as RuleLine['tone']) : 'accent',
   }
+}
+
+// Bir konunun kural satırları (Performans ve Envanter). Eşikler sunucu sayfasında yüklüdür; durum kuralları ayrı okunur ve
+// gelene kadar (null) durum kuralı satırı çıkmaz. `sources` devralınan değerlerin kaynak adlarıdır.
+export function ruleLinesFor(
+  items: readonly RuleItem[],
+  thresholds: HostThresholdsResponse | null,
+  status: HostStatusRuleView[] | null,
+  sources?: RuleSources,
+): RuleLine[] {
+  if (!thresholds || items.length === 0) return []
+  const state = hostRuleState(thresholds, status ?? [], null, null)
+  return items
+    .filter((item) => item.kind === 'threshold' || status !== null)
+    .map((item) => ruleLine(hostRow(item, state), item.kind === 'threshold' ? sources?.thresholds[item.metric] : sources?.status[item.rule]))
 }
 
 // Alert türünün Performans konusu; null = Performans konularına ait değil (servis, container, saat, çevrimdışı, bakım:

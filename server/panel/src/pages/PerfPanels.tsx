@@ -188,11 +188,12 @@ export function InterfacesTable({ latest, selected }: { latest: MetricPoint | nu
 
 // Konunun alert kuralları: etkin kurallar sütunlu satırlarda (ad · değer · süre · kaynak), tanımlı olmayanlar altta tek
 // satırda; sağ üstte Alert kurallarında o konuyu açan bağlantı.
-export function RuleList({ lines, to, canEdit }: { lines: RuleLine[]; to: string; canEdit: boolean }) {
+// embedded: bir kartın içinde (Envanter), kendi kutusu olmadan üst çizgiyle ayrılır.
+export function RuleList({ lines, to, canEdit, embedded = false }: { lines: RuleLine[]; to: string; canEdit: boolean; embedded?: boolean }) {
   const on = lines.filter((l) => l.on)
   const off = lines.filter((l) => !l.on)
   return (
-    <div className="perf-rules">
+    <div className={embedded ? 'perf-rules embedded' : 'perf-rules'}>
       <div className="perf-rules-head">
         <span className="perf-rules-title">Alert kuralları</span>
         <Link to={to}>{canEdit ? 'Alert kurallarında düzenle →' : 'Alert kurallarında gör →'}</Link>
@@ -211,7 +212,7 @@ export function RuleList({ lines, to, canEdit }: { lines: RuleLine[]; to: string
           <span className="perf-rule-source muted">{l.source}</span>
         </div>
       ))}
-      {on.length === 0 && <div className="perf-rule-off">Bu konuda etkin alert kuralı yok.</div>}
+      {on.length === 0 && off.length === 0 && <div className="perf-rule-off">Bu konuda etkin alert kuralı yok.</div>}
       {off.length > 0 && <div className="perf-rule-off">Tanımlı değil: {off.map((l) => l.name).join(' · ')}</div>}
     </div>
   )

@@ -5,12 +5,10 @@ import {
   formatUptime,
   ipMismatch,
   kernelLabel,
-  loadText,
   normalizeIP,
   osLabel,
   shortMachineId,
   supportsInventory,
-  swapText,
   virtualizationLabel,
 } from './inventory.ts'
 
@@ -60,15 +58,6 @@ test('formatUptime uses at most two units', () => {
   assert.equal(formatUptime(undefined), '—')
   assert.equal(formatUptime(-1), '—')
   assert.equal(formatUptime(Number.NaN), '—')
-})
-
-test('loadText and swapText', () => {
-  assert.equal(loadText({ load_avg: [0.84, 1.09, 1.18] }), '0.84 · 1.09 · 1.18 (1 / 5 / 15 dk)')
-  assert.equal(loadText({ load_avg: [0, 0, 0] }), '0.00 · 0.00 · 0.00 (1 / 5 / 15 dk)')
-  assert.equal(loadText({ load_avg: [1, 2] }), '—')
-  assert.equal(loadText({}), '—')
-  assert.equal(swapText({ swap: { total_mb: 4095, used_mb: 12 } }), '12 / 4095 MB')
-  assert.equal(swapText({}), 'Yok')
 })
 
 test('normalizeIP strips the prefix and canonicalizes IPv6', () => {
