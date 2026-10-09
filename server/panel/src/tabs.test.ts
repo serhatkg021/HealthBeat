@@ -35,3 +35,12 @@ test('arrow keys move to the neighbour and wrap around; Home/End jump to the end
   assert.equal(nextTab([], 'x', 'ArrowRight'), null)
   assert.equal(nextTab(['tek'], 'tek', 'ArrowRight'), 'tek')
 })
+
+test('a vertical menu moves with the up and down arrows; left and right do nothing', () => {
+  const ids = ['cpu', 'disk', 'saat']
+  assert.equal(nextTab(ids, 'cpu', 'ArrowDown', 'vertical'), 'disk')
+  assert.equal(nextTab(ids, 'cpu', 'ArrowUp', 'vertical'), 'saat')
+  assert.equal(nextTab(ids, 'disk', 'ArrowRight', 'vertical'), null)
+  assert.equal(nextTab(ids, 'disk', 'End', 'vertical'), 'saat')
+  assert.equal(nextTab(ids, 'disk', 'ArrowDown'), null)
+})

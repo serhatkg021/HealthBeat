@@ -255,13 +255,14 @@ function levelsChanged(x: Pick<Draft, 'warning' | 'critical' | 'duration'>, y: P
   return duration && !sameDuration(x.duration, y.duration)
 }
 
+// Bir metriğin taslağı değişti mi (seçim ya da özel değer).
+export function isMetricDirty(type: MetricType, x: Draft, y: Draft): boolean {
+  if (x.mode !== y.mode) return true
+  return x.mode === 'custom' && levelsChanged(x, y, metricInfo(type).duration === true)
+}
+
 export function isDirty(a: Drafts, b: Drafts): boolean {
-  return METRICS.some((m) => {
-    const x = a[m.type]
-    const y = b[m.type]
-    if (x.mode !== y.mode) return true
-    return x.mode === 'custom' && levelsChanged(x, y, m.duration === true)
-  })
+  return METRICS.some((m) => isMetricDirty(m.type, a[m.type], b[m.type]))
 }
 
 export function formatLevels(type: MetricType, levels: ThresholdLevels): string {

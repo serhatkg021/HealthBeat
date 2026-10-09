@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { Building2, Server } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { HostPicker, OrgPicker } from '../components/ScopePickers'
@@ -6,11 +6,11 @@ import { useScopeData } from '../components/useScopeData'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import type { RuleScope } from '../navigation'
-import type { Organization, OverviewHost } from '../types/api'
+import type { Organization } from '../types/api'
 import { resolveScope } from './alertRules'
-import { DiskAlertSettings } from './DiskAlertSettings'
-import { HostThresholdSettings } from './HostThresholdSettings'
+import { HostRules } from './HostRules'
 import { OrganizationThresholds } from './OrganizationThresholds'
+import { TOPICS, resolveTopic, type TopicId } from './ruleTopics'
 import { StatusRulesCard } from './StatusRulesCard'
 import { SystemThresholds } from './SystemThresholds'
 
@@ -23,13 +23,17 @@ export function AlertRulesPage() {
   const canSeeOrgs = can('organization.view')
   const [params, setParams] = useSearchParams()
   const scope = resolveScope(params.get('kapsam'), params.get('id'), canSeeOrgs)
+  const topic = resolveTopic(params.get('konu'))
 
   const { orgs, hosts, orgNames } = useScopeData(canSeeOrgs)
 
-  function select(next: RuleScope) {
+  // Kapsam ya da sunucu değişince seçili konu korunur; kaydedilmemiş değişiklikler (kapsamın bileşeni yeniden kurulduğu
+  // için) atılır.
+  function select(next: RuleScope, nextTopic: TopicId = topic) {
     const p = new URLSearchParams()
     if (next.kind !== 'sistem') p.set('kapsam', next.kind)
     if (next.kind !== 'sistem' && next.id) p.set('id', next.id)
+    if (nextTopic !== TOPICS[0].id) p.set('konu', nextTopic)
     setParams(p, { replace: true })
   }
 
@@ -63,7 +67,14 @@ export function AlertRulesPage() {
         </div>
       )}
       {scope.kind === 'org' && <OrgScope orgs={orgs} id={scope.id} />}
-      {scope.kind === 'sunucu' && <HostScope hosts={hosts} id={scope.id} />}
+      {scope.kind === 'sunucu' &&
+        (scope.id ? (
+          <HostRules key={scope.id} hostId={scope.id} host={hosts.find((h) => h.id === scope.id)} topic={topic} onTopic={(t) => select(scope, t)} />
+        ) : (
+          <div className="card">
+            <EmptyState icon={Server}>Kurallarını görmek için bir sunucu seçin.</EmptyState>
+          </div>
+        ))}
     </div>
   )
 }
@@ -82,36 +93,6 @@ function OrgScope({ orgs, id }: { orgs: Organization[]; id?: string }) {
     <div className="stack-col">
       <OrganizationThresholds key={org.id} organization={org} orgs={orgs} canEdit={can('threshold.edit')} />
       <StatusRulesCard key={`s-${org.id}`} scope={{ kind: 'org', organization: org, orgs }} canEdit={can('threshold.edit')} />
-    </div>
-  )
-}
-
-function HostScope({ hosts, id }: { hosts: OverviewHost[]; id?: string }) {
-  const { can } = useAuth()
-  if (!id) {
-    return (
-      <div className="card">
-        <EmptyState icon={Server}>Kurallarını görmek için bir sunucu seçin.</EmptyState>
-      </div>
-    )
-  }
-  const host = hosts.find((h) => h.id === id)
-  return (
-    <div>
-      <p className="muted" style={{ margin: '0 0 12px' }}>
-        {host ? (
-          <>
-            <Link to={`/hosts/${id}`}>{host.title}</Link> için geçerli değerler; “Varsayılan” seçili metrikler sistemden ya da organizasyondan devralınır.
-          </>
-        ) : (
-          'Seçili sunucu için geçerli değerler.'
-        )}
-      </p>
-      <div className="stack-col">
-        <HostThresholdSettings key={`t-${id}`} hostId={id} canEdit={can('threshold.edit')} />
-        <StatusRulesCard key={`s-${id}`} scope={{ kind: 'host', hostId: id }} canEdit={can('threshold.edit')} />
-        <DiskAlertSettings key={`d-${id}`} hostId={id} canEdit={can('host.update')} />
-      </div>
     </div>
   )
 }

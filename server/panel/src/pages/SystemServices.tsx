@@ -106,7 +106,7 @@ export function SystemServices({ host }: { host: Host }) {
             İzlenen servisler alert üretmiyor
           </div>
           “Servis çalışmıyor” durum kuralı bu sunucu için kapalı: izlenen bir servis dursa da alert açılmaz.{' '}
-          <Link to={alertRulesPath({ kind: 'sunucu', id: host.id })}>Alert kurallarında aç →</Link>
+          <Link to={alertRulesPath({ kind: 'sunucu', id: host.id }, 'servis')}>Alert kurallarında aç →</Link>
         </div>
       )}
       {error && <div className="error-banner">{error}</div>}

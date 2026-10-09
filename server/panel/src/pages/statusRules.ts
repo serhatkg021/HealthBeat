@@ -133,7 +133,7 @@ export function settingOf(rule: StatusRule, d: RuleDraft): StatusRuleSetting | n
   return seconds !== undefined ? { level: d.level, duration_seconds: seconds } : { level: d.level }
 }
 
-function ruleChanged(rule: StatusRule, a: RuleDraft, b: RuleDraft): boolean {
+export function ruleChanged(rule: StatusRule, a: RuleDraft, b: RuleDraft): boolean {
   if (a.level !== b.level) return true
   return usesDuration(rule, a.level) && !sameDuration(a.duration, b.duration)
 }
