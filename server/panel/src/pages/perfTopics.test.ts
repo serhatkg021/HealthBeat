@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import type { MetricPoint, SystemState } from '../types/api.ts'
-import { PERF_TOPICS, chartLayout, perfRuleItems, perfTiles, resolvePerfTopic, topicNow } from './perfTopics.ts'
+import { ALERT_TOPIC, PERF_TOPICS, chartLayout, openAlertsByTopic, perfRuleItems, perfTiles, resolvePerfTopic, ruleLine, topicNow } from './perfTopics.ts'
+import { hostRow, hostRuleState } from './hostRuleRows.ts'
+import { STATUS_RULES } from './statusRules.ts'
+import { METRIC_TYPES } from './thresholds.ts'
 import { TOPICS, itemKey, topicInfo, topicItems } from './ruleTopics.ts'
 
 test('the topic comes from the address; anything unknown is the overview', () => {
@@ -128,4 +131,61 @@ test('an old agent or a missing report shows dashes instead of breaking', () => 
     assert.ok(tiles.every((t) => t.value === '—'), id)
   }
   assert.deepEqual(perfTiles('ozet', { latest: null, now: NOW }), [])
+})
+
+test('rule lines say name, value, duration and source; subject values are counted; undefined ones only their name', () => {
+  const state = hostRuleState(
+    {
+      thresholds: METRIC_TYPES.map((m) =>
+        m === 'ram'
+          ? { metric_type: m, default: { warning_level: 80, critical_level: 95 }, custom: null }
+          : m === 'disk_latency'
+            ? { metric_type: m, default: null, custom: { warning_level: 30, critical_level: 50, duration_seconds: 600 } }
+            : { metric_type: m, default: null, custom: null },
+      ),
+      mount_thresholds: [],
+      container_thresholds: [],
+      subject_thresholds: [{ metric_type: 'disk_latency', subject: 'sda', custom: { warning_level: 60, critical_level: 90 } }],
+    },
+    STATUS_RULES.map((r) => ({ rule: r.rule, takes_duration: !!r.duration, default: r.rule === 'oom_kill' ? { level: 'warning' as const } : null, custom: null })),
+    null,
+    null,
+  )
+  assert.deepEqual(ruleLine(hostRow({ kind: 'threshold', metric: 'ram' }, state), 'E2E Org'), {
+    name: 'RAM',
+    value: 'uyarı %80 · kritik %95',
+    duration: 'anlık',
+    source: 'Devralındı · E2E Org',
+    extra: '',
+    on: true,
+    tone: 'accent',
+  })
+  assert.deepEqual(ruleLine(hostRow({ kind: 'threshold', metric: 'disk_latency' }, state)), {
+    name: 'Disk gecikmesi',
+    value: 'uyarı 30 ms · kritik 50 ms',
+    duration: '10 dk boyunca',
+    source: 'Bu sunucu',
+    extra: '+1 diske özel',
+    on: true,
+    tone: 'accent',
+  })
+  const oom = ruleLine(hostRow({ kind: 'status', rule: 'oom_kill' }, state))
+  assert.deepEqual([oom.value, oom.source, oom.tone], ['Uyarı', 'Devralındı', 'warning'])
+  const off = ruleLine(hostRow({ kind: 'status', rule: 'fs_readonly' }, state))
+  assert.deepEqual([off.name, off.on, off.value, off.source], ['Dosya sistemi salt okunur', false, '', ''])
+})
+
+test('open alerts are counted per topic with the worst level; other alert types stay out', () => {
+  assert.deepEqual(
+    openAlertsByTopic([
+      { alert_type: 'disk', level: 'warning' },
+      { alert_type: 'raid_degraded', level: 'critical' },
+      { alert_type: 'ram', level: 'warning' },
+      { alert_type: 'service_failed', level: 'critical' },
+      { alert_type: 'host_offline', level: 'critical' },
+    ]),
+    { disk: { count: 2, level: 'critical' }, bellek: { count: 1, level: 'warning' } },
+  )
+  // Bir konuya eşlenen her alert türü o konunun kurallarından gelir (yanlış konuya nokta düşmez).
+  for (const [type, topic] of Object.entries(ALERT_TOPIC)) if (topic) assert.ok(PERF_TOPICS.some((t) => t.id === topic), type)
 })

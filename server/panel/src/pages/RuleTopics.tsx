@@ -13,27 +13,26 @@ export interface TopicMenuItem {
   total: number
   // Bu konuda kaydedilmemiş değişiklik var.
   changed: boolean
+  // Menüde üzerine gelince görünen açıklama.
+  desc: string
 }
 
 export function RuleTopicLayout({
   menu,
   active,
   onSelect,
-  title,
-  desc,
   children,
 }: {
   menu: TopicMenuItem[]
   active: TopicId
   onSelect: (id: TopicId) => void
-  title: string
-  desc: string
   children: ReactNode
 }) {
-  const current = menu.find((m) => m.id === active)
+  // Seçili konunun adı soldaki menüde; panelde ayrıca başlık ve açıklama yok (açıklama menüde ipucu).
   const items = menu.map((m) => ({
     id: m.id,
     title: m.title,
+    hint: m.desc,
     ...(m.total > 0 ? { meta: `${m.on}/${m.total}`, metaTitle: `${m.total} kuraldan ${m.on} tanesi etkin` } : {}),
     ...(m.changed ? { dot: { label: 'kaydedilmemiş değişiklik var' } } : {}),
   }))
@@ -43,17 +42,6 @@ export function RuleTopicLayout({
       <TopicMenu items={items} active={active} onSelect={onSelect} panelId="konu-paneli" />
 
       <section className="card topic-panel" role="tabpanel" id="konu-paneli" aria-labelledby={`konu-${active}`}>
-        <div className="topic-head">
-          <div>
-            <h2 className="topic-heading">{title}</h2>
-            <p className="topic-desc">{desc}</p>
-          </div>
-          {current && current.total > 0 && (
-            <span className="topic-badge">
-              {current.on}/{current.total} kural etkin
-            </span>
-          )}
-        </div>
         <div className="rule-rows-head" aria-hidden="true">
           <span>Kural</span>
           <span>Değer</span>

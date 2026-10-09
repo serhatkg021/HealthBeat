@@ -4074,35 +4074,6 @@ textarea {
   overflow: hidden;
 }
 
-.topic-head {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 16px 18px 12px;
-}
-
-.topic-heading {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.topic-desc {
-  margin: 2px 0 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
-.topic-badge {
-  margin-left: auto;
-  padding: 2px 10px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  white-space: nowrap;
-}
-
 .rule-rows-head,
 .rule-row {
   display: grid;
@@ -4324,6 +4295,19 @@ textarea {
 }
 
 /* ---------- Performans: konu paneli ---------- */
+.perf-range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+}
+
+.perf-range-dates {
+  flex-wrap: nowrap;
+}
+
 .perf-panel {
   flex: 1;
   min-width: 0;
@@ -4335,7 +4319,7 @@ textarea {
 .perf-head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   flex-wrap: wrap;
 }
@@ -4371,3 +4355,123 @@ textarea {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Konunun alert kuralları (Performans): etkin kurallar sütunlu satırlarda, tanımlı olmayanlar altta tek satırda. */
+.perf-rules {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  font-size: 13px;
+}
+
+.perf-rules-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.perf-rules-title {
+  font-weight: 600;
+}
+
+.perf-rules-head a {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.perf-rule {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 0.8fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+
+.perf-rule-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.perf-rule-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.perf-rule-dot.warning { background: var(--status-warning); }
+.perf-rule-dot.critical { background: var(--status-critical); }
+
+.perf-rule-off {
+  padding: 5px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+@media (max-width: 860px) {
+  .perf-rule {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    row-gap: 2px;
+  }
+}
+
+/* Başlığın yanındaki açıklama düğmesi ve açılır kutusu. */
+.info-tip {
+  position: relative;
+  display: inline-flex;
+}
+
+.info-tip-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+/* Üzerine gelince ve açıkken biraz koyulaşır, dolmaz; açıkken çevresinde halka olur. */
+.info-tip-button:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.info-tip-button[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.info-tip-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -8px;
+  z-index: 30;
+  width: max-content;
+  max-width: min(340px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: normal;
+}
+

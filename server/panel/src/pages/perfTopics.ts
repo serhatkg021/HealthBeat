@@ -1,7 +1,8 @@
 // Sunucu sayfasının Performans sekmesi konuya göre: her konu (CPU, Bellek, Disk …) kendi grafiklerini, son rapordaki
 // değerlerini ve alert kurallarını bir arada gösterir. Konu kataloğu, menüdeki "şu an" değerleri, grafik yerleşim kuralı ve
 // konunun Alert kuralları karşılığı burada. React yok; Node'un çalıştırıcısıyla birim test edilir.
-import type { HostInfo, MetricPoint, SystemState } from '../types/api.ts'
+import type { Alert, AlertLevel, AlertType, HostInfo, MetricPoint, SystemState } from '../types/api.ts'
+import type { RuleRowView } from './hostRuleRows.ts'
 import { agoText } from './cache.ts'
 import { formatBytes } from './hardwareTotals.ts'
 import { itemKey, topicInfo, topicItems, type RuleItem, type TopicId } from './ruleTopics.ts'
@@ -206,4 +207,71 @@ export function perfTiles(id: PerfTopicId, ctx: TileContext): PerfTile[] {
     default:
       return []
   }
+}
+
+// ---- alert kuralları şeridi ve açık alert noktası ---------------------------------------------------------------
+
+export interface RuleLine {
+  name: string
+  // Etkin kuralda değer, süre ve kaynak; tanımlı olmayanda boş.
+  value: string
+  duration: string
+  source: string
+  // Konuya özel değerler (mount, disk, sensör) sayıyla: "+1 diske özel". Ayrıntısı Alert kurallarındadır.
+  extra: string
+  on: boolean
+  // accent: etkin eşik; info/warning/critical: durum kuralının seviyesi.
+  tone: 'accent' | 'info' | 'warning' | 'critical'
+}
+
+// Kural listesinin satırı: etkin kurallar sütunlu satır olur, tanımlı olmayanlar yalnızca adıyla alttaki özete girer.
+// `from`, devralınan değerin kaynağıdır (bilinmiyorsa yalnızca "Devralındı").
+export function ruleLine(row: RuleRowView, from?: string): RuleLine {
+  const subjects = row.subjects?.items.length ?? 0
+  return {
+    name: row.label,
+    value: row.on ? row.pills.map((p) => p.text).join(' · ') : '',
+    duration: row.on && row.duration ? row.duration : '',
+    source: row.source === 'own' ? 'Bu sunucu' : row.source === 'inherited' ? (from ? `Devralındı · ${from}` : 'Devralındı') : '',
+    extra: subjects > 0 ? `+${subjects} ${row.subjects!.label.replace(':', '').toLocaleLowerCase('tr')}` : '',
+    on: row.on,
+    tone: row.kind === 'durum' && row.on ? (row.pills[0]?.tone as RuleLine['tone']) : 'accent',
+  }
+}
+
+// Alert türünün Performans konusu; null = Performans konularına ait değil (servis, container, saat, çevrimdışı, bakım:
+// onlar Genel'deki açık sorunlarda görünür).
+export const ALERT_TOPIC: Record<AlertType, PerfTopicId | null> = {
+  cpu: 'cpu',
+  ram: 'bellek',
+  oom_kill: 'bellek',
+  disk: 'disk',
+  disk_missing: 'disk',
+  disk_latency: 'disk',
+  fs_readonly: 'disk',
+  raid_degraded: 'disk',
+  temperature: 'sicaklik',
+  docker_restart: null,
+  host_offline: null,
+  service_failed: null,
+  service_restart_loop: null,
+  container_unhealthy: null,
+  container_oom: null,
+  time_sync: null,
+  reboot_required: null,
+  security_updates: null,
+}
+
+const LEVEL_RANK: Record<AlertLevel, number> = { info: 0, warning: 1, critical: 2 }
+
+// Konu başına açık alert sayısı ve en kötü seviyesi (menüdeki nokta).
+export function openAlertsByTopic(alerts: readonly Pick<Alert, 'alert_type' | 'level'>[]): Partial<Record<PerfTopicId, { count: number; level: AlertLevel }>> {
+  const out: Partial<Record<PerfTopicId, { count: number; level: AlertLevel }>> = {}
+  for (const a of alerts) {
+    const topic = ALERT_TOPIC[a.alert_type]
+    if (!topic) continue
+    const cur = out[topic]
+    out[topic] = cur ? { count: cur.count + 1, level: LEVEL_RANK[a.level] > LEVEL_RANK[cur.level] ? a.level : cur.level } : { count: 1, level: a.level }
+  }
+  return out
 }

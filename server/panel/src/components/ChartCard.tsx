@@ -1,8 +1,10 @@
 import { useState, type ReactNode } from 'react'
 import { Maximize2, type LucideIcon } from 'lucide-react'
+import { InfoTip } from './InfoTip'
 import { Modal } from './Modal'
 
-// Grafik kartı: başlık, sağda seçiciler (disk, arayüz) ve büyüt düğmesi, altında açıklama ve grafik(ler). Büyüt, aynı
+// Grafik kartı: başlık (açıklaması yanındaki "i" düğmesinde), sağda seçiciler (disk, arayüz) ve büyüt düğmesi, altında
+// grafik(ler). Büyüt, aynı
 // grafikleri geniş bir pencerede yüksek çizer (children(true)); pencerede de aralık ve imleç diğer grafiklerle ortaktır,
 // Esc ya da dışına tıklamak kapatır.
 export function ChartCard({
@@ -25,6 +27,7 @@ export function ChartCard({
         <h2 className="card-title">
           <Icon size={16} strokeWidth={1.75} />
           {title}
+          {desc && <InfoTip label={title}>{desc}</InfoTip>}
         </h2>
         <span className="row row-tight">
           {actions}
@@ -33,7 +36,6 @@ export function ChartCard({
           </button>
         </span>
       </div>
-      {desc && <p className="card-desc">{desc}</p>}
       {children(false)}
       <Modal open={open} size="lg" title={title} onClose={() => setOpen(false)}>
         {desc && <p className="card-desc">{desc}</p>}

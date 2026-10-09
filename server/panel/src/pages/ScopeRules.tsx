@@ -129,10 +129,9 @@ export function ScopeRules({ target, topic, onTopic }: { target: ScopeTarget; to
   const menu: TopicMenuItem[] = TOPICS.map((t) => {
     const items = topicItems(t, scopeKind)
     const count = ruleCount(items, (item) => hostRow(item, draft).on)
-    return { id: t.id, title: t.title, on: count.on, total: count.total, changed: topicHasChanges(items, changes) }
+    return { id: t.id, title: t.title, desc: t.desc, on: count.on, total: count.total, changed: topicHasChanges(items, changes) }
   })
   const summary = hostSummary(TOPICS.flatMap((t) => rowsOf(t.id).map((r) => r.row)))
-  const info = topicInfo(topic)
   const changedTopics = TOPICS.filter((t) => topicHasChanges(t.items, changes)).map((t) => t.title)
 
   function renderRow({ item, row }: { item: TopicItem; row: RuleRowView }) {
@@ -232,7 +231,7 @@ export function ScopeRules({ target, topic, onTopic }: { target: ScopeTarget; to
           </span>
         )}
       </div>
-      <RuleTopicLayout menu={menu} active={topic} onSelect={onTopic} title={info.title} desc={info.desc}>
+      <RuleTopicLayout menu={menu} active={topic} onSelect={onTopic}>
         {rowsOf(topic).map(renderRow)}
       </RuleTopicLayout>
       <RuleSaveBar

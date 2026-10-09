@@ -7,6 +7,8 @@ export interface TopicMenuEntry {
   // Sağdaki kısa değer ("2/3", "%23") ve üzerine gelince görünen açıklaması.
   meta?: string
   metaTitle?: string
+  // Üzerine gelince görünen açıklama (konunun neyi kapsadığı; panelde ayrıca başlık yok).
+  hint?: string
   // Konudaki bir durumu bildiren nokta (kaydedilmemiş değişiklik, açık alert); label ekran okuyucu ve araç ipucu içindir.
   dot?: { label: string; tone?: 'accent' | 'warning' | 'critical' }
 }
@@ -54,6 +56,7 @@ export function TopicMenu<T extends string>({
           aria-controls={panelId}
           tabIndex={m.id === active ? 0 : -1}
           className={`topic-tab${m.id === active ? ' active' : ''}`}
+          title={m.hint}
           onClick={() => onSelect(m.id)}
           onKeyDown={(e) => onKeyDown(e, m.id)}
         >

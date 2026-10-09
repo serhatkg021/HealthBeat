@@ -1,9 +1,12 @@
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import type { LucideIcon } from 'lucide-react'
 import type { HostThresholdsResponse, MetricPoint, ProcessGroup, SystemState } from '../types/api'
+import { InfoTip } from '../components/InfoTip'
 import { StatusBadge } from '../components/StatusBadge'
 import { UsageBar } from '../components/UsageBar'
 import { formatMB } from './docker'
+import type { RuleLine } from './perfTopics'
 import { capacityRows, raidState, temperatureLevels, temperatureTone } from './systemState'
 import { formatBitRate, formatCelsius, formatCount, formatPct } from './units'
 
@@ -16,8 +19,8 @@ export function PanelCard({ title, icon: Icon, desc, children }: { title: string
       <h2 className="card-title">
         <Icon size={16} strokeWidth={1.75} />
         {title}
+        {desc && <InfoTip label={title}>{desc}</InfoTip>}
       </h2>
-      {desc && <p className="card-desc">{desc}</p>}
       {children}
     </div>
   )
@@ -180,5 +183,36 @@ export function InterfacesTable({ latest, selected }: { latest: MetricPoint | nu
         ))}
       </tbody>
     </table>
+  )
+}
+
+// Konunun alert kuralları: etkin kurallar sütunlu satırlarda (ad · değer · süre · kaynak), tanımlı olmayanlar altta tek
+// satırda; sağ üstte Alert kurallarında o konuyu açan bağlantı.
+export function RuleList({ lines, to, canEdit }: { lines: RuleLine[]; to: string; canEdit: boolean }) {
+  const on = lines.filter((l) => l.on)
+  const off = lines.filter((l) => !l.on)
+  return (
+    <div className="perf-rules">
+      <div className="perf-rules-head">
+        <span className="perf-rules-title">Alert kuralları</span>
+        <Link to={to}>{canEdit ? 'Alert kurallarında düzenle →' : 'Alert kurallarında gör →'}</Link>
+      </div>
+      {on.map((l) => (
+        <div key={l.name} className="perf-rule">
+          <span className="perf-rule-name">
+            <i className={`perf-rule-dot ${l.tone}`} aria-hidden="true" />
+            {l.name}
+          </span>
+          <span className="perf-rule-value tnum">
+            {l.value}
+            {l.extra && <span className="muted"> · {l.extra}</span>}
+          </span>
+          <span className="perf-rule-duration muted">{l.duration}</span>
+          <span className="perf-rule-source muted">{l.source}</span>
+        </div>
+      ))}
+      {on.length === 0 && <div className="perf-rule-off">Bu konuda etkin alert kuralı yok.</div>}
+      {off.length > 0 && <div className="perf-rule-off">Tanımlı değil: {off.map((l) => l.name).join(' · ')}</div>}
+    </div>
   )
 }
