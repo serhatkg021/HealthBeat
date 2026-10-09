@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check } from 'lucide-react'
-import { hostsApi } from '../api/endpoints'
+import { hostsApi, statusRulesApi, thresholdsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
-import type { DiskUsage, OverviewHost, SubjectMetricType } from '../types/api'
+import type { DiskUsage, Organization, OverviewHost, SubjectMetricType } from '../types/api'
 import {
   changedKeys,
   customizeItem,
@@ -13,6 +13,7 @@ import {
   hostSavePlan,
   hostSummary,
   inheritItem,
+  inheritedText,
   keepFailed,
   revertItem,
   type HostRuleState,
@@ -20,7 +21,9 @@ import {
   type SavePart,
 } from './hostRuleRows'
 import { DiskSelectionFields, StatusDurationField, StatusLevelField, ThresholdDurationField, ThresholdLevelFields } from './RuleEditors'
-import { RuleRow, RuleSaveBar, RuleTopicLayout, SubjectChips, type TopicMenuItem } from './RuleTopics'
+import { RuleButtons, RuleRow, RuleSaveBar, RuleTopicLayout, SubjectChips, type TopicMenuItem } from './RuleTopics'
+import { hostSources, type RuleSources } from './scopeRules'
+import { parentMap } from './orgTree'
 import { TOPICS, itemKey, ruleCount, topicHasChanges, topicInfo, topicItems, type TopicId, type TopicItem } from './ruleTopics'
 import { validateRuleDraft } from './statusRules'
 import { SubjectThresholdFields, type SubjectKind, type SubjectNote } from './SubjectThresholdFields'
@@ -70,7 +73,21 @@ async function loadHost(hostId: string): Promise<{ state: HostRuleState; reporte
 // Alert kuralları sayfasının sunucu kapsamı: sunucunun bütün kuralları konuya göre. Eşikler, durum kuralları, disk seçimi
 // ve izlenen servisler ayrı uçlardan okunur ve tek bir taslakta birleşir; değişiklikler konular arasında korunur ve alttaki
 // tek çubukla birlikte kaydedilir. Sunucu değişince bileşen yeniden kurulur (key) ve kaydedilmemiş değişiklikler atılır.
-export function HostRules({ hostId, host, topic, onTopic }: { hostId: string; host?: OverviewHost; topic: TopicId; onTopic: (id: TopicId) => void }) {
+export function HostRules({
+  hostId,
+  host,
+  orgs,
+  topic,
+  onTopic,
+}: {
+  hostId: string
+  host?: OverviewHost
+  // Organizasyonları görebilen kullanıcıda devralınan değerlerin kaynağı ("Devralındı · Ana Şirket") hesaplanır; yoksa
+  // yalnızca "Devralındı" yazar.
+  orgs?: Organization[]
+  topic: TopicId
+  onTopic: (id: TopicId) => void
+}) {
   const { can } = useAuth()
   const canEdit = can('threshold.edit')
   const canEditDisks = can('host.update')
@@ -123,6 +140,22 @@ export function HostRules({ hostId, host, topic, onTopic }: { hostId: string; ho
       cancelled = true
     }
   }, [hostId])
+
+  // Kaynak adları için genel ve organizasyon listeleri; okunamazlarsa satırlar yalnızca "Devralındı" der. Kaydetmeden sonra
+  // yeniden okunmaz: sunucu kapsamı bu listeleri değiştirmez.
+  const [sources, setSources] = useState<RuleSources | undefined>(undefined)
+  const hostOrg = host?.organization_id
+  useEffect(() => {
+    if (!orgs || orgs.length === 0 || !hostOrg) return
+    let cancelled = false
+    const nameOf = (id: string) => orgs.find((o) => o.id === id)?.name ?? 'üst şirket'
+    Promise.all([thresholdsApi.list(), statusRulesApi.list()])
+      .then(([t, s]) => !cancelled && setSources(hostSources(t, s, hostOrg, parentMap(orgs), nameOf)))
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [orgs, hostOrg])
 
   const changes = useMemo(() => (saved && draft ? changedKeys(saved, draft) : new Set<string>()), [saved, draft])
   const problems = useMemo(() => (draft ? hostProblems(draft) : []), [draft])
@@ -189,47 +222,26 @@ export function HostRules({ hostId, host, topic, onTopic }: { hostId: string; ho
   const info = topicInfo(topic)
   const changedTopics = TOPICS.filter((t) => topicHasChanges(t.items, changes)).map((t) => t.title)
 
-  // Eşik ve durum satırlarının ortak düğmeleri: Geri al · Düzenle · Devral ya da Özelleştir.
+  // Eşik ve durum satırlarının ortak düğmeleri.
   function ruleButtons(item: TopicItem, key: string, own: boolean, editing: boolean, changed: boolean) {
     if (!canEdit || !saved || !draft) return undefined
     return (
-      <span className="row row-tight rule-buttons">
-        {changed && (
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost"
-            disabled={saving}
-            onClick={() => {
-              edit(revertItem(item, saved, draft))
-              toggle(key, false)
-            }}
-          >
-            Geri al
-          </button>
-        )}
-        {own && !editing && (
-          <button type="button" className="btn btn-sm" disabled={saving} onClick={() => toggle(key, true)}>
-            Düzenle
-          </button>
-        )}
-        {own ? (
-          <button type="button" className="btn btn-sm" disabled={saving} onClick={() => edit(inheritItem(item, draft))}>
-            Devral
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-sm"
-            disabled={saving}
-            onClick={() => {
-              edit(customizeItem(item, draft))
-              toggle(key, true)
-            }}
-          >
-            Özelleştir
-          </button>
-        )}
-      </span>
+      <RuleButtons
+        own={own}
+        editing={editing}
+        changed={changed}
+        disabled={saving}
+        onRevert={() => {
+          edit(revertItem(item, saved, draft))
+          toggle(key, false)
+        }}
+        onEdit={() => toggle(key, true)}
+        onInherit={() => edit(inheritItem(item, draft))}
+        onCustomize={() => {
+          edit(customizeItem(item, draft))
+          toggle(key, true)
+        }}
+      />
     )
   }
 
@@ -256,6 +268,7 @@ export function HostRules({ hostId, host, topic, onTopic }: { hostId: string; ho
           editor={editing ? <ThresholdLevelFields metric={m} draft={d} onChange={setMetric} disabled={saving} /> : undefined}
           durationEditor={editing ? <ThresholdDurationField metric={m} draft={d} onChange={setMetric} disabled={saving} /> : undefined}
           error={editing ? validateDraft(m, d) : null}
+          sourceText={inheritedText(row, sources?.thresholds[m])}
           actions={ruleButtons(item, key, own, editing, changed)}
           extra={
             row.subjects &&
@@ -308,6 +321,7 @@ export function HostRules({ hostId, host, topic, onTopic }: { hostId: string; ho
           editor={editing ? <StatusLevelField rule={r} draft={d} onChange={setRule} disabled={saving} /> : undefined}
           durationEditor={editing ? <StatusDurationField rule={r} draft={d} onChange={setRule} disabled={saving} /> : undefined}
           error={editing ? validateRuleDraft(r, d) : null}
+          sourceText={inheritedText(row, sources?.status[r])}
           actions={ruleButtons(item, key, own, editing, changed)}
         />
       )
@@ -324,7 +338,7 @@ export function HostRules({ hostId, host, topic, onTopic }: { hostId: string; ho
           actions={
             editable && (
               <span className="row row-tight rule-buttons">
-                {changed && (
+                {(changed || isOpen) && (
                   <button
                     type="button"
                     className="btn btn-sm btn-ghost"

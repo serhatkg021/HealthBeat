@@ -6,26 +6,24 @@ import { useScopeData } from '../components/useScopeData'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import type { RuleScope } from '../navigation'
-import type { Organization } from '../types/api'
 import { resolveScope } from './alertRules'
 import { HostRules } from './HostRules'
-import { OrganizationThresholds } from './OrganizationThresholds'
 import { TOPICS, resolveTopic, type TopicId } from './ruleTopics'
-import { StatusRulesCard } from './StatusRulesCard'
-import { SystemThresholds } from './SystemThresholds'
+import { ScopeRules } from './ScopeRules'
 
 // Alert kuralları: sistem varsayılanı, organizasyon ve sunucu eşikleri ile durum kuralları tek sayfada, üstteki kapsam
-// seçiciyle. Kurallar
-// sistem → organizasyon (üst şirketten alta) → sunucu sırasıyla devralınır; her kapsam kendi editörünü gösterir. Kapsam
-// adreste (`?kapsam=&id=`) tutulur, böylece organizasyon ve sunucu sayfalarından doğrudan bağlantı verilebilir.
+// seçiciyle. Kurallar sistem → organizasyon (üst şirketten alta) → sunucu sırasıyla devralınır. Her kapsam aynı konu
+// düzenini (CPU ve bellek, Disk …) gösterir. Kapsam ve konu adreste (`?kapsam=&id=&konu=`) tutulur, böylece organizasyon
+// ve sunucu sayfalarından doğrudan bağlantı verilebilir.
 export function AlertRulesPage() {
-  const { can, user } = useAuth()
+  const { can } = useAuth()
   const canSeeOrgs = can('organization.view')
   const [params, setParams] = useSearchParams()
   const scope = resolveScope(params.get('kapsam'), params.get('id'), canSeeOrgs)
   const topic = resolveTopic(params.get('konu'))
 
   const { orgs, hosts, orgNames } = useScopeData(canSeeOrgs)
+  const org = scope.kind === 'org' ? orgs.find((o) => o.id === scope.id) : undefined
 
   // Kapsam ya da sunucu değişince seçili konu korunur; kaydedilmemiş değişiklikler (kapsamın bileşeni yeniden kurulduğu
   // için) atılır.
@@ -59,17 +57,25 @@ export function AlertRulesPage() {
         {scope.kind === 'sunucu' && <HostPicker idPrefix="rules" hosts={hosts} orgNames={orgNames} value={scope.id} onChange={(id) => select({ kind: 'sunucu', id })} />}
       </div>
 
-      {scope.kind === 'sistem' && (
-        <div className="stack-col">
-          <SystemThresholds />
-          {/* Genel kuralları server yalnızca super_admin'e yazdırır (eşiklerde olduğu gibi). */}
-          <StatusRulesCard scope={{ kind: 'system' }} canEdit={can('threshold.edit') && user?.role === 'super_admin'} />
-        </div>
-      )}
-      {scope.kind === 'org' && <OrgScope orgs={orgs} id={scope.id} />}
+      {scope.kind === 'sistem' && <ScopeRules key="sistem" target={{ kind: 'system' }} topic={topic} onTopic={(t) => select(scope, t)} />}
+      {scope.kind === 'org' &&
+        (org ? (
+          <ScopeRules key={org.id} target={{ kind: 'org', organization: org, orgs }} topic={topic} onTopic={(t) => select(scope, t)} />
+        ) : (
+          <div className="card">
+            <EmptyState icon={Building2}>{scope.id && orgs.length > 0 ? 'Bu organizasyon bulunamadı.' : 'Kurallarını görmek için bir organizasyon seçin.'}</EmptyState>
+          </div>
+        ))}
       {scope.kind === 'sunucu' &&
         (scope.id ? (
-          <HostRules key={scope.id} hostId={scope.id} host={hosts.find((h) => h.id === scope.id)} topic={topic} onTopic={(t) => select(scope, t)} />
+          <HostRules
+            key={scope.id}
+            hostId={scope.id}
+            host={hosts.find((h) => h.id === scope.id)}
+            orgs={canSeeOrgs ? orgs : undefined}
+            topic={topic}
+            onTopic={(t) => select(scope, t)}
+          />
         ) : (
           <div className="card">
             <EmptyState icon={Server}>Kurallarını görmek için bir sunucu seçin.</EmptyState>
@@ -79,20 +85,3 @@ export function AlertRulesPage() {
   )
 }
 
-function OrgScope({ orgs, id }: { orgs: Organization[]; id?: string }) {
-  const { can } = useAuth()
-  const org = orgs.find((o) => o.id === id)
-  if (!org) {
-    return (
-      <div className="card">
-        <EmptyState icon={Building2}>{id && orgs.length > 0 ? 'Bu organizasyon bulunamadı.' : 'Kurallarını görmek için bir organizasyon seçin.'}</EmptyState>
-      </div>
-    )
-  }
-  return (
-    <div className="stack-col">
-      <OrganizationThresholds key={org.id} organization={org} orgs={orgs} canEdit={can('threshold.edit')} />
-      <StatusRulesCard key={`s-${org.id}`} scope={{ kind: 'org', organization: org, orgs }} canEdit={can('threshold.edit')} />
-    </div>
-  )
-}

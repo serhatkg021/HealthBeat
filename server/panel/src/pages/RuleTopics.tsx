@@ -238,3 +238,52 @@ export function RuleSaveBar({
     </div>
   )
 }
+
+// Eşik ve durum satırlarının düğmeleri: Geri al · Düzenle · Devral ya da Özelleştir. "Geri al" satır değiştiyse ya da
+// düzenleme alanı açıksa görünür: değişikliği kaydedilmiş hâline döndürür ve alanı kapatır (değişiklik yoksa yalnızca
+// kapatır). Sistem kapsamında devralınacak bir şey olmadığından düğmeler "Tanımla" ve "Kaldır" adını alır.
+export function RuleButtons({
+  own,
+  editing,
+  changed,
+  disabled,
+  system = false,
+  onRevert,
+  onEdit,
+  onInherit,
+  onCustomize,
+}: {
+  own: boolean
+  editing: boolean
+  changed: boolean
+  disabled: boolean
+  system?: boolean
+  onRevert: () => void
+  onEdit: () => void
+  onInherit: () => void
+  onCustomize: () => void
+}) {
+  return (
+    <span className="row row-tight rule-buttons">
+      {(changed || editing) && (
+        <button type="button" className="btn btn-sm btn-ghost" disabled={disabled} onClick={onRevert}>
+          Geri al
+        </button>
+      )}
+      {own && !editing && (
+        <button type="button" className="btn btn-sm" disabled={disabled} onClick={onEdit}>
+          Düzenle
+        </button>
+      )}
+      {own ? (
+        <button type="button" className="btn btn-sm" disabled={disabled} onClick={onInherit}>
+          {system ? 'Kaldır' : 'Devral'}
+        </button>
+      ) : (
+        <button type="button" className="btn btn-sm" disabled={disabled} onClick={onCustomize}>
+          {system ? 'Tanımla' : 'Özelleştir'}
+        </button>
+      )}
+    </span>
+  )
+}

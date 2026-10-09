@@ -251,6 +251,11 @@ export function hostRow(item: TopicItem, state: HostRuleState): RuleRowView {
   }
 }
 
+// Devralınan satırın kaynak metni: "Devralındı · Ana Şirket"; kaynak bilinmiyorsa genel metin.
+export function inheritedText(row: RuleRowView, from: string | undefined): string | undefined {
+  return row.source === 'inherited' && from ? `Devralındı · ${from}` : undefined
+}
+
 // Özet satırı: bütün konularda etkin kural sayısı ve kaçının bu sunucuya özel olduğu.
 export function hostSummary(rows: RuleRowView[]): { on: number; own: number } {
   const rules = rows.filter((r) => r.kind === 'eşik' || r.kind === 'durum')

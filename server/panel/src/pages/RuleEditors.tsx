@@ -54,10 +54,23 @@ const LEVELS: { value: Exclude<RuleChoice, ''>; label: string }[] = [
   { value: 'critical', label: 'Kritik' },
 ]
 
-export function StatusLevelField({ rule, draft, onChange, disabled }: { rule: StatusRule; draft: RuleDraft; onChange: (next: RuleDraft) => void; disabled: boolean }) {
+// Sistem kapsamında "Kapalı" yoktur: orada kapalı ile tanımsız aynıdır (kural kaldırılır).
+export function StatusLevelField({
+  rule,
+  draft,
+  onChange,
+  disabled,
+  allowOff = true,
+}: {
+  rule: StatusRule
+  draft: RuleDraft
+  onChange: (next: RuleDraft) => void
+  disabled: boolean
+  allowOff?: boolean
+}) {
   return (
     <select aria-label={`${ruleInfo(rule).label} seviyesi`} value={draft.level} disabled={disabled} onChange={(e) => onChange({ ...draft, level: e.target.value as RuleChoice })}>
-      {LEVELS.map((l) => (
+      {LEVELS.filter((l) => allowOff || l.value !== 'off').map((l) => (
         <option key={l.value} value={l.value}>
           {l.label}
         </option>
