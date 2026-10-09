@@ -138,8 +138,6 @@ export function ruleChanged(rule: StatusRule, a: RuleDraft, b: RuleDraft): boole
   return usesDuration(rule, a.level) && !sameDuration(a.duration, b.duration)
 }
 
-export const isRulesDirty = (saved: RuleDrafts, draft: RuleDrafts): boolean => STATUS_RULES.some((r) => ruleChanged(r.rule, saved[r.rule], draft[r.rule]))
-
 // Yalnızca değişen kurallar gönderilir; dokunulmayanlar başka bir yerden değiştirilmişse ezilmez.
 export function ruleChanges(saved: RuleDrafts, draft: RuleDrafts): StatusRuleChanges {
   const out: StatusRuleChanges = {}

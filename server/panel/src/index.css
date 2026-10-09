@@ -1537,26 +1537,9 @@ input[type='checkbox'], input[type='radio'] {
   min-width: 0;
 }
 
-/* Eşik düzenleyici metrik bloklarını iki sütunda gösterir, bu yüzden diğer ayar kartlarından geniştir. */
-.settings-card.settings-card-wide {
-  max-width: 1100px;
-}
-
 /* Bağlantı ve kimlik kartları ızgara sütununu doldurur (aksi halde iki kart arasında büyük boşluk kalır). */
 .settings-content .form-card {
   max-width: none;
-}
-
-.settings-content .threshold-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
-  gap: 12px;
-  align-items: start;
-  margin-bottom: 14px;
-}
-
-.settings-content .threshold-row {
-  margin: 0;
 }
 
 @media (max-width: 860px) {
@@ -2326,15 +2309,6 @@ pre.secret-box {
   width: 96px;
 }
 
-.metric-hint {
-  max-width: 280px;
-  font-weight: 400;
-}
-
-.thresholds-table td.primary {
-  font-weight: 500;
-}
-
 @media (max-width: 860px) {
   .level-input {
     width: 120px;
@@ -2342,10 +2316,6 @@ pre.secret-box {
 
   .form-actions .btn {
     flex: 1 1 auto;
-  }
-
-  table.stack td.primary .metric-hint {
-    max-width: none;
   }
 }
 
@@ -2552,10 +2522,6 @@ pre.secret-box {
   width: 72px;
 }
 
-.notice-more {
-  margin: 8px 0 0;
-}
-
 /* Grafiğin altındaki seri açıklaması (grafiğin dışında: üzerine gelmek araç ipucunu açmaz). */
 .chart-legend {
   display: flex;
@@ -2637,40 +2603,6 @@ pre.secret-box {
   .psi-charts {
     grid-template-columns: minmax(0, 1fr);
   }
-}
-
-/* Durum kuralları kartı: tablo kenardan kenara, başlık, açıklama ve düğmeler kart iç boşluğuyla. Genişliği kapsamın eşik
-   kartıyla aynıdır (.page-readable ve .settings-card-wide). */
-.status-rules-card {
-  max-width: 1040px;
-}
-
-.status-rules-card.status-rules-wide {
-  max-width: 1100px;
-}
-
-.status-rules-card > .card-title-row,
-.status-rules-card > .card-desc,
-.status-rules-card > .save-note,
-.status-rules-card > .muted {
-  padding: 0 18px;
-}
-
-.status-rules-card > .card-title-row {
-  padding-top: 14px;
-}
-
-.status-rules-card > .error-banner {
-  margin: 0 18px 12px;
-}
-
-.status-rules-actions {
-  padding: 12px 18px 14px;
-  border-top: 1px solid var(--border);
-}
-
-.status-rules-table select {
-  min-width: 150px;
 }
 
 @media (max-width: 480px) {

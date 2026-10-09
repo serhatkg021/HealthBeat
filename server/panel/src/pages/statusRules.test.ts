@@ -7,7 +7,6 @@ import {
   STATUS_RULES,
   hostDrafts,
   inheritedForOrg,
-  isRulesDirty,
   ruleChanges,
   scopeDrafts,
   settingOf,
@@ -58,7 +57,6 @@ test('each scope reads only its own rows', () => {
 
 test('only changed rules are sent; clearing a rule sends null', () => {
   const saved = scopeDrafts([row('service_failed', 'critical', undefined, 60), row('reboot_required', 'info')])
-  assert.equal(isRulesDirty(saved, saved), false)
   assert.deepEqual(ruleChanges(saved, saved), {})
 
   const draft = {
@@ -67,7 +65,7 @@ test('only changed rules are sent; clearing a rule sends null', () => {
     reboot_required: { level: '' as const, duration: emptyDuration() },
     raid_degraded: { level: 'warning' as const, duration: { value: '5', unit: 'dk' as const } },
   }
-  assert.equal(isRulesDirty(saved, { ...saved, service_failed: draft.service_failed }), false, '60 sn = 1 dk')
+  assert.deepEqual(ruleChanges(saved, { ...saved, service_failed: draft.service_failed }), {}, '60 sn = 1 dk')
   assert.deepEqual(ruleChanges(saved, draft), {
     reboot_required: null,
     raid_degraded: { level: 'warning', duration_seconds: 300 },
@@ -86,7 +84,7 @@ test('a duration is sent only where it means something', () => {
 test('a duration change on an inherited or disabled rule is not a change', () => {
   const saved = scopeDrafts([])
   const draft = { ...saved, service_failed: { level: '' as const, duration: { value: '5', unit: 'dk' as const } } }
-  assert.equal(isRulesDirty(saved, draft), false)
+  assert.deepEqual(ruleChanges(saved, draft), {})
 })
 
 test('invalid durations are reported per rule, only for enabled rules', () => {

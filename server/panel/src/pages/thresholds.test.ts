@@ -334,10 +334,9 @@ import {
   draftLevels,
   emptySubjectDrafts,
   formatLevels,
-  isSubjectsDirty,
+  isMetricDirty,
+  levelsDraft,
   parseSubjectToAdd,
-  rowChanged,
-  rowDraft,
   rowPayload,
   subjectDraftsFromServer,
   temperatureNotes,
@@ -396,7 +395,7 @@ test('the inherited value of an organization carries its duration', () => {
 })
 
 test('system and organization rows: a duration metric always sends its duration, null when empty', () => {
-  assert.deepEqual(rowPayload('disk_latency', rowDraft({ warning_level: 30, critical_level: 50, duration_seconds: 120 })), {
+  assert.deepEqual(rowPayload('disk_latency', levelsDraft({ warning_level: 30, critical_level: 50, duration_seconds: 120 })), {
     warning_level: 30,
     critical_level: 50,
     duration_seconds: 120,
@@ -407,11 +406,16 @@ test('system and organization rows: a duration metric always sends its duration,
     duration_seconds: null,
   })
   assert.deepEqual(rowPayload('cpu', { warning: '70', critical: '90', duration: { value: '5', unit: 'dk' } }), { warning_level: 70, critical_level: 90 })
-  const saved = { warning_level: 30, critical_level: 50, duration_seconds: 600 }
-  assert.equal(rowChanged('disk_latency', rowDraft(saved), saved), false)
-  assert.equal(rowChanged('disk_latency', { ...rowDraft(saved), duration: emptyDuration() }, saved), true)
-  assert.equal(rowChanged('cpu', { warning: '70', critical: '90', duration: { value: '5', unit: 'dk' } }, { warning_level: 70, critical_level: 90 }), false)
-  assert.equal(rowChanged('cpu', rowDraft(), undefined), false)
+})
+
+test('a duration change counts only for metrics that take a duration', () => {
+  const saved = { mode: 'custom' as const, ...levelsDraft({ warning_level: 30, critical_level: 50, duration_seconds: 600 }) }
+  assert.equal(isMetricDirty('disk_latency', saved, saved), false)
+  assert.equal(isMetricDirty('disk_latency', { ...saved, duration: emptyDuration() }, saved), true)
+  const cpu = { mode: 'custom' as const, warning: '70', critical: '90', duration: emptyDuration() }
+  assert.equal(isMetricDirty('cpu', { ...cpu, duration: { value: '5', unit: 'dk' } }, cpu), false)
+  // Varsayılandaki bir satırın yazılı değerleri önemsizdir.
+  assert.equal(isMetricDirty('cpu', { ...cpu, mode: 'default', warning: '1' }, { ...cpu, mode: 'default' }), false)
 })
 
 test('subject thresholds round-trip and only changed kinds are sent; removed subjects become null', () => {
@@ -420,7 +424,6 @@ test('subject thresholds round-trip and only changed kinds are sent; removed sub
     { metric_type: 'temperature', subject: 'coretemp/Package id 0', custom: { warning_level: 85, critical_level: 100 } },
   ])
   assert.deepEqual(saved.disk_latency.sda, { warning: '30', critical: '50', duration: { value: '5', unit: 'dk' } })
-  assert.equal(isSubjectsDirty(saved, saved), false)
   assert.deepEqual(toSubjectOverrides(saved, saved), {})
 
   const draft = {
@@ -428,7 +431,6 @@ test('subject thresholds round-trip and only changed kinds are sent; removed sub
     disk_latency: {},
     service_restart: { 'nginx.service': { warning: '3', critical: '5', duration: emptyDuration() } },
   }
-  assert.equal(isSubjectsDirty(saved, draft), true)
   assert.deepEqual(toSubjectOverrides(saved, draft), {
     disk_latency: { sda: null },
     service_restart: { 'nginx.service': { warning_level: 3, critical_level: 5 } },

@@ -271,17 +271,10 @@ export function formatLevels(type: MetricType, levels: ThresholdLevels): string 
   return levels.duration_seconds ? `${text} · ${formatDuration(levels.duration_seconds)} boyunca` : text
 }
 
-// ---- sistem ve organizasyon tablolarının satırı -----------------------------------------------------------------
-// Bu kapsamlarda "varsayılan" seçimi yok: satır ya tanımlıdır ya da değildir (kaldırınca üst kapsamdan devralınır).
+// ---- sistem ve organizasyon eşiği -------------------------------------------------------------------------------
+// Bu kapsamlarda eşik satırı ya tanımlıdır ya da değildir (kaldırınca üst kapsamdan devralınır); her satır ayrı kaydedilir.
 
 export type RowDraft = Pick<Draft, 'warning' | 'critical' | 'duration'>
-
-export const rowDraft = (saved?: ThresholdLevels): RowDraft => (saved ? levelsDraft(saved) : { warning: '', critical: '', duration: emptyDuration() })
-
-export function rowChanged(type: MetricType, draft: RowDraft, saved?: ThresholdLevels): boolean {
-  if (!saved) return draft.warning.trim() !== '' || draft.critical.trim() !== ''
-  return levelsChanged(draft, levelsDraft(saved), metricInfo(type).duration === true)
-}
 
 // Kaydetme gövdesi. Süre alan türlerde süre her zaman gönderilir: boşsa null (süreyi kaldır, hemen).
 export function rowPayload(type: MetricType, draft: RowDraft): { warning_level: number; critical_level: number; duration_seconds?: number | null } {
@@ -513,8 +506,6 @@ export function toSubjectOverrides(saved: SubjectDrafts, draft: SubjectDrafts): 
   }
   return out
 }
-
-export const isSubjectsDirty = (a: SubjectDrafts, b: SubjectDrafts): boolean => SUBJECT_METRICS.some((t) => isMountsDirty(a[t], b[t]))
 
 // "Ekle"ye yazılan konu adını denetler: kullanılabilir bir ad ya da bir mesaj döner.
 export function parseSubjectToAdd(type: SubjectMetricType, text: string, existing: MountDrafts): { mount: string } | { error: string } {
