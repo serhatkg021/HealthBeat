@@ -99,7 +99,13 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - **Sunucu sayfası** sabit altı sekme: Genel (açık sorunlar dahil), Performans (geçmiş grafikleri tek zaman seçiciyle ve
     fiziksel diskler; eski "Detay" penceresinin yerine), Servisler (Docker ve systemd), Envanter (eski "Sistem"), Alert'ler,
     Ayarlar.
-  - **Alert kuralları:** sistem, organizasyon ve sunucu eşikleri ile disk alert seçimi tek sayfada, kapsam seçiciyle. Sunucu
+  - **Alert kuralları:** sistem, organizasyon ve sunucu eşikleri, durum kuralları ve disk alert seçimi tek sayfada, kapsam
+    seçiciyle. Kurallar üç kapsamda da konuya göre gruplu: solda konu menüsü (CPU ve bellek, Disk, Sıcaklık, Servisler,
+    Container, Saat, Sistem bakımı, Erişilebilirlik; konu başına etkin/toplam kural sayısı), sağda o konunun eşikleri,
+    durum kuralları ve seçimleri; seçili konu adreste (`?konu=`). Satırda Özelleştir / Düzenle / Devral (sistemde Tanımla /
+    Kaldır) ve Geri al; disk alert seçimi ve mount, disk, sensör, servis, container başına değerler ilgili satırın altında.
+    Değişiklikler konular arasında korunur ve alttaki tek Kaydet çubuğuyla birlikte kaydedilir; kapsam ya da sunucu
+    değişince kaydedilmemiş değişiklikler atılır. Devralınan değerin kaynağı yazılır ("Devralındı · Ana Şirket"). Sunucu
     ayarlarında geçerli kurallar ve nereden geldikleri (devralındı / bu sunucuya özel) salt okunur gösterilir.
   - **Bildirim:** kanallar, sistem sahipleri, bildirim kuralları (organizasyon ya da sunucu kapsamı) ve tüm organizasyonların
     iletişim kişileri (salt okunur, aranabilir) tek sayfada. Kişiler organizasyon sayfasında düzenlenir.

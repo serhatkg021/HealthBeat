@@ -293,7 +293,11 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   bilgisi ve sıcaklık, kapasite, güncellemeler, saat senkronu, süreçler, RAID), **Alert'ler**, **Ayarlar** (bağlantı ve geçerli
   alert kuralları, salt okunur).
 - **Alert kuralları** sayfası eşikleri, durum kurallarını ve disk alert seçimini sistem / organizasyon / sunucu kapsamında tek
-  yerde düzenler (miras gösterimiyle). **Bildirim** sayfası kanalları, sistem sahiplerini ve bildirim kurallarını toplar.
+  yerde düzenler. Üç kapsamda da kurallar konuya göre gruplanır (solda konu menüsü: CPU ve bellek, Disk, Sıcaklık, Servisler,
+  Container, Saat, Sistem bakımı, Erişilebilirlik); bir konunun eşiği, durum kuralı, seçimi ve konuya özel değerleri yan
+  yanadır. Devralınan değerin kaynağı (sistem ya da hangi organizasyon) yazılır; kapsamdaki değişiklikler tek Kaydet ile
+  birlikte kaydedilir. Konu kataloğu `server/panel/src/pages/ruleTopics.ts`'tedir: yeni bir eşik türü ya da durum kuralı
+  bir konuya eklenmezse panel testi kırılır. **Bildirim** sayfası kanalları, sistem sahiplerini ve bildirim kurallarını toplar.
 - **Organizasyon sayfası:** sunucular, sunucu ekleme sihirbazı, iletişim kişileri; ayarlar (ağaçtaki yer, adres) çarkla açılan
   pencerede.
 - Harici görselleştirme araçları (Grafana/Prometheus) kullanılmaz; grafikler uygulama içindedir.

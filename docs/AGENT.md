@@ -202,8 +202,8 @@ bırakır**: sanal dosya sistemleri (`proc`, `sysfs`, `cgroup`, …), bellek tab
 yerden bağlanması (bind mount) tek disk sayılır. Ağ dosya sistemleri (NFS/CIFS) dahildir; yanıt vermeyen bir NFS mount'u
 toplamayı **dondurmaz** (her mount en fazla 2 sn beklenir, takılanlar atlanır).
 
-**Panelde seçim:** Alert kuralları → kapsam **Sunucu** → ilgili sunucu → **Disk alert'leri** (sunucu sayfasının Ayarlar →
-Geçerli alert kuralları bölümünde salt okunur özetlenir):
+**Panelde seçim:** Alert kuralları → kapsam **Sunucu** → ilgili sunucu → **Disk** konusu → **Alert üreten mount'lar** →
+Değiştir (sunucu sayfasının Ayarlar → Geçerli alert kuralları bölümünde salt okunur özetlenir):
 
 - **Raporlanan tüm diskler** — seçim yapılmamış; raporlanan her disk eşiği aşarsa alert üretir (varsayılan).
 - **Yalnızca seçtiklerim** — agent'ın son raporladığı diskler doluluk yüzdeleriyle listelenir; alert istediklerini işaretle.

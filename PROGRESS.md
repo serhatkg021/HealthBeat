@@ -4,7 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-08 — **Protokol 4: sistem sağlığı ve performans** (agent, server ve panel birlikte). Agent CPU/bellek
+**Son güncelleme:** 2026-10-10 — **Alert kuralları konuya göre** (panel): üç kapsamda da kurallar 8 konuya gruplu (solda konu
+menüsü), satırda Özelleştir / Devral / Geri al, kapsam başına tek Kaydet, devralınan değerin kaynağı yazılıyor. Önceki:
+2026-10-08 — **Protokol 4: sistem sağlığı ve performans** (agent, server ve panel birlikte). Agent CPU/bellek
 ayrıntısı, PSI, disk ve ağ G/Ç'si, TCP, systemd servisleri, sıcaklık, RAID, kapasite sınırları, süreçler, bekleyen güncellemeler
 ve saat senkronu ayrıntısı topluyor (hepsi yetkisiz, sandbox gevşetilmeden). Server bunları ham saklıyor; disk gecikmesi,
 sıcaklık, servis yeniden başlatma ve saat farkı eşikleri (süre koşuluyla, konu başına) ve 11 durum kuralı ile alert üretiyor;
@@ -84,5 +86,7 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
    Log Analiz bir günü baştan sona tarar: çok büyük günlerde (yüzlerce MB) yavaşlar, 15 sn'de zaman aşımına uğrar.
 2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
 3. Panelde "Yakında" olarak yeri hazır olan özellikler: bakım pencereleri ve "bu alert kime gider?" önizlemesi.
-4. Server container'ında healthcheck'in bıraktığı zombi süreçler (busybox `wget` → `ssl_client`; PID 1 Go binary'si onları
+4. Panel sayfa içi yerleşim: Alert kuralları'ndaki "konuya göre grupla" ilkesi Performans ve Envanter sekmelerine (ve sunucu
+   ayarlarındaki salt okunur "Geçerli alert kuralları"na) uygulanabilir.
+5. Server container'ında healthcheck'in bıraktığı zombi süreçler (busybox `wget` → `ssl_client`; PID 1 Go binary'si onları
    toplamıyor): imaja init (tini) ya da healthcheck'i server binary'siyle yapmak — ayrı iş.
