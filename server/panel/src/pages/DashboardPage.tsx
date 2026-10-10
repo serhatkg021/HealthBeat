@@ -21,6 +21,7 @@ import { Drawer } from '../components/Drawer'
 import { EmptyState } from '../components/EmptyState'
 import { PageHeader } from '../components/PageHeader'
 import { StatTile } from '../components/StatTile'
+import { MaintenanceBadge } from '../components/MaintenanceBadge'
 import { StatusBadge } from '../components/StatusBadge'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import { agentKind, needsUpdate } from './agentStatus'
@@ -189,7 +190,10 @@ export function DashboardPage() {
               <ul className="feed">
                 {problems.map(({ host: c, critical, warning }) => (
                   <li key={c.id}>
-                    <StatusBadge tone={c.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(c.status)}</StatusBadge>
+                    <span className="badge-row">
+                      <StatusBadge tone={c.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(c.status)}</StatusBadge>
+                      <MaintenanceBadge untilLocal={c.maintenance_until_local} />
+                    </span>
                     <div className="feed-main">
                       <Link to={`/hosts/${c.id}`}>{c.title}</Link>
                       <span className="muted">{orgName.get(c.organization_id) ?? c.ip}</span>

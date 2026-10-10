@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Clock, Database, FileText, Globe, RotateCcw, Save, type LucideIcon } from 'lucide-react'
+import { Clock, Clock4, Database, FileText, Globe, RotateCcw, Save, type LucideIcon } from 'lucide-react'
 import { ApiError } from '../api/client'
 import { settingsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import { FieldLabel } from '../components/FieldLabel'
 import { InfoTip } from '../components/InfoTip'
 import { StatusBadge } from '../components/StatusBadge'
+import { SearchSelect } from '../components/SearchSelect'
+import { refreshMeta } from '../components/useAgentPolicy'
+import { timezoneOptions } from './timezones'
 import { useTab } from '../components/useTab'
 import type { SettingsField, SettingsResponse } from '../types/api'
 import { SETTINGS_SECTIONS, buildPatch, defaultText, fieldMessage, toDisplay, type SectionDef } from './settingsForm'
@@ -17,6 +20,7 @@ const NAV: { id: string; label: string; icon: LucideIcon }[] = [
   { id: 'saklama', label: 'Veri saklama', icon: Clock },
   { id: 'oturum', label: 'Oturum ve hız sınırları', icon: Clock },
   { id: 'panel', label: 'Panel adresi', icon: Globe },
+  { id: 'saat', label: 'Saat dilimi', icon: Clock4 },
   { id: 'log', label: 'Loglama', icon: FileText },
 ]
 
@@ -106,7 +110,9 @@ function GeneralSection({
     setError(null)
     setSaved(false)
     try {
-      onSaved(await action())
+      const result = await action()
+      onSaved(result)
+      if (section.fields.some((f) => f.field === 'timezone')) refreshMeta() // alt çubuktaki server saati yeni dilime geçsin
       setErrors({})
       setSaved(true)
     } catch (err) {
@@ -158,17 +164,16 @@ function GeneralSection({
                   {f.hint} <span className="muted">({defaultText(f, data.defaults[f.field])})</span>
                 </>
               }
-            >
-              {changed && <StatusBadge tone="neutral">değiştirildi</StatusBadge>}
-              {canEdit && changed && (
-                <button type="button" className="link-btn" disabled={busy} onClick={() => run(() => settingsApi.reset([f.field]))}>
-                  <RotateCcw size={12} strokeWidth={2} />
-                  Varsayılana dön
-                </button>
-              )}
-            </FieldLabel>
+            />
             <div className="input-with-unit">
-              {f.kind === 'select' ? (
+              {f.kind === 'timezone' ? (
+                <TimezoneSelect
+                  id={id}
+                  value={draft[f.field] ?? ''}
+                  disabled={!canEdit}
+                  onChange={(v) => setDraft({ ...draft, [f.field]: v })}
+                />
+              ) : f.kind === 'select' ? (
                 <select id={id} value={draft[f.field] ?? ''} disabled={!canEdit} onChange={(e) => setDraft({ ...draft, [f.field]: e.target.value })}>
                   {f.options?.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -187,6 +192,17 @@ function GeneralSection({
                 />
               )}
               {f.unit && <span className="muted">{f.unit}</span>}
+              {changed && (
+                <span className="setting-state">
+                  <StatusBadge tone="neutral">değiştirildi</StatusBadge>
+                  {canEdit && (
+                    <button type="button" className="link-btn" disabled={busy} onClick={() => run(() => settingsApi.reset([f.field]))}>
+                      <RotateCcw size={12} strokeWidth={2} />
+                      Varsayılana dön
+                    </button>
+                  )}
+                </span>
+              )}
             </div>
             {errors[f.field] && <p className="field-error flush">{errors[f.field]}</p>}
           </div>
@@ -204,4 +220,15 @@ function GeneralSection({
       {data.updated_by && <p className="form-hint">Son değişiklik: {data.updated_by.name}, {when(data.updated_at)}</p>}
     </form>
   )
+}
+
+// Saat dilimi seçimi: yazarak aranır ("istanbul", "UTC+3"); boş seçenek server'ın kendi saat dilimidir. Seçenekler
+// (ofsetleriyle) bileşen açılırken bir kez hesaplanır.
+function TimezoneSelect({ id, value, disabled, onChange }: { id: string; value: string; disabled: boolean; onChange: (v: string) => void }) {
+  const [options] = useState(() => [
+    { value: '', label: 'Server’ın saat dilimi (boş)' },
+    ...timezoneOptions(new Date()).map((o) => ({ value: o.value, label: o.label })),
+  ])
+  if (disabled) return <input id={id} value={options.find((o) => o.value === value)?.label ?? value} disabled />
+  return <SearchSelect id={id} label="Saat dilimi" options={options} value={value} onChange={onChange} placeholder="Saat dilimi ara (ör. Istanbul, UTC+3)…" />
 }

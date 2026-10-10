@@ -46,10 +46,14 @@ export function formatDuration(minutes: number): string {
   return parts.length ? parts.join(' ') : '0 dk'
 }
 
-// formatDate, "2026-10-12" → "12.10.2026".
+// formatDate, "2026-10-12" → "2026.10.12" (bakım pencerelerinin tarih biçimi: YYYY.AA.GG).
 export function formatDate(date: string): string {
-  const [y, m, d] = date.split('-')
-  return `${d}.${m}.${y}`
+  return date.replaceAll('-', '.')
+}
+
+// formatLocal, "2026-10-12T01:00" → "2026.10.12 01:00".
+export function formatLocal(local: string): string {
+  return `${formatDate(local.slice(0, 10))} ${local.slice(11, 16)}`
 }
 
 function weekdayPhrase(days: number[], long: boolean): string {
@@ -66,26 +70,10 @@ function monthPhrase(w: Pick<MaintenanceWindow, 'month_day' | 'month_week' | 'mo
   return `Ayın ${week} ${WEEKDAYS[(w.month_weekday ?? 1) - 1]?.possessive ?? '?'}`
 }
 
-// weekdayOf, "2026-10-13T02:00" → "Sal" (yerel takvim günü; saat dilimi hesabı yok).
-export function weekdayOf(local: string): string {
-  const day = new Date(`${local.slice(0, 10)}T00:00:00Z`).getUTCDay() // 0 = Pazar
-  return WEEKDAYS[(day + 6) % 7].short
-}
-
-function dayDiff(a: string, b: string): number {
-  return Math.round((Date.parse(`${b.slice(0, 10)}T00:00:00Z`) - Date.parse(`${a.slice(0, 10)}T00:00:00Z`)) / 86_400_000)
-}
-
-// occurrenceText, bir tekrarı tek kalıpta yazar: "Sal 20.10.2026 22:00 – 23:30". Bitiş ertesi günse "+1", daha
-// sonraysa tarihiyle ("– 13.10 02:00"). currentYear verilirse o yılın tarihleri yılsızdır (ızgarada kısa yazım).
-export function occurrenceText(startLocal: string, endLocal: string, currentYear?: number): string {
-  const [date, time] = startLocal.split('T')
-  const [y, m, d] = date.split('-')
-  const day = Number(y) === currentYear ? `${d}.${m}` : `${d}.${m}.${y}`
-  const diff = dayDiff(startLocal, endLocal)
-  const endTime = endLocal.slice(11)
-  const end = diff === 0 ? endTime : diff === 1 ? `${endTime} +1` : `${endLocal.slice(8, 10)}.${endLocal.slice(5, 7)} ${endTime}`
-  return `${weekdayOf(startLocal)} ${day} ${time} – ${end}`
+// occurrenceText, bir tekrarı tek kalıpta yazar; başlangıç ve bitiş her zaman tam tarih-saattir:
+// "2026.10.20 22:00 – 2026.10.20 23:30".
+export function occurrenceText(startLocal: string, endLocal: string): string {
+  return `${formatLocal(startLocal)} – ${formatLocal(endLocal)}`
 }
 
 // typeLabel, Tür sütunudur: "Tek seferlik", "Haftalık", aralık 1'den büyükse "Haftalık · 2 haftada".

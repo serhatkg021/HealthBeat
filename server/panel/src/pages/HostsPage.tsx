@@ -11,6 +11,7 @@ import { Pagination } from '../components/Pagination'
 import { OrgPicker } from '../components/ScopePickers'
 import { SearchInput } from '../components/SearchInput'
 import { SecretNotice } from '../components/SecretNotice'
+import { MaintenanceBadge } from '../components/MaintenanceBadge'
 import { StatusBadge } from '../components/StatusBadge'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
 import { useAgentPolicy } from '../components/useAgentPolicy'
@@ -226,7 +227,10 @@ function HostList() {
                     {c.mode}
                   </td>
                   <td data-label="Durum">
-                    <StatusBadge tone={c.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(c.status)}</StatusBadge>
+                    <span className="badge-row">
+                      <StatusBadge tone={c.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(c.status)}</StatusBadge>
+                      <MaintenanceBadge untilLocal={c.maintenance_until_local} />
+                    </span>
                   </td>
                   <td data-label="Agent">
                     <AgentBadge host={c} policy={agentPolicy} />

@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import type { MaintenanceWindow } from '../types/api.ts'
 import {
   emptyDraft, filterWindows, formatDuration, fromWindow, occurrenceText, ruleText, scopeCount, shownOccurrence, statusOf, toInput,
-  typeLabel, upcomingLabel, validityText, weekdayOf,
+  typeLabel, upcomingLabel, validityText,
 } from './maintenance.ts'
 
 function win(over: Partial<MaintenanceWindow>): MaintenanceWindow {
@@ -22,12 +22,9 @@ test('durations read naturally', () => {
   assert.equal(formatDuration(10080), '7 gün')
 })
 
-test('every occurrence is written the same way; a next-day end gets +1', () => {
-  assert.equal(occurrenceText('2026-10-20T22:00', '2026-10-20T23:30'), 'Sal 20.10.2026 22:00 – 23:30')
-  assert.equal(occurrenceText('2026-10-30T23:00', '2026-10-31T02:00'), 'Cum 30.10.2026 23:00 – 02:00 +1')
-  assert.equal(occurrenceText('2026-10-10T22:00', '2026-10-12T06:00'), 'Cmt 10.10.2026 22:00 – 12.10 06:00')
-  assert.equal(occurrenceText('2026-10-20T22:00', '2026-10-20T23:30', 2026), 'Sal 20.10 22:00 – 23:30')
-  assert.equal(occurrenceText('2027-01-03T03:00', '2027-01-03T05:00', 2026), 'Paz 03.01.2027 03:00 – 05:00')
+test('every occurrence is written in full, start and end, as YYYY.AA.GG SS:DD', () => {
+  assert.equal(occurrenceText('2026-10-20T22:00', '2026-10-20T23:30'), '2026.10.20 22:00 – 2026.10.20 23:30')
+  assert.equal(occurrenceText('2026-10-30T23:00', '2026-10-31T02:00'), '2026.10.30 23:00 – 2026.10.31 02:00')
 })
 
 test('the type column names the kind and a longer interval', () => {
@@ -45,8 +42,8 @@ test('the detail spells out the rule and the dates', () => {
   assert.equal(ruleText(win({ recurrence: 'monthly', month_week: 1, month_weekday: 7, repeat_every: 3 })), '3 ayda bir · Ayın ilk Pazarı · başlangıç 02:00 · süre 2 saat')
   assert.equal(ruleText(win({ recurrence: 'monthly', month_day: -1 })), 'Her ay · Ayın son günü · başlangıç 02:00 · süre 2 saat')
   assert.equal(ruleText(win({ recurrence: 'once' })), 'Tek seferlik')
-  assert.equal(validityText(win({})), 'İlk tekrar 10.10.2026 · bitiş yok')
-  assert.equal(validityText(win({ valid_until: '2026-12-31' })), 'İlk tekrar 10.10.2026 · son tekrar 31.12.2026')
+  assert.equal(validityText(win({})), 'İlk tekrar 2026.10.10 · bitiş yok')
+  assert.equal(validityText(win({ valid_until: '2026-12-31' })), 'İlk tekrar 2026.10.10 · son tekrar 2026.12.31')
   assert.equal(validityText(win({ recurrence: 'once' })), '')
 })
 
@@ -131,8 +128,3 @@ test('the list puts running windows first, then the soonest planned, then the pa
   assert.deepEqual(filterWindows(ws, 'all', '').map((w) => w.id), ['running', 'soon', 'later', 'past-new', 'past-old'])
 })
 
-test('weekday names come from the local date', () => {
-  assert.equal(weekdayOf('2026-10-13T02:00'), 'Sal')
-  assert.equal(weekdayOf('2026-10-11T23:00'), 'Paz')
-  assert.equal(weekdayOf('2026-10-12T00:30'), 'Pzt')
-})

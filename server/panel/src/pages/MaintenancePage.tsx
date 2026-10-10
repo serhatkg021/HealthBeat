@@ -1,4 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { CalendarClock, CalendarPlus, ChevronRight, CircleStop, Pencil, SkipForward, TimerOff, Trash2 } from 'lucide-react'
 import { maintenanceApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
@@ -47,9 +48,11 @@ type Pending = { kind: 'end' | 'delete' | 'skip' | 'end-occurrence'; window: Mai
 export function MaintenancePage() {
   const { can } = useAuth()
   const canManage = can('maintenance.manage')
+  // Sunucu sayfasındaki "Bakım planla" yeni pencere formunu o sunucu seçili açar (?sekme=yeni&sunucu=<id>).
+  const [params] = useSearchParams()
+  const presetHost = params.get('sunucu')
   const clock = useServerClock()
   const browserNow = useNow(60_000)
-  const year = clock ? Number(clock.nowLocal.slice(0, 4)) : undefined
   const { orgs, hosts } = useScopeData(can('organization.view'))
 
   const [windows, setWindows] = useState<MaintenanceWindow[] | null>(null)
@@ -209,8 +212,8 @@ export function MaintenancePage() {
             <SearchInput value={query} onChange={setQuery} placeholder="Açıklama ya da kapsam ara…" />
           </div>
           {clock && (
-            <span className="muted server-clock-inline tnum" title="Bakım saatleri kurulumun saat dilimine göredir">
-              Server saati {clock.time} · {clock.timezone} ({clock.offset})
+            <span className="muted server-clock-inline tnum" title={`Bakım saatleri kurulumun saat dilimine göredir: ${clock.timezone} (${clock.offset})`}>
+              Server saati {clock.label}
             </span>
           )}
         </div>
@@ -315,7 +318,7 @@ export function MaintenancePage() {
                                 <dt>{upcomingLabel(Math.min(detail?.upcoming?.length ?? 0, OCCURRENCE_LIMIT))}</dt>
                                 <dd>
                                   {detail ? (
-                                    <OccurrenceGrid occurrences={detail.upcoming ?? []} skipped={detail.skipped_local} currentYear={year} />
+                                    <OccurrenceGrid occurrences={detail.upcoming ?? []} skipped={detail.skipped_local} />
                                   ) : (
                                     <span className="muted">Yükleniyor…</span>
                                   )}
@@ -352,7 +355,7 @@ export function MaintenancePage() {
         <TabPanel id="yeni" active={tab}>
           <MaintenanceForm
             key={formKey}
-            initial={emptyDraft(nowLocal)}
+            initial={{ ...emptyDraft(nowLocal), hostIds: presetHost ? [presetHost] : [] }}
             clock={clock}
             orgs={orgs}
             hosts={hosts}

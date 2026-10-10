@@ -48,7 +48,6 @@ export function MaintenanceForm({
   const [saving, setSaving] = useState(false)
   const [preview, setPreview] = useState<{ upcoming: MaintenanceOccurrence[] } | { error: string } | null>(null)
   const set = (patch: Partial<MaintenanceDraft>) => setDraft((d) => ({ ...d, ...patch }))
-  const year = clock ? Number(clock.nowLocal.slice(0, 4)) : undefined
 
   // Önizleme açıklama ve kapsamdan bağımsızdır: yalnızca zamana ilişkin alanlar değişince istenir.
   const timing = useMemo(() => JSON.stringify({ ...toInput(draft), title: 'önizleme', host_ids: [], organization_ids: [] }), [draft])
@@ -279,7 +278,7 @@ export function MaintenanceForm({
         </span>
         {preview === null && <span className="muted">Hesaplanıyor…</span>}
         {preview && 'error' in preview && <span className="muted">{preview.error}</span>}
-        {preview && 'upcoming' in preview && <OccurrenceGrid occurrences={preview.upcoming} currentYear={year} />}
+        {preview && 'upcoming' in preview && <OccurrenceGrid occurrences={preview.upcoming} />}
       </div>
 
       <div className="form-actions">
@@ -290,7 +289,11 @@ export function MaintenanceForm({
         <button className="btn" type="button" disabled={saving} onClick={onCancel}>
           Vazgeç
         </button>
-        {zone && <span className="muted">Saatler {zone}</span>}
+        {clock && (
+          <span className="muted" title={zone ?? undefined}>
+            Saatler server saatine göredir ({clock.short})
+          </span>
+        )}
       </div>
     </form>
   )

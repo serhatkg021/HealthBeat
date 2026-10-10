@@ -10,6 +10,13 @@ import type { Meta } from '../types/api'
 export type LoadedMeta = Meta & { fetchedAt: number }
 
 let shared: Promise<LoadedMeta | null> | null = null
+const listeners = new Set<() => void>()
+
+// refreshMeta, /meta'yı yeniden okutur (ör. saat dilimi ayarı değişince): açık bütün bileşenler yeni değeri alır.
+export function refreshMeta() {
+  shared = null
+  for (const l of listeners) l()
+}
 
 function loadMeta(): Promise<LoadedMeta | null> {
   shared ??= metaApi
@@ -24,13 +31,21 @@ function loadMeta(): Promise<LoadedMeta | null> {
 
 export function useMeta(): LoadedMeta | null {
   const [meta, setMeta] = useState<LoadedMeta | null>(null)
+  const [version, setVersion] = useState(0)
+  useEffect(() => {
+    const bump = () => setVersion((v) => v + 1)
+    listeners.add(bump)
+    return () => {
+      listeners.delete(bump)
+    }
+  }, [])
   useEffect(() => {
     let alive = true
     void loadMeta().then((m) => alive && setMeta(m))
     return () => {
       alive = false
     }
-  }, [])
+  }, [version])
   return meta
 }
 

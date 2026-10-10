@@ -133,6 +133,9 @@ export interface Host {
   // Aynı makine kimliğini bildiren diğer sunucular (çift kayıt uyarısı); yalnızca tek sunucu yanıtında,
   // yalnızca çağıranın görebildikleri. Klon sanal makineler aynı kimliği taşıyabilir: yalnızca uyarıdır.
   same_machine_as?: { id: string; title: string; organization_id: string }[]
+  // Sunucu şu an bakımdaysa kesintisiz bakımın bittiği an (yerel: kurulumun saatinde); yalnızca tek sunucu yanıtında.
+  maintenance_until?: string
+  maintenance_until_local?: string
   // Yalnızca oluşturma/rotate-credentials'tan hemen sonra bir kez bulunur.
   api_token?: string
   pull_secret?: string
@@ -710,6 +713,8 @@ export interface SettingsValues {
   log_error_body_bytes: number
   log_file_max_age_days: number
   log_file_max_total_mb: number
+  // Kurulumun saat dilimi (IANA adı); "" = server'ın saat dilimi.
+  timezone: string
 }
 
 export type SettingsField = keyof SettingsValues

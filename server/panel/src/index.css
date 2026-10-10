@@ -509,6 +509,18 @@ code, .mono {
   font-variant-numeric: tabular-nums;
 }
 
+/* Alt çubukta sürümün yanında server saati (kurulumun saat dilimi); dar ekranda gizlenir. */
+.version-note.server-clock::before {
+  content: '·';
+  margin-right: 8px;
+}
+
+@media (max-width: 640px) {
+  .version-note.server-clock {
+    display: none;
+  }
+}
+
 /* Panel ve server sürümü farklı: yalnızca biri yeniden kurulmuş olabilir. */
 .version-note.mismatch {
   color: var(--status-warning-text);
@@ -3129,6 +3141,25 @@ body.scroll-lock {
   flex: 0 0 64px;
 }
 
+/* Ayarlarda değişmiş alanın "değiştirildi" rozeti ve "Varsayılana dön" düğmesi kutunun sağındadır; yalnızca o alanın
+   kutusu kısalır. */
+.input-with-unit > .setting-state {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .input-with-unit:has(> .setting-state) {
+    flex-wrap: wrap;
+  }
+
+  .input-with-unit > .setting-state {
+    flex-basis: 100%;
+  }
+}
+
 .link-btn {
   display: inline-flex;
   align-items: center;
@@ -4661,9 +4692,9 @@ textarea {
 
 .occurrence-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 6px;
-  max-width: 700px;
+  max-width: 900px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -4864,5 +4895,43 @@ textarea {
   margin-right: 8px;
   color: var(--text-muted);
   font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* Sunucu sayfasında bakımdaki sunucunun şeridi (sekmelerin üstünde, her sekmede görünür). */
+.maintenance-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--status-warning) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--status-warning) 12%, var(--surface-1));
+  font-size: 13.5px;
+}
+
+.maintenance-strip > svg {
+  color: var(--status-warning-text);
+}
+
+.maintenance-strip-link {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+/* Durum rozeti ve yanındaki "Bakımda" rozeti. */
+.badge-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Başlıktaki küçük işlem düğmesi (ör. sunucu sayfasında "Bakım planla"): başlık yazısının boyutunu almaz. */
+.page-title .title-action {
+  margin-left: 6px;
+  font-size: 12.5px;
   font-weight: 500;
 }
