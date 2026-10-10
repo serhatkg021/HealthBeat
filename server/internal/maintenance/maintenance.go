@@ -80,6 +80,12 @@ func wallInstant(d date, minute int, loc *time.Location) time.Time {
 	return best
 }
 
+// FromLocal, loc'ta wall'un takvim günü ve saat:dakikasının gösterdiği anı döndürür (wall'un kendi saat dilimi yok
+// sayılır). Tekrarlarla aynı kural: yaz saatinde hiç yaşanmayan saat ileri kayar, iki kez yaşanan saat ilkidir.
+func FromLocal(wall time.Time, loc *time.Location) time.Time {
+	return wallInstant(civil(wall), wall.Hour()*60+wall.Minute(), loc)
+}
+
 // nextStartDate, d ve sonrasında tekrarın başladığı ilk günü döndürür (ValidUntil'i aşarsa ok=false). Pencere tekrarlı
 // olmalıdır.
 func nextStartDate(w model.MaintenanceWindow, d date) (date, bool) {

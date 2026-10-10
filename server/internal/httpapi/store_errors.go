@@ -37,6 +37,10 @@ var storeReasons = []struct {
 	{store.ErrRouteTargetMissing, http.StatusNotFound, "organizasyon, sunucu, kullanıcı ya da iletişim kişisi bulunamadı"},
 	{store.ErrRouteShape, http.StatusConflict, "kuralın tam olarak bir kapsamı ve bir alıcısı olmalı"},
 
+	{store.ErrMaintenanceWindowInvalid, http.StatusBadRequest, "geçersiz bakım penceresi"},
+	{store.ErrMaintenanceScopeMissing, http.StatusNotFound, "seçilen sunuculardan ya da organizasyonlardan biri bulunamadı"},
+	{store.ErrMaintenanceWindowEnded, http.StatusConflict, "bu bakım penceresi bitirilmiş; değiştirilemez"},
+
 	// İletişim kişisi kuralları istemcinin düzeltebileceği istek hatalarıdır.
 	{store.ErrContactManagerInvalid, http.StatusBadRequest, "yönetici aynı organizasyondan bir iletişim kişisi olmalı"},
 	{store.ErrContactInvalid, http.StatusBadRequest, "en az bir iletişim yolu (telefon ya da e-posta) gerekli ve kişi kendi yöneticisi olamaz"},
