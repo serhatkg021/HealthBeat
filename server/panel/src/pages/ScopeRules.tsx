@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Check } from 'lucide-react'
 import { statusRulesApi, thresholdsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
+import { InfoTip } from '../components/InfoTip'
 import type { MetricType, Organization } from '../types/api'
 import { changedKeys, customizeItem, hostProblems, hostRow, hostSummary, inheritItem, inheritedText, revertItem, type HostRuleState, type RuleRowView } from './hostRuleRows'
 import { StatusDurationField, StatusLevelField, ThresholdDurationField, ThresholdLevelFields } from './RuleEditors'
@@ -207,21 +208,26 @@ export function ScopeRules({ target, topic, onTopic }: { target: ScopeTarget; to
       <div className="card rule-summary">
         {system ? (
           <>
-            <strong>Sistem varsayılanında {summary.on} kural tanımlı.</strong>
-            <span className="muted">
-              Kendi değeri olmayan her organizasyon ve sunucu bunları kullanır; hiçbir kapsamda tanımlanmayan kural kapalıdır.
-              {!canEdit && ' Genel kuralları yalnızca süper admin değiştirebilir.'}
-            </span>
+            <div className="rule-summary-head">
+              <strong>Sistem varsayılanında {summary.on} kural tanımlı.</strong>
+              <InfoTip label="Sistem varsayılanları">
+                Kendi değeri olmayan her organizasyon ve sunucu bunları kullanır; hiçbir kapsamda tanımlanmayan kural kapalıdır.
+              </InfoTip>
+            </div>
+            {/* Düzenleme düğmelerinin neden olmadığını açıklar; bu yüzden düğmenin içine gizlenmez. */}
+            {!canEdit && <span className="muted">Genel kuralları yalnızca süper admin değiştirebilir.</span>}
           </>
         ) : (
           <>
-            <strong>
-              {target.kind === 'org' && target.organization.name} için {summary.on} kural etkin; {summary.own} tanesi bu organizasyona özel.
-            </strong>
-            <span className="muted">
-              Tanımlanmayan değer üst şirketten, o da yoksa sistemden devralınır. Alt organizasyonlar ve sunucular bu değerleri devralır; bir
-              sunucunun kendi değeri her zaman önceliklidir.
-            </span>
+            <div className="rule-summary-head">
+              <strong>
+                {target.kind === 'org' && target.organization.name} için {summary.on} kural etkin; {summary.own} tanesi bu organizasyona özel.
+              </strong>
+              <InfoTip label="Organizasyon kuralları">
+                Tanımlanmayan değer üst şirketten, o da yoksa sistemden devralınır. Alt organizasyonlar ve sunucular bu değerleri devralır;
+                bir sunucunun kendi değeri her zaman önceliklidir.
+              </InfoTip>
+            </div>
           </>
         )}
         {notice && changes.size === 0 && (

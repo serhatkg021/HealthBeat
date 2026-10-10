@@ -113,7 +113,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
     Kaldır) ve Geri al; disk alert seçimi ve mount, disk, sensör, servis, container başına değerler ilgili satırın altında.
     Değişiklikler konular arasında korunur ve alttaki tek Kaydet çubuğuyla birlikte kaydedilir; kapsam ya da sunucu
     değişince kaydedilmemiş değişiklikler atılır. Devralınan değerin kaynağı yazılır ("Devralındı · Ana Şirket"). Sunucu
-    ayarlarında geçerli kurallar ve nereden geldikleri (devralındı / bu sunucuya özel) salt okunur gösterilir.
+    ayarlarında geçerli kurallar ve nereden geldikleri (devralındı / bu sunucuya özel) salt okunur gösterilir. Kuralların ve
+    kapsam özetinin açıklaması adın yanındaki ⓘ düğmesinde.
   - **Bildirim:** kanallar, sistem sahipleri, bildirim kuralları (organizasyon ya da sunucu kapsamı) ve tüm organizasyonların
     iletişim kişileri (salt okunur, aranabilir) tek sayfada. Kişiler organizasyon sayfasında düzenlenir.
   - **Organizasyon ayarları** (ad, adres, üst şirket, silme) organizasyon listesindeki ve organizasyon sayfasındaki çarkla

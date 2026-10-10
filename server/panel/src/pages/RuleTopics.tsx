@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { InfoTip } from '../components/InfoTip'
 import { TopicMenu } from '../components/TopicMenu'
 import type { Pill, RuleRowView, SourceKind } from './hostRuleRows'
 import type { TopicId } from './ruleTopics'
@@ -99,7 +100,7 @@ export function RuleRow({
       <div className="rule-name">
         <span className="rule-label">{row.label}</span>
         <span className="rule-kind">{row.kind}</span>
-        {row.hint && <div className="rule-hint">{row.hint}</div>}
+        {row.hint && <InfoTip label={row.label}>{row.hint}</InfoTip>}
       </div>
       <div className="rule-value" data-label="Değer">
         {editor ?? (

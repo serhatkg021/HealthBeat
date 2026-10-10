@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check } from 'lucide-react'
 import { hostsApi, statusRulesApi, thresholdsApi } from '../api/endpoints'
+import { InfoTip } from '../components/InfoTip'
 import { useAuth } from '../auth/AuthContext'
 import type { DiskUsage, Organization, OverviewHost, SubjectMetricType } from '../types/api'
 import {
@@ -383,18 +384,20 @@ export function HostRules({
   return (
     <div className="stack-col">
       <div className="card rule-summary">
-        <strong>
-          {host && (
-            <>
-              <Link to={`/hosts/${hostId}`}>{host.title}</Link> için{' '}
-            </>
-          )}
-          {summary.on} kural etkin; {summary.own} tanesi bu sunucuya özel.
-        </strong>
-        <span className="muted">
-          Hiçbir kapsamda tanımlanmayan kural kapalıdır. “Devralındı”: değer sistemden ya da organizasyondan gelir; “Özelleştir” yalnızca bu
-          sunucu için değer verir.
-        </span>
+        <div className="rule-summary-head">
+          <strong>
+            {host && (
+              <>
+                <Link to={`/hosts/${hostId}`}>{host.title}</Link> için{' '}
+              </>
+            )}
+            {summary.on} kural etkin; {summary.own} tanesi bu sunucuya özel.
+          </strong>
+          <InfoTip label="Sunucu kuralları">
+            Hiçbir kapsamda tanımlanmayan kural kapalıdır. “Devralındı”: değer sistemden ya da organizasyondan gelir; “Özelleştir” yalnızca
+            bu sunucu için değer verir.
+          </InfoTip>
+        </div>
         {notice && changes.size === 0 && (
           <span className="save-note" style={{ margin: '6px 0 0' }}>
             <Check size={14} strokeWidth={2.2} />

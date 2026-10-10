@@ -7,7 +7,7 @@ Anlamlı bir iş bitince bu dosya güncellenir.
 **Son güncelleme:** 2026-10-10 — **Sunucu sayfası konuya göre** (panel): Performans 7 konuya ayrıldı (şu an kutuları, alert
 kuralları, eşik çizgili ve büyütülebilir grafikler, son rapor yan yana; menüde açık alert noktası), Envanter dört kart (Makine,
 İşletim sistemi ve ağ, Saat, Bakım); sayfa açıklamaları kaldırıldı. Aynı gün: **Alert kuralları konuya göre**: üç kapsamda da kurallar 8 konuya gruplu (solda konu
-menüsü), satırda Özelleştir / Devral / Geri al, kapsam başına tek Kaydet, devralınan değerin kaynağı yazılıyor. Önceki:
+menüsü), satırda Özelleştir / Devral / Geri al, kapsam başına tek Kaydet, devralınan değerin kaynağı yazılıyor; kural açıklamaları ⓘ düğmesinde. Önceki:
 2026-10-08 — **Protokol 4: sistem sağlığı ve performans** (agent, server ve panel birlikte). Agent CPU/bellek
 ayrıntısı, PSI, disk ve ağ G/Ç'si, TCP, systemd servisleri, sıcaklık, RAID, kapasite sınırları, süreçler, bekleyen güncellemeler
 ve saat senkronu ayrıntısı topluyor (hepsi yetkisiz, sandbox gevşetilmeden). Server bunları ham saklıyor; disk gecikmesi,

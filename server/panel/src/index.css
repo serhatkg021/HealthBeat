@@ -3994,6 +3994,14 @@ textarea {
   gap: 2px;
 }
 
+/* Özet cümlesi ve yanındaki açıklama düğmesi tek satırda. */
+.rule-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
 .rule-summary strong {
   font-weight: 600;
 }
@@ -4071,7 +4079,17 @@ textarea {
   flex: 1;
   min-width: 0;
   padding: 0;
-  overflow: hidden;
+}
+
+/* Panel taşanı kesmez (açıklama kutuları son satırda da görünsün); köşeleri ilk ve son satır kendisi yuvarlar. */
+.topic-panel > :first-child {
+  border-top-left-radius: calc(var(--radius) - 1px);
+  border-top-right-radius: calc(var(--radius) - 1px);
+}
+
+.topic-panel .rule-rows > :last-child {
+  border-bottom-left-radius: calc(var(--radius) - 1px);
+  border-bottom-right-radius: calc(var(--radius) - 1px);
 }
 
 .rule-rows-head,
@@ -4113,22 +4131,20 @@ textarea {
   font-weight: 600;
 }
 
+.rule-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
 .rule-kind {
-  margin-left: 6px;
   padding: 1px 6px;
   border-radius: 4px;
   background: var(--surface-2);
   color: var(--text-secondary);
   font-size: 11px;
   font-weight: 600;
-  vertical-align: 1px;
-}
-
-.rule-hint {
-  margin-top: 2px;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.45;
 }
 
 .rule-pills {
@@ -4251,6 +4267,11 @@ textarea {
 
   .rule-rows-head {
     display: none;
+  }
+
+  .topic-panel .rule-rows > :first-child {
+    border-top-left-radius: calc(var(--radius) - 1px);
+    border-top-right-radius: calc(var(--radius) - 1px);
   }
 
   .rule-row {
