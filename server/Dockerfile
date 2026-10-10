@@ -24,6 +24,8 @@ RUN apk add --no-cache ca-certificates tzdata \
 COPY --from=build /out/healthbeat-server /usr/local/bin/healthbeat-server
 USER 10001:10001
 EXPOSE 8443
+# Sağlık kontrolünü binary'nin kendisi yapar (HTTP_ADDR'deki porta, container'ın içinden): wget kullanılmaz, çünkü
+# busybox wget'in TLS için açtığı ssl_client PID 1'e (server) kalıp zombi olarak birikiyordu.
 HEALTHCHECK --interval=15s --timeout=5s --start-period=20s --retries=5 \
-  CMD wget -q --no-check-certificate -O /dev/null https://127.0.0.1:8443/healthz || exit 1
+  CMD ["healthbeat-server", "healthcheck"]
 ENTRYPOINT ["healthbeat-server"]

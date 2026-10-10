@@ -4,8 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-10 — **Sunucu sayfası konuya göre** (panel): Performans 7 konuya ayrıldı (şu an kutuları, alert
-kuralları, eşik çizgili ve büyütülebilir grafikler, son rapor yan yana; menüde açık alert noktası), Envanter dört kart (Makine,
+**Son güncelleme:** 2026-10-10 — Server container'ında sağlık kontrolünün bıraktığı zombi süreçler giderildi: kontrolü
+artık server binary'si yapıyor (`healthbeat-server healthcheck`). Aynı gün: **Sunucu sayfası konuya göre** (panel):
+Performans 7 konuya ayrıldı (şu an kutuları, alert kuralları, eşik çizgili ve büyütülebilir grafikler, son rapor yan yana; menüde açık alert noktası), Envanter dört kart (Makine,
 İşletim sistemi ve ağ, Saat, Bakım); sayfa açıklamaları kaldırıldı. Aynı gün: **Alert kuralları konuya göre**: üç kapsamda da kurallar 8 konuya gruplu (solda konu
 menüsü), satırda Özelleştir / Devral / Geri al, kapsam başına tek Kaydet, devralınan değerin kaynağı yazılıyor; kural açıklamaları ⓘ düğmesinde. Kart ve form alanı açıklamaları panelin tamamında ⓘ düğmesinde. Önceki:
 2026-10-08 — **Protokol 4: sistem sağlığı ve performans** (agent, server ve panel birlikte). Agent CPU/bellek
@@ -91,5 +92,3 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 4. Panel: sunucu ayarlarındaki salt okunur "Geçerli alert kuralları" da konuya göre gruplanabilir; Genel sekmesinin üstündeki
    Mod/Aralık kutuları sadeleşebilir. Çok dar ekranda (~420 px) sunucu sayfası başlığında ad görünmüyor (durum rozeti ve
    alert sayaçları yer kaplıyor).
-5. Server container'ında healthcheck'in bıraktığı zombi süreçler (busybox `wget` → `ssl_client`; PID 1 Go binary'si onları
-   toplamıyor): imaja init (tini) ya da healthcheck'i server binary'siyle yapmak — ayrı iş.

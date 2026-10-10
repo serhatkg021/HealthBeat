@@ -199,7 +199,8 @@ ya da sonuna eklediğinden** emin ol (panelin nginx'i `$remote_addr` ile ezer). 
 ### Sağlık uçları
 
 - `GET /healthz`: süreç ayakta mı. Veritabanına bakmaz; container sağlık kontrolü (`server/Dockerfile`) bunu kullanır,
-  çünkü veritabanı düştüğünde server'ı yeniden başlatmak bir şey düzeltmez.
+  çünkü veritabanı düştüğünde server'ı yeniden başlatmak bir şey düzeltmez. Kontrolü binary'nin kendisi yapar:
+  `healthbeat-server healthcheck`, `HTTP_ADDR`'deki porta container'ın içinden bağlanır, 200 alırsa 0 ile çıkar.
 - `GET /readyz`: istek karşılamaya hazır mı. Veritabanına ping atar (2 sn): ulaşılabiliyorsa `200 {"status":"ok"}`,
   değilse `503` ve `code: database_unavailable`. Yük dengeleyici ya da orkestratörün trafik yönlendirme denetimi içindir.
   İkisi de kimlik doğrulama istemez.

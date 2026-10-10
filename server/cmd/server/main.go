@@ -37,6 +37,10 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
 		os.Exit(runMigrateCommand(os.Args[2:], os.Stdout, os.Stderr))
 	}
+	// `healthbeat-server healthcheck` container sağlık kontrolüdür (healthcheck.go).
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		os.Exit(runHealthcheckCommand(os.Stderr))
+	}
 
 	cfg, err := config.Load()
 	if err != nil {
