@@ -35,6 +35,7 @@ type Engine struct {
 	hosts         HostStore
 	organizations OrgStore
 	notifs        RecipientStore
+	maintenance   MaintenanceStore
 	tx            TxRunner
 	// notifiers, kanal adına göre bildirim kanallarıdır (bkz. notify.Notifier); olmayan kanalın alıcıları atlanır.
 	notifiers map[string]notify.Notifier
@@ -63,6 +64,7 @@ func New(pool *pgxpool.Pool, mailer *notify.Mailer, panelBaseURL string) *Engine
 		Hosts:         store.NewHosts(pool, nil), // yalnızca host adlarını okur; pull secret'lara asla dokunmaz
 		Organizations: store.NewOrganizations(pool),
 		Recipients:    store.NewNotifications(pool),
+		Maintenance:   store.NewMaintenanceWindows(pool),
 		Tx:            pgTx{pool: pool, alerts: alerts, outbox: queue},
 	}, []notify.Notifier{email}, panelBaseURL, outbox.NewWorker(queue, []string{store.OutboxKindAlert}, email))
 }
@@ -78,6 +80,7 @@ func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, 
 		hosts:         st.Hosts,
 		organizations: st.Organizations,
 		notifs:        st.Recipients,
+		maintenance:   st.Maintenance,
 		tx:            st.Tx,
 		notifiers:     make(map[string]notify.Notifier, len(notifiers)),
 		worker:        worker,

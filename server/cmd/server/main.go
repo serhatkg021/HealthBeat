@@ -101,6 +101,7 @@ func main() {
 	alertEngine := alertengine.New(pool, mailer, cur.PanelBaseURL)
 	// Alert bildirimleri kalıcı kuyruktan (notification_outbox) teslim edilir; gönderilemeyen yeniden denenir.
 	background.Go("alert notifications", alertEngine.RunNotifications)
+	background.Go("deferred maintenance notifications", alertEngine.RunDeferred)
 
 	deps := httpapi.NewDeps(pool, tokenSvc, alertEngine, rateLimits(cur), secrets)
 

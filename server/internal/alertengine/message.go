@@ -19,6 +19,8 @@ type messageContext struct {
 	HostTitle string
 	HostIP    string
 	Hostname  string
+	// Deferred, bildirimin sunucu bakımdan çıkınca gönderildiğini söyler (metne not eklenir).
+	Deferred bool
 }
 
 // buildMessage, alert bildiriminin konusunu ve gövdesini üretir; zamanlar loc'ta yazılır. Saf fonksiyondur: aynı girdi
@@ -61,6 +63,9 @@ func buildMessage(alert model.Alert, mc messageContext, panelBaseURL string, loc
 	if resolved && alert.ResolvedAt != nil {
 		fmt.Fprintf(&body, "Çözülme: %s\n", formatAlertTime(*alert.ResolvedAt, loc))
 		fmt.Fprintf(&body, "Çözüm Süresi: %s\n", formatResolutionDuration(alert.ResolvedAt.Sub(alert.CreatedAt)))
+	}
+	if mc.Deferred {
+		fmt.Fprintf(&body, "\nNot: Bu alert sunucu bakımdayken açıldı; bildirimi bakım bitince gönderildi.\n")
 	}
 	if panelBaseURL != "" {
 		fmt.Fprintf(&body, "\nPanel: %s/hosts/%s?sekme=alertler\n", panelBaseURL, alert.HostID)

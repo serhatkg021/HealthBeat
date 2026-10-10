@@ -204,6 +204,24 @@ func (s *MaintenanceWindows) ForHost(ctx context.Context, hostID uuid.UUID, now 
 	return out, s.loadDetails(ctx, out, false)
 }
 
+// Open, now'da henüz geride kalmamış bütün pencereleri kapsamları ve istisnalarıyla döndürür (ForHost'un süzgeci,
+// sunucu süzgeci olmadan): sunucu listelerinde hangi sunucunun bakımda olduğunu tek sorguyla bulmak için.
+func (s *MaintenanceWindows) Open(ctx context.Context, now time.Time) ([]model.MaintenanceWindow, error) {
+	rows, err := s.pool.Query(ctx, `SELECT `+maintenanceColumns+` FROM maintenance_windows w
+		WHERE (w.ended_at IS NULL OR w.ended_at > $1)
+		  AND (w.recurrence <> 'once' OR w.ends_at > $1)
+		  AND (w.valid_until IS NULL OR w.valid_until >= ($1::timestamptz - interval '8 days')::date)
+		ORDER BY w.created_at, w.id`, now)
+	if err != nil {
+		return nil, err
+	}
+	out, err := collect(rows, scanMaintenanceWindow)
+	if err != nil {
+		return nil, err
+	}
+	return out, s.loadDetails(ctx, out, true)
+}
+
 // End pencereyi at anında bitirir: seri kapanır, süren tekrar da biter.
 func (s *MaintenanceWindows) End(ctx context.Context, id uuid.UUID, at time.Time) (model.MaintenanceWindow, error) {
 	tag, err := s.pool.Exec(ctx, `UPDATE maintenance_windows SET ended_at = $2, updated_at = now() WHERE id = $1 AND ended_at IS NULL`, id, at)

@@ -25,11 +25,11 @@ func NewAlerts(pool *pgxpool.Pool) *Alerts {
 // commit edilsin diye.
 func (s *Alerts) WithTx(tx pgx.Tx) *Alerts { return &Alerts{pool: tx} }
 
-const alertColumns = `id, host_id, alert_type, COALESCE(subject, ''), level, status, value, threshold, created_at, acknowledged_at, acknowledged_by, resolved_at`
+const alertColumns = `id, host_id, alert_type, COALESCE(subject, ''), level, status, value, threshold, created_at, acknowledged_at, acknowledged_by, resolved_at, notify_pending`
 
 func scanAlert(row interface{ Scan(...any) error }) (model.Alert, error) {
 	var a model.Alert
-	err := row.Scan(&a.ID, &a.HostID, &a.AlertType, &a.Subject, &a.Level, &a.Status, &a.Value, &a.Threshold, &a.CreatedAt, &a.AcknowledgedAt, &a.AcknowledgedBy, &a.ResolvedAt)
+	err := row.Scan(&a.ID, &a.HostID, &a.AlertType, &a.Subject, &a.Level, &a.Status, &a.Value, &a.Threshold, &a.CreatedAt, &a.AcknowledgedAt, &a.AcknowledgedBy, &a.ResolvedAt, &a.NotifyPending)
 	return a, err
 }
 
@@ -211,7 +211,7 @@ func (s *Alerts) Acknowledge(ctx context.Context, id, by uuid.UUID) (model.Alert
 
 // alertColumnsJoined, List/ListForHosts'ın hosts'a JOIN yaptığı sorgularda kullanılır
 // (arama title'ı da kapsar); alertColumns tablo öneki olmadan alias'sız sorgularda kalır.
-const alertColumnsJoined = `a.id, a.host_id, a.alert_type, COALESCE(a.subject, ''), a.level, a.status, a.value, a.threshold, a.created_at, a.acknowledged_at, a.acknowledged_by, a.resolved_at`
+const alertColumnsJoined = `a.id, a.host_id, a.alert_type, COALESCE(a.subject, ''), a.level, a.status, a.value, a.threshold, a.created_at, a.acknowledged_at, a.acknowledged_by, a.resolved_at, a.notify_pending`
 
 // AlertFilter, alert listesinin isteğe bağlı süzgeçleridir; boş alan "hepsi" demektir.
 type AlertFilter struct {
@@ -282,7 +282,7 @@ func (s *Alerts) listWhere(ctx context.Context, scopeClause string, scopeArgs []
 		var a model.Alert
 		var notification *string
 		if err := rows.Scan(&a.ID, &a.HostID, &a.AlertType, &a.Subject, &a.Level, &a.Status, &a.Value, &a.Threshold,
-			&a.CreatedAt, &a.AcknowledgedAt, &a.AcknowledgedBy, &a.ResolvedAt, &notification); err != nil {
+			&a.CreatedAt, &a.AcknowledgedAt, &a.AcknowledgedBy, &a.ResolvedAt, &a.NotifyPending, &notification); err != nil {
 			return nil, 0, err
 		}
 		if notification != nil {
@@ -394,7 +394,7 @@ func (s *Alerts) ClearPending(ctx context.Context, hostID uuid.UUID, alertType, 
 // SetNotifyPending, alert'in bir olayının bildirimi bakım yüzünden gönderilmediğinde true, ertelenen bildirim
 // gönderildiğinde false yazar (bkz. migration 000008).
 func (s *Alerts) SetNotifyPending(ctx context.Context, id uuid.UUID, pending bool) error {
-	_, err := s.pool.Exec(ctx, `UPDATE alerts SET notify_pending = $2 WHERE id = $1`, id, pending)
+	_, err := s.pool.Exec(ctx, `UPDATE alerts SET notify_pending = $2 WHERE id = $1 AND notify_pending <> $2`, id, pending)
 	return err
 }
 

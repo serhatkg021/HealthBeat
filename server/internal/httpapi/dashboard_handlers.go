@@ -71,6 +71,10 @@ type overviewHost struct {
 	// (bkz. model.Host). Sürümden başka bir şey değildir, gizli bilgi taşımaz.
 	AgentVersion  *string `json:"agent_version,omitempty"`
 	AgentProtocol *int    `json:"agent_protocol,omitempty"`
+	// MaintenanceUntil, sunucu şu an bakımdaysa kesintisiz bakımın bittiği andır (MaintenanceUntilLocal kurulumun
+	// saatinde); bakımda değilse yoktur.
+	MaintenanceUntil      *time.Time `json:"maintenance_until,omitempty"`
+	MaintenanceUntilLocal *string    `json:"maintenance_until_local,omitempty"`
 }
 
 type dashboardOverviewResponse struct {
@@ -130,13 +134,22 @@ func (d *Deps) handleDashboardOverview(w http.ResponseWriter, r *http.Request) e
 		}
 	}
 
+	until, err := d.maintenanceUntil(r.Context(), hosts)
+	if err != nil {
+		return fail("maintenance", err)
+	}
+	loc := d.location()
 	out := make([]overviewHost, 0, len(hosts))
 	for _, c := range hosts {
-		out = append(out, overviewHost{
+		h := overviewHost{
 			ID: c.ID, OrganizationID: c.OrganizationID, Title: c.Title, IP: c.IP,
 			Mode: c.Mode, Status: c.Status, LastSeen: c.LastSeen,
 			AgentVersion: c.AgentVersion, AgentProtocol: c.AgentProtocol,
-		})
+		}
+		if t, ok := until[c.ID]; ok {
+			h.MaintenanceUntil, h.MaintenanceUntilLocal = &t, localPtr(&t, loc, localDateTime)
+		}
+		out = append(out, h)
 	}
 	writeJSON(w, http.StatusOK, dashboardOverviewResponse{Organizations: orgs, Hosts: out, Alerts: alerts})
 	return nil

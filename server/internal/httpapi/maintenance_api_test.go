@@ -328,3 +328,56 @@ func TestMaintenanceLocalTimeInDaylightSavingGap(t *testing.T) {
 		t.Fatalf("ends_local = %s", *w.EndsLocal)
 	}
 }
+
+// Bakımdaki sunucunun Özet/Sunucular listesinde ve ayrıntısında kesintisiz bakımın bitişi (yerel saatiyle) bulunur;
+// bakımda olmayan sunucuda alan yoktur. Pencere bitirilince alan kalkar.
+func TestHostResponsesCarryMaintenanceUntil(t *testing.T) {
+	a := newAPI(t)
+	root, _ := a.login("root@x.test", "super_admin")
+	setTimezone(a, root, "Europe/Istanbul")
+	ist, err := time.LoadLocation("Europe/Istanbul")
+	if err != nil {
+		t.Fatal(err)
+	}
+	org := a.createOrg(root, "A")
+	busy, idle := a.createPushHost(root, org, "busy"), a.createPushHost(root, org, "idle")
+	now := time.Now().In(ist)
+	end := now.Add(2 * time.Hour).Truncate(time.Minute)
+	var w maintenanceJSON
+	a.expect(201, "POST", maintenancePath, root, once("şimdi", now.Add(-time.Hour).Format("2006-01-02T15:04"), end.Format("2006-01-02T15:04"),
+		[]uuid.UUID{busy.ID}, nil), &w)
+
+	type hostJSON struct {
+		ID         uuid.UUID  `json:"id"`
+		Until      *time.Time `json:"maintenance_until"`
+		UntilLocal *string    `json:"maintenance_until_local"`
+	}
+	var ov struct {
+		Hosts []hostJSON `json:"hosts"`
+	}
+	a.expect(200, "GET", "/api/v1/dashboard/overview", root, nil, &ov)
+	for _, h := range ov.Hosts {
+		switch h.ID {
+		case busy.ID:
+			if h.Until == nil || !h.Until.Equal(end) || *h.UntilLocal != end.Format("2006-01-02T15:04") {
+				t.Errorf("busy host in the overview = %+v, want until %s", h, end)
+			}
+		case idle.ID:
+			if h.Until != nil {
+				t.Errorf("idle host carries maintenance_until %v", h.Until)
+			}
+		}
+	}
+	var detail hostJSON
+	a.expect(200, "GET", "/api/v1/hosts/"+busy.ID.String(), root, nil, &detail)
+	if detail.Until == nil || !detail.Until.Equal(end) {
+		t.Errorf("host detail = %+v", detail)
+	}
+
+	a.expect(200, "POST", maintenancePath+"/"+w.ID.String()+"/end", root, nil, nil)
+	detail = hostJSON{}
+	a.expect(200, "GET", "/api/v1/hosts/"+busy.ID.String(), root, nil, &detail)
+	if detail.Until != nil {
+		t.Errorf("after ending the window: maintenance_until = %v", detail.Until)
+	}
+}

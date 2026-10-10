@@ -379,6 +379,30 @@ func (d *Deps) canManageMaintenance(r *http.Request) (bool, error) {
 	return d.perms.HasPermission(r.Context(), role, "maintenance.manage")
 }
 
+// maintenanceUntil, verilen sunuculardan şu an bakımda olanların kesintisiz bakımının bitişidir (açık pencereler bir
+// kez okunur). Sunucu, doğrudan ya da doğrudan bağlı olduğu organizasyon üzerinden kapsanır.
+func (d *Deps) maintenanceUntil(ctx context.Context, hosts []model.Host) (map[uuid.UUID]time.Time, error) {
+	now := time.Now()
+	ws, err := d.maintenance.Open(ctx, now)
+	if err != nil || len(ws) == 0 {
+		return nil, err
+	}
+	loc := d.location()
+	out := map[uuid.UUID]time.Time{}
+	for _, h := range hosts {
+		var mine []model.MaintenanceWindow
+		for _, w := range ws {
+			if slices.Contains(w.HostIDs, h.ID) || slices.Contains(w.OrgIDs, h.OrganizationID) {
+				mine = append(mine, w)
+			}
+		}
+		if until, ok := maintenance.ActiveAt(mine, loc, now); ok {
+			out[h.ID] = until
+		}
+	}
+	return out, nil
+}
+
 type maintenanceListResponse struct {
 	Timezone string            `json:"timezone"`
 	Windows  []maintenanceView `json:"windows"`

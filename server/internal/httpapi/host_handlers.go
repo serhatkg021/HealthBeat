@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -52,8 +53,12 @@ type hostResponse struct {
 	// SystemState, agent'ın son raporundaki anlık durumlardır (protokol 4: sıcaklık, RAID, kapasite, süreçler,
 	// güncellemeler, saat senkronu, OOM sayacı); yalnızca tek sunucu yanıtında (listelerde her sunucu 1–2 KB büyürdü).
 	SystemState *model.SystemState `json:"system_state,omitempty"`
-	APIToken    *string            `json:"api_token,omitempty"`
-	PullSecret  *string            `json:"pull_secret,omitempty"`
+	// MaintenanceUntil, sunucu şu an bakımdaysa kesintisiz bakımın bittiği andır (MaintenanceUntilLocal kurulumun
+	// saatinde); yalnızca tek sunucu yanıtında.
+	MaintenanceUntil      *time.Time `json:"maintenance_until,omitempty"`
+	MaintenanceUntilLocal *string    `json:"maintenance_until_local,omitempty"`
+	APIToken              *string    `json:"api_token,omitempty"`
+	PullSecret            *string    `json:"pull_secret,omitempty"`
 }
 
 // Validate, istek içinde kalan kuralları denetler; eşik girdileri handler'da çevrilir (çevrilmiş değerleri gerekir).
@@ -194,6 +199,11 @@ func (d *Deps) handleGetHost(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	resp := hostResponse{Host: host}
+	if until, err := d.maintenanceUntil(r.Context(), []model.Host{host}); err != nil {
+		slog.WarnContext(r.Context(), "get host: maintenance", "err", err) // tamamlayıcıdır; yokluğu yanıtı bozmamalı
+	} else if t, ok := until[host.ID]; ok {
+		resp.MaintenanceUntil, resp.MaintenanceUntilLocal = &t, localPtr(&t, d.location(), localDateTime)
+	}
 	if st, err := d.hosts.SystemState(r.Context(), host.ID); err != nil {
 		slog.WarnContext(r.Context(), "get host: system state", "err", err) // tamamlayıcıdır; yokluğu yanıtı bozmamalı
 	} else {
