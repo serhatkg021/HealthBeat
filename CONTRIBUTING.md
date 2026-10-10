@@ -85,9 +85,12 @@ kurallar disiplinle uygulanır.
 
 ```sh
 cd server && TEST_DATABASE_URL=postgres://… go test ./... -race     # veritabanı testleri geçici şemada çalışır
-cd server && go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+cd server && GOTOOLCHAIN=go1.27.1 go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 cd agent && go test ./... -race && ../agent/deploy/install_test.sh
 cd server/panel && npx tsc -b && npm test && npm run build
 scripts/release_test.sh                                            # sürüm betikleri
 scripts/compat_e2e.sh                                              # ingest'e dokunulduysa
 ```
+
+staticcheck satırındaki `GOTOOLCHAIN=go1.27.1` geçicidir: staticcheck v0.8.1 Go 1.27.2'yi okuyamıyor; Go 1.27.2'yi tanıyan
+sürümü çıkınca `ci.yml` ile birlikte kaldırılır.

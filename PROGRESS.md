@@ -4,7 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-06 — Panel yeni düzene geçti: menü İzleme / Alert Yönetimi / Yönetim gruplarına ayrıldı;
+**Son güncelleme:** 2026-10-10 — Server Go 1.27.2'ye geçti (Go 1.27.1 standart kütüphanesindeki güvenlik açıkları);
+staticcheck v0.8.1 Go 1.27.2'yi okuyamadığı için CI'da ve yerelde geçici olarak Go 1.27.1 ile çalışıyor. Önceki: 2026-10-06 —
+Panel yeni düzene geçti: menü İzleme / Alert Yönetimi / Yönetim gruplarına ayrıldı;
 Sunucular, Alert kuralları ve Bildirim sayfaları tek yerde toplandı; sunucu sayfası altı sabit sekme; organizasyon ayarları
 çarkla açılan pencerede; Denetim Kaydı Sistem Araçları'nda; Ctrl+K araması. Gelecek özelliklerin yerleri "Yakında · örnek
 veri" olarak duruyor. Server + panel **2.0.0** yayında (2026-10-01); bunlar "Yayınlanmamış"ta.
