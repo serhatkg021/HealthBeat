@@ -13,25 +13,32 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
 	"healthbeat-server/internal/logging"
+	"healthbeat-server/internal/maintenance"
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/store"
 )
 
 // pending, bir alert değişikliğinin bildirimi için önceden okunanlardır. recipients boşsa bildirim yazılmaz (alıcı yok
-// ya da hiçbirinin kanalı gönderemiyor).
+// ya da hiçbirinin kanalı gönderemiyor). suppressed, sunucunun bakımda olduğunu söyler: bildirim ertelenir.
 type pending struct {
 	recipients []store.Recipient
 	mc         messageContext
+	suppressed bool
 }
 
 // prepare, hostID'deki level seviyesindeki bir alert'in alıcılarını ve bildirim metninin sunucu bağlamını okur. Kanalı
 // kapalı ya da henüz uygulanmamış alıcılar atlanır ve loglanır. Alıcılar okunamazsa hata loglanır ve bildirimsiz devam
 // edilir: alert yine kaydedilir ve panelde görünür.
 func (e *Engine) prepare(ctx context.Context, hostID, orgID uuid.UUID, level string) pending {
+	if e.inMaintenance(ctx, hostID) {
+		slog.DebugContext(ctx, "alert engine: host is in maintenance, notification deferred", "host_id", hostID.String())
+		return pending{suppressed: true}
+	}
 	recipients, err := e.notifs.ResolveRecipients(ctx, hostID, orgID, level)
 	if err != nil {
 		slog.ErrorContext(ctx, "alert engine: resolve recipients", "host_id", hostID.String(), "err", err)
@@ -60,7 +67,7 @@ func (e *Engine) enqueue(ctx context.Context, tx Tx, p pending, event string, al
 	if len(p.recipients) == 0 {
 		return nil
 	}
-	msg := buildMessage(alert, p.mc, *e.panelBaseURL.Load())
+	msg := buildMessage(alert, p.mc, *e.panelBaseURL.Load(), e.location.Load())
 	alertID := alert.ID
 	for _, r := range p.recipients {
 		if _, err := tx.Outbox().Enqueue(ctx, store.OutboxMessage{
@@ -80,14 +87,37 @@ func (e *Engine) enqueue(ctx context.Context, tx Tx, p pending, event string, al
 // Alert kaydı esastır: bildirim kuyruğa yazılamazsa (ör. o anki bir veritabanı hatası) yalnızca bildirim geri alınır,
 // alert değişikliği yine kaydedilir ve ERROR loglanır. Alıcı o olayın e-postasını almaz ama sonraki bildirim (seviye
 // değişimi, çözülme) normal gider; ayrıntı panelde görülür.
+//
+// Sunucu bakımdaysa (p.suppressed) bildirim yazılmaz: açılma ve seviye değişiminde alert'e "bildirimi ertelendi" işareti
+// konur (bakım bitince FlushDeferred güncel durumu bildirir). Açılışı hiç bildirilmemiş (işaretli) bir alert çözülürse
+// çözülmesi de bildirilmez. Gönderilen her bildirimde işaret kalkar.
 func (e *Engine) change(ctx context.Context, p pending, event string, fn func(tx Tx) (model.Alert, bool, error)) error {
 	notified := false
 	err := e.tx.InTx(ctx, func(tx Tx) error {
 		alert, notify, err := fn(tx)
-		if err != nil || !notify || len(p.recipients) == 0 {
+		if err != nil || !notify {
 			return err
 		}
-		if err := tx.Savepoint(ctx, func(sp Tx) error { return e.enqueue(ctx, sp, p, event, alert) }); err != nil {
+		resolved := event == store.AlertEventResolved
+		switch {
+		case p.suppressed:
+			e.markDeferred(ctx, tx, alert, !resolved)
+			return nil
+		case resolved && alert.NotifyPending:
+			e.markDeferred(ctx, tx, alert, false)
+			return nil
+		case len(p.recipients) == 0:
+			if alert.NotifyPending {
+				e.markDeferred(ctx, tx, alert, false)
+			}
+			return nil
+		}
+		if err := tx.Savepoint(ctx, func(sp Tx) error {
+			if err := e.enqueue(ctx, sp, p, event, alert); err != nil {
+				return err
+			}
+			return sp.Alerts().SetNotifyPending(ctx, alert.ID, false)
+		}); err != nil {
 			slog.ErrorContext(ctx, "alert engine: notification could not be queued; the alert is recorded without it",
 				"alert_id", alert.ID.String(), "host_id", alert.HostID.String(), "err", err)
 			return nil
@@ -99,6 +129,86 @@ func (e *Engine) change(ctx context.Context, p pending, event string, fn func(tx
 		e.worker.Wake()
 	}
 	return err
+}
+
+// markDeferred, alert'in "bildirimi ertelendi" işaretini yazar (kayıt noktasında: yazılamazsa alert değişikliği yine
+// kaydedilir, hata loglanır).
+func (e *Engine) markDeferred(ctx context.Context, tx Tx, alert model.Alert, deferred bool) {
+	if err := tx.Savepoint(ctx, func(sp Tx) error { return sp.Alerts().SetNotifyPending(ctx, alert.ID, deferred) }); err != nil {
+		slog.ErrorContext(ctx, "alert engine: maintenance mark could not be written", "alert_id", alert.ID.String(), "deferred", deferred, "err", err)
+	}
+}
+
+// inMaintenance, sunucunun şu an bakımda olup olmadığını söyler. Pencereler okunamazsa bakımda sayılmaz: bildirim
+// susturulmaktansa gitsin (hata loglanır).
+func (e *Engine) inMaintenance(ctx context.Context, hostID uuid.UUID) bool {
+	if e.maintenance == nil {
+		return false
+	}
+	now := e.now()
+	ws, err := e.maintenance.ForHost(ctx, hostID, now)
+	if err != nil {
+		slog.ErrorContext(ctx, "alert engine: read maintenance windows; notifying as usual", "host_id", hostID.String(), "err", err)
+		return false
+	}
+	_, active := maintenance.ActiveAt(ws, e.location.Load(), now)
+	return active
+}
+
+// deferredInterval, ertelenen bildirimlerin denetlenme aralığıdır: bakım bitince bildirim en geç bu kadar sonra gider.
+const deferredInterval = 30 * time.Second
+
+// RunDeferred, bakım yüzünden ertelenen bildirimleri sunucular bakımdan çıktıkça gönderir; ctx bitene kadar çalışır.
+func (e *Engine) RunDeferred(ctx context.Context) {
+	t := time.NewTicker(deferredInterval)
+	defer t.Stop()
+	for {
+		e.FlushDeferred(ctx)
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// FlushDeferred, bildirimi ertelenmiş aktif alert'lerden sunucusu artık bakımda olmayanların güncel durumunu (tek
+// bildirim, "bakım sırasında açıldı" notuyla) kuyruğa yazar ve işaretlerini kaldırır. Durum veritabanındaki işarettir:
+// server yeniden başlasa da bekleyen bildirim kaybolmaz.
+func (e *Engine) FlushDeferred(ctx context.Context) {
+	alerts, err := e.alerts.ListNotifyPending(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "alert engine: list deferred notifications", "err", err)
+		return
+	}
+	busy := map[uuid.UUID]bool{}
+	for _, a := range alerts {
+		if inMaint, seen := busy[a.HostID]; seen && inMaint {
+			continue
+		}
+		host, err := e.hosts.GetByID(ctx, a.HostID)
+		if err != nil {
+			slog.ErrorContext(ctx, "alert engine: deferred notification host", "alert_id", a.ID.String(), "err", err)
+			continue
+		}
+		p := e.prepare(ctx, a.HostID, host.OrganizationID, a.Level)
+		busy[a.HostID] = p.suppressed
+		if p.suppressed {
+			continue
+		}
+		p.mc.Deferred = true
+		err = e.change(ctx, p, store.AlertEventOpened, func(tx Tx) (model.Alert, bool, error) {
+			cur, err := tx.Alerts().GetByID(ctx, a.ID)
+			if err != nil {
+				return model.Alert{}, false, err
+			}
+			// Arada çözülmüş ya da bildirilmiş olabilir.
+			return cur, cur.NotifyPending && cur.Status != model.AlertStatusResolved, nil
+		})
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			slog.ErrorContext(ctx, "alert engine: deferred notification", "alert_id", a.ID.String(), "err", err)
+		}
+	}
 }
 
 // resolveAndNotify bir alert'i çözer ve gerçekten değiştiyse (daha önce zaten çözülmemişse) "çözüldü" bildirimini

@@ -23,6 +23,16 @@ type AlertStore interface {
 	UpdateLevel(ctx context.Context, id uuid.UUID, level string, value, threshold *float64, reopen bool) error
 	Resolve(ctx context.Context, id uuid.UUID, value, threshold *float64) (model.Alert, error)
 	ResolveActiveByHostAndMetric(ctx context.Context, hostID uuid.UUID, alertType string) (model.Alert, error)
+	GetByID(ctx context.Context, id uuid.UUID) (model.Alert, error)
+	// SetNotifyPending ve ListNotifyPending, sunucu bakımdayken ertelenen bildirimlerin işaretidir.
+	SetNotifyPending(ctx context.Context, id uuid.UUID, pending bool) error
+	ListNotifyPending(ctx context.Context) ([]model.Alert, error)
+}
+
+// MaintenanceStore, bir sunucuyu kapsayan bakım pencereleridir (store.MaintenanceWindows); sunucunun o an bakımda olup
+// olmadığını internal/maintenance hesaplar.
+type MaintenanceStore interface {
+	ForHost(ctx context.Context, hostID uuid.UUID, now time.Time) ([]model.MaintenanceWindow, error)
 }
 
 // ThresholdStore, eşik ve durum kuralı çözümlemesidir (store.Thresholds; en özel olan kazanır, bkz. docs/MIMARI.md
@@ -94,7 +104,9 @@ type Stores struct {
 	Metrics       MetricStore
 	Organizations OrgStore
 	Recipients    RecipientStore
-	Tx            TxRunner
+	// Maintenance nil ise hiçbir sunucu bakımda sayılmaz.
+	Maintenance MaintenanceStore
+	Tx          TxRunner
 }
 
 // pgTx, TxRunner'ın PostgreSQL uygulamasıdır.

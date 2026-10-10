@@ -133,6 +133,9 @@ export interface Host {
   // Aynı makine kimliğini bildiren diğer sunucular (çift kayıt uyarısı); yalnızca tek sunucu yanıtında,
   // yalnızca çağıranın görebildikleri. Klon sanal makineler aynı kimliği taşıyabilir: yalnızca uyarıdır.
   same_machine_as?: { id: string; title: string; organization_id: string }[]
+  // Sunucu şu an bakımdaysa kesintisiz bakımın bittiği an (yerel: kurulumun saatinde); yalnızca tek sunucu yanıtında.
+  maintenance_until?: string
+  maintenance_until_local?: string
   // Yalnızca oluşturma/rotate-credentials'tan hemen sonra bir kez bulunur.
   api_token?: string
   pull_secret?: string
@@ -527,6 +530,8 @@ export interface Alert {
   // Yalnızca alert listelerinde: bildirimlerin toplu durumu (en az biri gitmediyse failed, bekleyen varsa pending, hepsi
   // gittiyse sent). Yoksa alert'in bildirimi olmamıştır (ör. alıcı yoktu).
   notification_status?: NotificationStatus
+  // Bir olayının bildirimi sunucu bakımdayken ertelendi; sunucu bakımdan çıkınca güncel durumu bildirilir.
+  notify_pending?: boolean
 }
 
 export type NotificationStatus = 'sent' | 'pending' | 'failed'
@@ -579,6 +584,9 @@ export interface OverviewHost {
   last_seen?: string
   agent_version?: string
   agent_protocol?: number
+  // Sunucu şu an bakımdaysa kesintisiz bakımın bittiği an (yerel: kurulumun saatinde, "2026-10-12T05:00").
+  maintenance_until?: string
+  maintenance_until_local?: string
 }
 
 // GET /api/v1/meta: server sürümü ve agent sürüm politikası (boş = tanımsız).
@@ -587,6 +595,82 @@ export interface Meta {
   protocol: number
   latest_agent_version: string
   min_agent_version: string
+  // Kurulumun saat dilimi (bakım pencereleri ve bildirimler buna göre), o anki ofseti ve server'ın saati.
+  timezone: string
+  utc_offset: string
+  utc_offset_seconds: number
+  server_time: string
+}
+
+// Bakım pencereleri (GET /api/v1/maintenance-windows). Saatler kurulumun saat diliminde yerel saattir
+// ("2026-10-12T01:00", "02:30", "2026-10-12"); start/end gibi alanlar kesin andır (UTC).
+export type MaintenanceRecurrence = 'once' | 'daily' | 'weekly' | 'monthly'
+export type MaintenanceStatus = 'active' | 'scheduled' | 'past'
+
+export interface MaintenanceOccurrence {
+  start: string
+  end: string
+  start_local: string
+  end_local: string
+}
+
+export interface MaintenanceWindow {
+  id: string
+  title: string
+  recurrence: MaintenanceRecurrence
+  starts_at?: string
+  ends_at?: string
+  starts_local?: string
+  ends_local?: string
+  start_time?: string
+  duration_minutes?: number
+  repeat_every: number
+  weekdays?: number[] // 1 = Pazartesi … 7 = Pazar
+  month_day?: number // 1–28, -1 = ayın son günü
+  month_week?: number // 1–4, -1 = son
+  month_weekday?: number
+  valid_from?: string
+  valid_until?: string
+  ended_at?: string
+  ended_local?: string
+  hosts: { id: string; name: string }[]
+  organizations: { id: string; name: string }[]
+  hidden_scope: number
+  status: MaintenanceStatus
+  current?: MaintenanceOccurrence
+  next?: MaintenanceOccurrence
+  // Geçmiş pencerenin son yaşanan tekrarı (son bir yıl içinde).
+  last?: MaintenanceOccurrence
+  upcoming?: MaintenanceOccurrence[]
+  // Atlanmış, henüz gelmemiş tekrarların başlangıçları (yerel saat).
+  skipped_local?: string[]
+  can_manage: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface MaintenanceList {
+  timezone: string
+  windows: MaintenanceWindow[]
+}
+
+// Oluşturma, düzenleme ve önizleme gövdesi.
+export interface MaintenanceInput {
+  title: string
+  recurrence: MaintenanceRecurrence
+  starts_local?: string
+  ends_local?: string
+  start_time?: string
+  duration_minutes?: number
+  repeat_every?: number
+  weekdays?: number[]
+  month_day?: number
+  month_week?: number
+  month_weekday?: number
+  valid_from?: string
+  valid_until?: string
+  host_ids: string[]
+  organization_ids: string[]
 }
 
 export interface DashboardOverview {
@@ -629,6 +713,8 @@ export interface SettingsValues {
   log_error_body_bytes: number
   log_file_max_age_days: number
   log_file_max_total_mb: number
+  // Kurulumun saat dilimi (IANA adı); "" = server'ın saat dilimi.
+  timezone: string
 }
 
 export type SettingsField = keyof SettingsValues

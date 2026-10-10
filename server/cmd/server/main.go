@@ -28,6 +28,7 @@ import (
 	"healthbeat-server/internal/settings"
 	"healthbeat-server/internal/store"
 	"healthbeat-server/internal/tlsreload"
+	"healthbeat-server/internal/tz"
 	"healthbeat-server/internal/version"
 )
 
@@ -100,6 +101,7 @@ func main() {
 	alertEngine := alertengine.New(pool, mailer, cur.PanelBaseURL)
 	// Alert bildirimleri kalıcı kuyruktan (notification_outbox) teslim edilir; gönderilemeyen yeniden denenir.
 	background.Go("alert notifications", alertEngine.RunNotifications)
+	background.Go("deferred maintenance notifications", alertEngine.RunDeferred)
 
 	deps := httpapi.NewDeps(pool, tokenSvc, alertEngine, rateLimits(cur), secrets)
 
@@ -278,6 +280,7 @@ func (t settingsTargets) apply(s model.AppSettings) {
 	t.deps.SetAgentPolicy(httpapi.AgentPolicy{Latest: s.LatestAgentVersion, Min: s.MinSupportedAgentVersion})
 	t.deps.SetPanelBaseURL(s.PanelBaseURL)
 	t.alerts.SetPanelBaseURL(s.PanelBaseURL)
+	t.alerts.SetLocation(tz.Resolve(s.Timezone))
 	t.purger.SetDays(retentionDays(s))
 }
 

@@ -12,11 +12,16 @@ import type { Host, HostThresholdsResponse, DockerContainerReport, MetricPoint }
 import { StatusBadge } from '../components/StatusBadge'
 import { PageHeader } from '../components/PageHeader'
 import { Link } from 'react-router-dom'
-import { Bell, Boxes, ChartLine, LayoutDashboard, MonitorCog, Settings, TriangleAlert } from 'lucide-react'
+import { Bell, Boxes, CalendarPlus, ChartLine, LayoutDashboard, MonitorCog, Settings, TriangleAlert, Wrench } from 'lucide-react'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
 import { useTab } from '../components/useTab'
 import { hostStatusLabel } from '../labels'
 import { useDocumentTitle } from '../components/useDocumentTitle'
+import { useAuth } from '../auth/AuthContext'
+import { InfoTip } from '../components/InfoTip'
+import { useServerClock } from '../components/useServerClock'
+import { MAINTENANCE_PATH } from '../navigation'
+import { formatLocal } from './maintenance'
 
 // Sekmeler sabittir: yeni bir özellik yeni sekme açmaz, bu altısından birine girer (zamana bağlı metrikler
 // Performans'a, sunucuda çalışanlar Servisler'e, değişmeyen bilgiler Envanter'e).
@@ -38,6 +43,8 @@ export function HostDetailPage() {
   const { id } = useParams<{ id: string }>()
 
   const agentPolicy = useAgentPolicy()
+  const { can } = useAuth()
+  const clock = useServerClock()
   const [host, setHost] = useState<Host | null>(null)
   // Son rapor edilen değerler — "Genel" sekmesi grafik değil, en güncel durumu gösterir; geçmiş "Performans"
   // sekmesinde seçilen aralıkla ayrıca yüklenir (bkz. HostPerformance).
@@ -77,9 +84,39 @@ export function HostDetailPage() {
             'Sunucu'
           )
         }
-        badge={host && <StatusBadge tone={host.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(host.status)}</StatusBadge>}
+        badge={
+          host && (
+            <>
+              <StatusBadge tone={host.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(host.status)}</StatusBadge>
+              {can('maintenance.manage') && (
+                <Link className="btn btn-sm title-action" to={`${MAINTENANCE_PATH}?sekme=yeni&sunucu=${host.id}`}>
+                  <CalendarPlus size={14} strokeWidth={1.9} />
+                  Bakım planla
+                </Link>
+              )}
+            </>
+          )
+        }
       />
       {error && <div className="error-banner">{error}</div>}
+      {host?.maintenance_until_local && (
+        <div className="maintenance-strip" role="status">
+          <Wrench size={15} strokeWidth={1.9} />
+          <strong>Bakımda</strong>
+          <span className="tnum">
+            bitiş {formatLocal(host.maintenance_until_local)}
+            {clock && ` (${clock.short})`}
+          </span>
+          <InfoTip label="Bakım">
+            Bu sürede alert'ler kaydedilir ve panelde görünür; bildirimleri bakım bitince, hâlâ açıksa gönderilir.
+          </InfoTip>
+          {can('maintenance.view') && (
+            <Link to={MAINTENANCE_PATH} className="maintenance-strip-link">
+              Bakım pencereleri
+            </Link>
+          )}
+        </div>
+      )}
       {host?.same_machine_as && host.same_machine_as.length > 0 && (
         <div className="notice notice-warning same-machine-warning">
           <div className="notice-title">

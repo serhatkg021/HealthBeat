@@ -80,6 +80,8 @@ Tam şema, ilişkiler ve kısıtlar: **`docs/VERITABANI.md`** (tek kaynak). Öne
   panelde yapılır.
 - **Yetkiler veritabanındadır:** `roles`, `permissions`, `role_permissions`. Kod `if role == "admin"` demez; yetki
   denetimi her zaman `permission_key` üzerindendir (`internal/rbac`). İleride özel roller eklemek yeni satırdır.
+- **Bakım pencereleri** (`maintenance_windows` + kapsam ve tek tekrar istisnası tabloları) bölüm 8'de anlatılır; tekrarlar
+  kurulumun saat dilimine (`app_settings.timezone`) göre hesaplanır.
 - **Bildirim kuralları** (`notification_routes`) ve **iletişim kişileri** (`organization_contacts`) bölüm 8'de anlatılır.
 - Kullanıcı tablosunda ileride iki faktörlü doğrulama için `two_factor_enabled` / `two_factor_channel` alanları hazırdır;
   şimdilik yalnızca saklanır.
@@ -106,6 +108,9 @@ Kurallar:
   `system.queue.view` (bildirim kuyruğu), `system.cache.view` (server sürecinin bellekteki durumu: izin önbelleği, hız
   sınırlayıcılar, pull zamanlayıcı, güvenilen proxy'ler, TLS sertifikası), `system.logs.view` (kalıcı log dosyalarının gün
   gün okunması ve indirilmesi; denetim kaydına yazılır); varsayılan olarak yalnızca süper admindedir.
+- **Bakım pencereleri:** `maintenance.view` (üç rol) ve `maintenance.manage` (süper admin, organizasyon admin). Kullanıcı
+  kapsamında en az bir sunucusu ya da organizasyonu olan pencereyi görür; görmediği kapsam sayı olarak yazılır. Düzenlemek,
+  bitirmek ve silmek için pencerenin bütün kapsamını yönetebilmelidir.
 - Bir sunucu oluşturulurken organizasyon seçimi zorunludur (bkz. bölüm 6).
 
 Uygulama: her istek iki denetimden geçer. **İzin** (ne yapabilir) `role_permissions`'tan gelir (`internal/rbac`; rol başına
@@ -188,6 +193,7 @@ GET    /api/v1/me (+ permissions) | /me/hosts | /meta        PATCH /api/v1/me (k
        /api/v1/thresholds[/:id]                 varsayılan eşikler (genel ya da organizasyon)
        /api/v1/status-rules                     durum kuralları (genel ya da organizasyon)
        /api/v1/notification-routes[/:id]        + .../organizations/:id|hosts/:id/notification-routes | -recipients
+       /api/v1/maintenance-windows[/:id]        + POST …/preview | …/:id/end | …/:id/end-occurrence | …/:id/skip-next
 GET    /api/v1/alerts?status=open&level=…       POST /api/v1/alerts/:id/acknowledge · GET …/:id/notifications
        /api/v1/users[/:id]                      + organizations | hosts atamaları
 GET    /api/v1/audit-logs | /dashboard/summary | /dashboard/overview
@@ -248,6 +254,21 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
 - **Alert kaydı** tetiklendiği andaki ölçümü ve eşiği taşır (panel "%97,5 (eşik %95)" gösterir).
 - **Dedup:** aktif alert varken aynı olay için yeniden bildirim gitmez. Seviye değiştiğinde (iki yönde de) yeni seviyenin
   tüm alıcılarına yeniden e-posta gider; açılış ve çözülme de bildirilir.
+- **Bakım pencereleri:** planlı işte (yeniden başlatma, DC bakımı) e-posta yağmasın diye. Pencere tek seferlik ya da
+  günlük / haftalık / aylık tekrarlıdır ve sunucuları ve/veya organizasyonları kapsar (organizasyon yalnızca doğrudan bağlı
+  sunucularını; alt organizasyonlar ayrıca seçilir). Bakımdaki sunucuda alert'ler her zamanki gibi açılır, seviye değiştirir
+  ve çözülür; yalnızca **bildirim gitmez**: olay alert'e `notify_pending` olarak işaretlenir. Bir iş 30 saniyede bir
+  işaretli alert'lere bakar; sunucu bakımdan çıkınca hâlâ aktif olan alert'in **güncel durumunu** tek bildirimle ("bakım
+  sırasında açıldı" notuyla) kuyruğa yazar ve işareti kaldırır. Bakımda çözülen alert'in çözülmesi bildirilmez. Durum
+  veritabanındaki işarettir, server yeniden başlasa da bekleyen bildirim kaybolmaz. Pencereler okunamazsa sunucu bakımda
+  sayılmaz (bildirim susturulmaktansa gider). Tekrar hesabı saf Go paketi `internal/maintenance`'tadır: tekrarları
+  kurulumun saat diliminde üretir (yaz saati geçişinde olmayan saat ileri kayar, iki kez yaşanan saatte ilki alınır),
+  "Sıradaki tekrarı atla" ve "Bu tekrarı bitir" istisnalarını uygular. API yerel saati duvar saati olarak alır ve verir
+  (`"2026-10-12T01:00"`, `"02:30"`); kesin ana (UTC) çeviriyi server yapar.
+- **Saat dilimi:** kurulum geneli tek ayardır (Ayarlar → Saat dilimi, `app_settings.timezone`; boşsa server'ın `TZ`'si, o da
+  yoksa UTC; `internal/tz`, saat dilimi verisi binary'ye gömülü). Tekrarlı bakım pencereleri ve e-postalardaki saatler buna
+  göredir; e-posta saati dilimin adı ve o andaki ofsetiyle yazar ("11.10.2026 00:57:21 (Europe/Istanbul, UTC+3)").
+  `/api/v1/meta` dilimi, ofseti ve server saatini döndürür; panel alt çubukta server saatini gösterir.
 - **Offline tespiti:** pull'da agent'a ulaşılamazsa, push'ta beklenen sürede veri gelmezse ayrı bir `host_offline` alert'i.
   Seçili bir disk üst üste birkaç raporda görünmezse `disk_missing`.
 - **Kime gider — sistem sahipleri ve ek alıcılar:** bildirimin amacı **sistem sahibidir**; organizasyon ve sunucu kuralları
@@ -302,6 +323,11 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   yanadır. Devralınan değerin kaynağı (sistem ya da hangi organizasyon) yazılır; kapsamdaki değişiklikler tek Kaydet ile
   birlikte kaydedilir. Konu kataloğu `server/panel/src/pages/ruleTopics.ts`'tedir: yeni bir eşik türü ya da durum kuralı
   bir konuya eklenmezse panel testi kırılır. **Bildirim** sayfası kanalları, sistem sahiplerini ve bildirim kurallarını toplar.
+- **Bakım pencereleri** sayfası (Alert Yönetimi altında): pencere listesi (tür, kapsam sayısı, süren / sıradaki / son
+  tekrar, durum; satır açılınca kural, geçerlilik, kapsam ve sonraki 3 tekrar), form (önizlemeli) ve ⋯ menüsünde Düzenle,
+  Bu tekrarı bitir / Sıradaki tekrarı atla, Pencereyi bitir, Sil. Bakımdaki sunucu sunucu sayfasında şeritle, Sunucular ve
+  Özet'te "Bakımda" rozetiyle, bildirimi ertelenmiş alert "Bakım bitince" işaretiyle görünür. Bakım ekranlarındaki tarihler
+  `YYYY.AA.GG SS:DD` biçimindedir, kısa ofsetle ("(+3)").
 - **Organizasyon sayfası:** sunucular, sunucu ekleme sihirbazı, iletişim kişileri; ayarlar (ağaçtaki yer, adres) çarkla açılan
   pencerede.
 - Harici görselleştirme araçları (Grafana/Prometheus) kullanılmaz; grafikler uygulama içindedir.
@@ -315,7 +341,7 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
 
 Organizasyon ağacı, CPU/RAM/disk/Docker metrikleri, sistem sağlığı ve performans verileri (protokol 4: PSI, disk ve ağ
 G/Ç'si, systemd servisleri, sıcaklık, RAID, saat senkronu …), push ve pull, sunucu yönetimi, hiyerarşik eşikler ve
-mount/container/disk/sensör/servis başına eşikler, süre koşulu ve durum kuralları, e-posta alert'i ve bildirim kuralları, offline/disk kayıp tespiti, roller ve yetkiler, panel auth (JWT, şifre
+mount/container/disk/sensör/servis başına eşikler, süre koşulu ve durum kuralları, e-posta alert'i ve bildirim kuralları, bakım pencereleri, offline/disk kayıp tespiti, roller ve yetkiler, panel auth (JWT, şifre
 sıfırlama, denetim kaydı), in-house dashboard, sürüm uyumluluğu, paket dağıtımı.
 
 ### Sonra (henüz yok)

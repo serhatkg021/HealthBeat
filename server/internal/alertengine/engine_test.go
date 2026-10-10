@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -367,6 +368,25 @@ func TestEmailOmitsPanelLinkWhenNotConfigured(t *testing.T) {
 	msgs = e.messages()
 	if len(msgs) != 2 || !strings.Contains(msgs[1].Text(), "Panel: https://panel.test/hosts/"+e.host.String()) {
 		t.Fatalf("after SetPanelBaseURL: %d emails, last:\n%s", len(msgs), msgs[len(msgs)-1].Text())
+	}
+}
+
+// Saat dilimi ayarı panelden değişince sonraki bildirimlerin zamanları o saatte, adı ve ofsetiyle yazılır.
+func TestEmailTimesFollowTheInstallationTimezone(t *testing.T) {
+	e := newEnvWithPanel(t, "")
+	e.feedCPU(97)
+	if msgs := e.messages(); len(msgs) != 1 || !strings.Contains(msgs[0].Text(), " (UTC)") {
+		t.Fatalf("default: want UTC times:\n%s", msgs[0].Text())
+	}
+	istanbul, err := time.LoadLocation("Europe/Istanbul")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.engine.SetLocation(istanbul)
+	e.feedCPU(20) // çözülme bildirimi
+	msgs := e.messages()
+	if len(msgs) != 2 || strings.Count(msgs[1].Text(), "(Europe/Istanbul, UTC+3)") != 2 {
+		t.Fatalf("after SetLocation: want both times in Istanbul time:\n%s", msgs[len(msgs)-1].Text())
 	}
 }
 

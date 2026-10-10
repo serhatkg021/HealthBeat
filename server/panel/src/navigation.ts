@@ -76,7 +76,7 @@ export function navigation(can: Can): Navigation {
       label: 'Alert Yönetimi',
       items: [
         ...item(can('threshold.view'), { id: 'kurallar', to: ALERT_RULES_PATH, label: 'Alert kuralları' }),
-        { id: 'bakim', to: MAINTENANCE_PATH, label: 'Bakım pencereleri' },
+        ...item(can('maintenance.view'), { id: 'bakim', to: MAINTENANCE_PATH, label: 'Bakım pencereleri' }),
         ...item(notifications.length > 0, { id: 'bildirim', to: NOTIFICATIONS_PATH, label: 'Bildirim' }),
       ],
     },

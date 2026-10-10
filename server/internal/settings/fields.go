@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"healthbeat-server/internal/model"
+	"healthbeat-server/internal/tz"
 	"healthbeat-server/internal/version"
 )
 
@@ -30,6 +31,7 @@ const (
 	FieldLogErrorBodyBytes              Field = "log_error_body_bytes"
 	FieldLogFileMaxAgeDays              Field = "log_file_max_age_days"
 	FieldLogFileMaxTotalMB              Field = "log_file_max_total_mb"
+	FieldTimezone                       Field = "timezone"
 )
 
 // Fields, bütün ayarlardır (sabit sıra; store.SettingsColumns ile aynı küme — bkz. TestFieldsMatchStoreColumns).
@@ -40,6 +42,7 @@ var Fields = []Field{
 	FieldRateLimitAuthFailuresPerMinute, FieldRateLimitIngestPerMinute,
 	FieldPanelBaseURL,
 	FieldLogLevel, FieldLogErrorBodyBytes, FieldLogFileMaxAgeDays, FieldLogFileMaxTotalMB,
+	FieldTimezone,
 }
 
 // intRange, sayısal bir ayarın izin verilen aralığıdır; migration 000005'teki CHECK kısıtlarıyla aynıdır
@@ -87,6 +90,7 @@ type Patch struct {
 	LogErrorBodyBytes              *int    `json:"log_error_body_bytes"`
 	LogFileMaxAgeDays              *int    `json:"log_file_max_age_days"`
 	LogFileMaxTotalMB              *int    `json:"log_file_max_total_mb"`
+	Timezone                       *string `json:"timezone"`
 }
 
 // values, Patch'te verilen alanları döndürür.
@@ -116,6 +120,7 @@ func (p Patch) values() map[Field]any {
 	num(FieldLogErrorBodyBytes, p.LogErrorBodyBytes)
 	num(FieldLogFileMaxAgeDays, p.LogFileMaxAgeDays)
 	num(FieldLogFileMaxTotalMB, p.LogFileMaxTotalMB)
+	str(FieldTimezone, p.Timezone)
 	return out
 }
 
@@ -137,6 +142,7 @@ func Values(s model.AppSettings) map[Field]any {
 		FieldLogErrorBodyBytes:              s.LogErrorBodyBytes,
 		FieldLogFileMaxAgeDays:              s.LogFileMaxAgeDays,
 		FieldLogFileMaxTotalMB:              s.LogFileMaxTotalMB,
+		FieldTimezone:                       s.Timezone,
 	}
 }
 
@@ -160,6 +166,12 @@ func normalize(in map[Field]any) (map[Field]any, error) {
 			s, err := ParsePanelBaseURL(v.(string))
 			if err != nil {
 				return nil, &FieldError{f, "geçerli bir adres değil (scheme://alan-adı[:port], ör. https://panel.example.com)"}
+			}
+			out[f] = s
+		case FieldTimezone:
+			s := strings.TrimSpace(v.(string))
+			if s != "" && !tz.Valid(s) {
+				return nil, &FieldError{f, "geçerli bir saat dilimi değil (IANA adı, ör. Europe/Istanbul); boş bırakılırsa server'ın saat dilimi kullanılır"}
 			}
 			out[f] = s
 		case FieldLogLevel:

@@ -38,6 +38,10 @@ type AppSettings struct {
 	LogFileMaxAgeDays int
 	LogFileMaxTotalMB int
 
+	// Timezone, kurulumun saat dilimidir (IANA adı, ör. Europe/Istanbul): tekrarlı bakım pencereleri ve bildirimlerdeki
+	// zamanlar buna göredir. "" = server sürecinin TZ'si, o da yoksa UTC (bkz. internal/tz).
+	Timezone string
+
 	UpdatedAt time.Time
 	UpdatedBy *uuid.UUID
 }

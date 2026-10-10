@@ -30,6 +30,10 @@ import type {
   DiskAlertSettings,
   DockerContainerReport,
   MetricPoint,
+  MaintenanceInput,
+  MaintenanceList,
+  MaintenanceOccurrence,
+  MaintenanceWindow,
   Meta,
   MetricType,
   MountOverrides,
@@ -74,6 +78,21 @@ export const authApi = {
 export const dashboardApi = {
   summary: () => apiRequest<DashboardSummary>('/api/v1/dashboard/summary'),
   overview: () => apiRequest<DashboardOverview>('/api/v1/dashboard/overview'),
+}
+
+const maintenancePath = '/api/v1/maintenance-windows'
+
+export const maintenanceApi = {
+  list: () => apiRequest<MaintenanceList>(maintenancePath),
+  get: (id: string) => apiRequest<MaintenanceWindow>(`${maintenancePath}/${id}`),
+  preview: (input: MaintenanceInput) =>
+    apiRequest<{ timezone: string; upcoming: MaintenanceOccurrence[] }>(`${maintenancePath}/preview`, { method: 'POST', body: input }),
+  create: (input: MaintenanceInput) => apiRequest<MaintenanceWindow>(maintenancePath, { method: 'POST', body: input }),
+  update: (id: string, input: MaintenanceInput) => apiRequest<MaintenanceWindow>(`${maintenancePath}/${id}`, { method: 'PUT', body: input }),
+  remove: (id: string) => apiRequest<void>(`${maintenancePath}/${id}`, { method: 'DELETE' }),
+  end: (id: string) => apiRequest<MaintenanceWindow>(`${maintenancePath}/${id}/end`, { method: 'POST' }),
+  endOccurrence: (id: string) => apiRequest<MaintenanceWindow>(`${maintenancePath}/${id}/end-occurrence`, { method: 'POST' }),
+  skipNext: (id: string) => apiRequest<MaintenanceWindow>(`${maintenancePath}/${id}/skip-next`, { method: 'POST' }),
 }
 
 export const metaApi = {

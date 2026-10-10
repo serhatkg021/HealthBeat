@@ -509,6 +509,18 @@ code, .mono {
   font-variant-numeric: tabular-nums;
 }
 
+/* Alt çubukta sürümün yanında server saati (kurulumun saat dilimi); dar ekranda gizlenir. */
+.version-note.server-clock::before {
+  content: '·';
+  margin-right: 8px;
+}
+
+@media (max-width: 640px) {
+  .version-note.server-clock {
+    display: none;
+  }
+}
+
 /* Panel ve server sürümü farklı: yalnızca biri yeniden kurulmuş olabilir. */
 .version-note.mismatch {
   color: var(--status-warning-text);
@@ -3129,6 +3141,25 @@ body.scroll-lock {
   flex: 0 0 64px;
 }
 
+/* Ayarlarda değişmiş alanın "değiştirildi" rozeti ve "Varsayılana dön" düğmesi kutunun sağındadır; yalnızca o alanın
+   kutusu kısalır. */
+.input-with-unit > .setting-state {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .input-with-unit:has(> .setting-state) {
+    flex-wrap: wrap;
+  }
+
+  .input-with-unit > .setting-state {
+    flex-basis: 100%;
+  }
+}
+
 .link-btn {
   display: inline-flex;
   align-items: center;
@@ -4563,4 +4594,344 @@ textarea {
   .inventory-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Bakım pencereleri: liste araç çubuğundaki server saati, form ızgarası, gün seçici, kapsam ağacı, sonraki tekrarlar. */
+.server-clock-inline {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.form-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-card.maintenance-form {
+  max-width: 760px;
+}
+
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.input-narrow {
+  width: 90px;
+}
+
+.weekday-picker button {
+  min-width: 44px;
+}
+
+/* Form satırındaki düğme grupları içerikleri kadar geniştir; ⓘ'li ve ⓘ'siz etiketler aynı hizada durur. */
+.maintenance-form .segmented {
+  align-self: flex-start;
+}
+
+.maintenance-form .field-head {
+  min-height: 22px;
+}
+
+.scope-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scope-tree {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.scope-org-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scope-org-row .check-row {
+  gap: 8px;
+}
+
+.icon-btn.scope-toggle {
+  width: 24px;
+  height: 24px;
+}
+
+.check-row.scope-host {
+  padding-left: 28px;
+}
+
+.scope-summary {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.maintenance-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 16px;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+/* Sonraki tekrarlar: eşit genişlikte hücreler (en çok 3); altında atlananların notu. */
+.occurrence-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.occurrence-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 6px;
+  max-width: 900px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.occurrence-grid li {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.occurrence-note {
+  font-size: 12.5px;
+}
+
+/* Bakım pencereleri tablosu: satıra ya da oka tıklayınca altında ayrıntı açılır. */
+.maintenance-table th.expand-col,
+.maintenance-table td.expand-col {
+  width: 40px;
+  padding-right: 0;
+}
+
+.maintenance-row {
+  cursor: pointer;
+}
+
+.maintenance-row.open td {
+  border-bottom-color: transparent;
+}
+
+.expand-button {
+  width: 28px;
+  height: 28px;
+}
+
+.expand-button svg {
+  transition: transform 0.15s;
+}
+
+.expand-button[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+
+.maintenance-detail td {
+  padding: 4px 18px 16px 58px;
+  background: var(--surface-2);
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 8px 0 0;
+}
+
+.detail-grid dt {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding-top: 2px;
+}
+
+.detail-grid dd {
+  margin: 0;
+  font-size: 13.5px;
+}
+
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip-static {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-1);
+  font-size: 12.5px;
+}
+
+/* Satır işlemleri menüsü (ekrana sabitlenir; tablo kartı taşanı kesse de görünür). */
+.icon-btn.row-menu-button {
+  width: 30px;
+  height: 30px;
+}
+
+.row-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 200px;
+  padding: 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-menu-item:hover,
+.row-menu-item:focus-visible {
+  background: var(--surface-2);
+}
+
+.row-menu-item svg {
+  color: var(--text-secondary);
+}
+
+.row-menu-item.danger,
+.row-menu-item.danger svg {
+  color: var(--status-critical);
+}
+
+.row-menu-separator {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--border);
+}
+
+@media (max-width: 860px) {
+  /* Kart düzeninde ok sol üstte, ⋯ sağ üstte; ayrıntı kartın altında tam genişlikte. */
+  .maintenance-table tr.maintenance-row {
+    position: relative;
+    padding-left: 44px;
+    padding-right: 48px;
+  }
+
+  .maintenance-table td.expand-col {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .maintenance-table tr.maintenance-row td.actions {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .maintenance-detail td {
+    display: block;
+    padding: 4px 14px 14px;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .detail-grid dd {
+    margin-bottom: 8px;
+  }
+}
+
+@media (max-width: 640px) {
+  .form-grid-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Zaman sütunu: başlıkta açıklama düğmesi, hücrede hangi tekrar olduğunu söyleyen küçük etiket. */
+.th-with-tip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.time-kind {
+  display: inline-block;
+  min-width: 58px;
+  margin-right: 8px;
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+/* Sunucu sayfasında bakımdaki sunucunun şeridi (sekmelerin üstünde, her sekmede görünür). */
+.maintenance-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, var(--status-warning) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--status-warning) 12%, var(--surface-1));
+  font-size: 13.5px;
+}
+
+.maintenance-strip > svg {
+  color: var(--status-warning-text);
+}
+
+.maintenance-strip-link {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+/* Durum rozeti ve yanındaki "Bakımda" rozeti. */
+.badge-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Başlıktaki küçük işlem düğmesi (ör. sunucu sayfasında "Bakım planla"): başlık yazısının boyutunu almaz. */
+.page-title .title-action {
+  margin-left: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
 }

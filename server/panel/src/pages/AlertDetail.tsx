@@ -139,7 +139,15 @@ export function AlertDetail({ alert, hostTitle, onClose }: { alert: Alert | null
 }
 
 // NotificationBadge, alert listelerindeki "Bildirim" sütunudur: bildirimlerin toplu durumu ya da (hiç bildirim yoksa) "—".
-export function NotificationBadge({ status }: { status?: NotificationStatus }) {
+// deferred: bir olayının bildirimi sunucu bakımdayken ertelendi; bakım bitince, alert hâlâ açıksa gönderilir.
+export function NotificationBadge({ status, deferred }: { status?: NotificationStatus; deferred?: boolean }) {
+  if (deferred) {
+    return (
+      <StatusBadge tone="neutral" title="Sunucu bakımda: bildirim bakım bitince, alert hâlâ açıksa gönderilir.">
+        Bakım bitince
+      </StatusBadge>
+    )
+  }
   if (!status) return <span className="muted" title="Bu alert için bildirim yazılmadı">—</span>
   return <StatusBadge tone={notificationStatusTone(status)}>{notificationStatusLabel(status)}</StatusBadge>
 }

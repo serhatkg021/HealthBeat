@@ -630,6 +630,9 @@ type Alert struct {
 	// NotificationFailed, bekleyen varsa NotificationPending, hepsi gittiyse NotificationSent; boş = bildirim yok
 	// (ör. alıcı yok). Tek alert yanıtlarında doldurulmaz.
 	NotificationStatus string `json:"notification_status,omitempty"`
+	// NotifyPending, bir olayının bildirimi sunucu bakımdayken ertelenmiş aktif alert'tir: sunucu bakımdan çıkınca
+	// güncel durumu bildirilir (bkz. internal/alertengine, migration 000008).
+	NotifyPending bool `json:"notify_pending,omitempty"`
 }
 
 // Bir bildirimin (ya da alert'in bildirimlerinin toplu) teslim durumu.

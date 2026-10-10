@@ -111,7 +111,7 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
                   <td className="muted" data-label="Çözülme">{a.resolved_at ? new Date(a.resolved_at).toLocaleString() : '—'}</td>
                 )}
                 <td data-label="Bildirim">
-                  <NotificationBadge status={a.notification_status} />
+                  <NotificationBadge status={a.notification_status} deferred={a.notify_pending} />
                 </td>
                 <td className="actions">
                   <button className="btn btn-sm btn-ghost" onClick={() => setSelected(a)}>

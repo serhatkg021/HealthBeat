@@ -44,6 +44,16 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/notification-routes/{id}", d.requirePermission("notification.edit", handle(d.handleDeleteRoute)))
 
 	// Sistem ayarları: bkz. settings_handlers.go.
+	mux.HandleFunc("GET /api/v1/maintenance-windows", d.requirePermission("maintenance.view", handle(d.handleListMaintenance)))
+	mux.HandleFunc("POST /api/v1/maintenance-windows/preview", d.requirePermission("maintenance.view", handle(d.handlePreviewMaintenance)))
+	mux.HandleFunc("GET /api/v1/maintenance-windows/{id}", d.requirePermission("maintenance.view", handle(d.handleGetMaintenance)))
+	mux.HandleFunc("POST /api/v1/maintenance-windows", d.requirePermission("maintenance.manage", handle(d.handleCreateMaintenance)))
+	mux.HandleFunc("PUT /api/v1/maintenance-windows/{id}", d.requirePermission("maintenance.manage", handle(d.handleUpdateMaintenance)))
+	mux.HandleFunc("DELETE /api/v1/maintenance-windows/{id}", d.requirePermission("maintenance.manage", handle(d.handleDeleteMaintenance)))
+	mux.HandleFunc("POST /api/v1/maintenance-windows/{id}/end", d.requirePermission("maintenance.manage", handle(d.handleEndMaintenance)))
+	mux.HandleFunc("POST /api/v1/maintenance-windows/{id}/end-occurrence", d.requirePermission("maintenance.manage", handle(d.handleEndOccurrence)))
+	mux.HandleFunc("POST /api/v1/maintenance-windows/{id}/skip-next", d.requirePermission("maintenance.manage", handle(d.handleSkipNext)))
+
 	mux.HandleFunc("GET /api/v1/settings", d.requirePermission("settings.view", handle(d.handleGetSettings)))
 	mux.HandleFunc("PATCH /api/v1/settings", d.requirePermission("settings.manage", handle(d.handleUpdateSettings)))
 	mux.HandleFunc("POST /api/v1/settings/reset", d.requirePermission("settings.manage", handle(d.handleResetSettings)))

@@ -35,12 +35,16 @@ type Engine struct {
 	hosts         HostStore
 	organizations OrgStore
 	notifs        RecipientStore
+	maintenance   MaintenanceStore
 	tx            TxRunner
 	// notifiers, kanal adına göre bildirim kanallarıdır (bkz. notify.Notifier); olmayan kanalın alıcıları atlanır.
 	notifiers map[string]notify.Notifier
 	// panelBaseURL, bildirimlerde alert'e doğrudan giden bir bağlantı eklemek için (boşsa satır hiç eklenmez). Panelden
 	// değişebilir (SetPanelBaseURL); her bildirim kuyruğa yazılırken okunur.
 	panelBaseURL atomic.Pointer[string]
+	// location, bildirimlerdeki zamanların saat dilimidir (kurulumun saat dilimi; varsayılan UTC). Panelden değişebilir
+	// (SetLocation).
+	location atomic.Pointer[time.Location]
 	// worker, alert bildirimlerini kuyruktan teslim eder; DB'siz testlerde nil.
 	worker *outbox.Worker
 	// now, süre koşullarının saatidir (testler değiştirir).
@@ -60,6 +64,7 @@ func New(pool *pgxpool.Pool, mailer *notify.Mailer, panelBaseURL string) *Engine
 		Hosts:         store.NewHosts(pool, nil), // yalnızca host adlarını okur; pull secret'lara asla dokunmaz
 		Organizations: store.NewOrganizations(pool),
 		Recipients:    store.NewNotifications(pool),
+		Maintenance:   store.NewMaintenanceWindows(pool),
 		Tx:            pgTx{pool: pool, alerts: alerts, outbox: queue},
 	}, []notify.Notifier{email}, panelBaseURL, outbox.NewWorker(queue, []string{store.OutboxKindAlert}, email))
 }
@@ -75,12 +80,14 @@ func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, 
 		hosts:         st.Hosts,
 		organizations: st.Organizations,
 		notifs:        st.Recipients,
+		maintenance:   st.Maintenance,
 		tx:            st.Tx,
 		notifiers:     make(map[string]notify.Notifier, len(notifiers)),
 		worker:        worker,
 		now:           time.Now,
 	}
 	e.SetPanelBaseURL(panelBaseURL)
+	e.SetLocation(time.UTC)
 	for _, n := range notifiers {
 		e.notifiers[n.Channel()] = n
 	}
@@ -100,6 +107,14 @@ func (e *Engine) Notifier(channel string) (personal, implemented bool) {
 func (e *Engine) SetPanelBaseURL(url string) {
 	url = strings.TrimSuffix(url, "/")
 	e.panelBaseURL.Store(&url)
+}
+
+// SetLocation, bildirimlerdeki zamanların saat dilimini değiştirir (nil = UTC).
+func (e *Engine) SetLocation(loc *time.Location) {
+	if loc == nil {
+		loc = time.UTC
+	}
+	e.location.Store(loc)
 }
 
 // Report, bir agent raporunun alert motorunu ilgilendiren kısmıdır. Metrik satırı EvaluateReport'tan önce yazılmış

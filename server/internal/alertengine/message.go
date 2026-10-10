@@ -10,6 +10,7 @@ import (
 
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/notify"
+	"healthbeat-server/internal/tz"
 )
 
 // messageContext, bildirim metninin alert dışındaki bilgileridir (bkz. Engine.messageContext).
@@ -18,10 +19,13 @@ type messageContext struct {
 	HostTitle string
 	HostIP    string
 	Hostname  string
+	// Deferred, bildirimin sunucu bakımdan çıkınca gönderildiğini söyler (metne not eklenir).
+	Deferred bool
 }
 
-// buildMessage, alert bildiriminin konusunu ve gövdesini üretir. Saf fonksiyondur: aynı girdi her zaman aynı metni verir.
-func buildMessage(alert model.Alert, mc messageContext, panelBaseURL string) notify.Message {
+// buildMessage, alert bildiriminin konusunu ve gövdesini üretir; zamanlar loc'ta yazılır. Saf fonksiyondur: aynı girdi
+// her zaman aynı metni verir.
+func buildMessage(alert model.Alert, mc messageContext, panelBaseURL string, loc *time.Location) notify.Message {
 	hostLabel := mc.HostTitle
 	if mc.HostIP != "" {
 		hostLabel = fmt.Sprintf("%s(%s)", mc.HostTitle, mc.HostIP)
@@ -55,10 +59,13 @@ func buildMessage(alert model.Alert, mc messageContext, panelBaseURL string) not
 	if alert.Value != nil && alert.Threshold != nil {
 		fmt.Fprintf(&body, "Değer: %s\n", formatAlertReading(alert.AlertType, *alert.Value, *alert.Threshold))
 	}
-	fmt.Fprintf(&body, "Oluşturulma: %s\n", formatAlertTime(alert.CreatedAt))
+	fmt.Fprintf(&body, "Oluşturulma: %s\n", formatAlertTime(alert.CreatedAt, loc))
 	if resolved && alert.ResolvedAt != nil {
-		fmt.Fprintf(&body, "Çözülme: %s\n", formatAlertTime(*alert.ResolvedAt))
+		fmt.Fprintf(&body, "Çözülme: %s\n", formatAlertTime(*alert.ResolvedAt, loc))
 		fmt.Fprintf(&body, "Çözüm Süresi: %s\n", formatResolutionDuration(alert.ResolvedAt.Sub(alert.CreatedAt)))
+	}
+	if mc.Deferred {
+		fmt.Fprintf(&body, "\nNot: Bu alert sunucu bakımdayken açıldı; bildirimi bakım bitince gönderildi.\n")
 	}
 	if panelBaseURL != "" {
 		fmt.Fprintf(&body, "\nPanel: %s/hosts/%s?sekme=alertler\n", panelBaseURL, alert.HostID)
@@ -108,11 +115,14 @@ func formatCount(v float64) string {
 	return strconv.FormatFloat(v, 'f', 0, 64)
 }
 
-// formatAlertTime, e-postadaki zamanları tek biçimde ve saat dilimi açıkça belirtilerek yazar.
-// Sunucu UTC'de çalışır; dönüştürmek yerine dilimi parantezde göstermek daha az yanıltıcı
-// (yanlış bir dönüşüm hatasına açık kapı bırakmaz).
-func formatAlertTime(t time.Time) string {
-	return t.UTC().Format("02.01.2006 15:04:05") + " (UTC)"
+// formatAlertTime, e-postadaki zamanları kurulumun saat diliminde, dilimin adı ve o andaki UTC ofsetiyle yazar:
+// "10.10.2026 21:11:08 (Europe/Istanbul, UTC+3)"; saat dilimi ayarlanmamışsa "… (UTC)". Ofset, yaz saati
+// geçişinde iki kez yaşanan saati de ayırt eder.
+func formatAlertTime(t time.Time, loc *time.Location) string {
+	if loc == nil {
+		loc = time.UTC
+	}
+	return t.In(loc).Format("02.01.2006 15:04:05") + " (" + tz.Label(t, loc) + ")"
 }
 
 // formatResolutionDuration, bir alert'in ne kadar açık kaldığını insan-okur biçimde yazar; baştaki

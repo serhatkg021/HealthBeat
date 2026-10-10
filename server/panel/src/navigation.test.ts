@@ -37,7 +37,7 @@ test('the system tools area is its own page, not part of settings', () => {
 })
 
 test('an operator gets the same host list (scoped by the server) and read-only alert management; an empty group disappears', () => {
-  const nav = navigation(canOnly('host.view', 'alert.view', 'threshold.view', 'notification.view'))
+  const nav = navigation(canOnly('host.view', 'alert.view', 'threshold.view', 'notification.view', 'maintenance.view'))
   assert.deepEqual(ids(nav.groups), ['izleme', 'alert-yonetimi'])
   assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet', 'sunucular', 'alertler'])
   assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['kurallar', 'bakim', 'bildirim'])
@@ -54,15 +54,18 @@ test('an organization admin sees the host list and notifications but no users or
 
 test('notifications are reachable with either notification or settings permission', () => {
   assert.ok(ids(group(navigation(canOnly('settings.view')), 'alert-yonetimi')!.items).includes('bildirim'))
-  assert.ok(!ids(group(navigation(() => false), 'alert-yonetimi')!.items).includes('bildirim'))
+  assert.ok(!ids(group(navigation(() => false), 'alert-yonetimi')?.items ?? []).includes('bildirim'))
 })
 
-test('with no permissions only the summary and maintenance remain and there is no settings entry', () => {
+test('with no permissions only the summary remains and there is no settings entry', () => {
   const nav = navigation(() => false)
-  assert.deepEqual(ids(nav.groups), ['izleme', 'alert-yonetimi'])
+  assert.deepEqual(ids(nav.groups), ['izleme'])
   assert.deepEqual(ids(group(nav, 'izleme')!.items), ['ozet'])
-  assert.deepEqual(ids(group(nav, 'alert-yonetimi')!.items), ['bakim'])
   assert.deepEqual(nav.settings, [])
+})
+
+test('maintenance windows need the maintenance view permission', () => {
+  assert.deepEqual(ids(group(navigation(canOnly('maintenance.view')), 'alert-yonetimi')!.items), ['bakim'])
 })
 
 test('a group keeps only the items the user may see', () => {
@@ -113,7 +116,7 @@ test('notification tabs follow permissions; the menu entry disappears with none'
   assert.deepEqual(ids(navigation(canOnly('notification.view', 'notification.edit', 'contact.view')).notifications), ['kurallar', 'kisiler'])
   // Operatör: yalnızca kurallar (salt okunur).
   assert.deepEqual(ids(navigation(canOnly('notification.view')).notifications), ['kurallar'])
-  assert.ok(!ids(group(navigation(canOnly('host.view')), 'alert-yonetimi')!.items).includes('bildirim'))
+  assert.ok(!ids(group(navigation(canOnly('host.view')), 'alert-yonetimi')?.items ?? []).includes('bildirim'))
 })
 
 test('the notifications address carries the tab and, for rules, the scope', () => {

@@ -11,6 +11,7 @@ import { HeaderSlotContext } from './headerSlot'
 import { ProfileMenu } from './ProfileMenu'
 import { SystemTicker } from './SystemTicker'
 import { useServerVersion } from './useAgentPolicy'
+import { useServerClock } from './useServerClock'
 import { useDocumentTitle } from './useDocumentTitle'
 import { useOpenAlertCounts } from './useOpenAlertCounts'
 import { useScrollStrips } from './useScrollStrips'
@@ -83,6 +84,7 @@ export function Layout() {
   // Detay sayfaları (sunucu, organizasyon) başlığı kendileri verir; burada yalnızca sabit rotalar.
   useDocumentTitle(pageTitle(pathname))
   useScrollStrips()
+  const clock = useServerClock()
   const version = versionInfo(typeof __PANEL_VERSION__ === 'string' ? __PANEL_VERSION__ : 'dev', useServerVersion())
   const counts = useOpenAlertCounts(!!user && can('alert.view') && can('dashboard.view'))
   const notices = useSystemNotices(!!user && can('settings.view'), version.mismatch ? version.title : null)
@@ -219,6 +221,11 @@ export function Layout() {
           <span className={`version-note${version.mismatch ? ' mismatch' : ''}`} title={version.title}>
             {version.label}
           </span>
+          {clock && (
+            <span className="version-note server-clock" title={`Server saati: ${clock.timezone} (${clock.offset}). Bakım pencereleri ve bildirimlerdeki saatler buna göredir.`}>
+              Server saati {clock.label}
+            </span>
+          )}
           <SystemTicker notices={notices} />
         </footer>
       </div>

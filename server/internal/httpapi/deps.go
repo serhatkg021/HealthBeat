@@ -83,6 +83,8 @@ type Deps struct {
 	appSettings *settings.Service
 	channels    *settings.Channels
 	owners      *store.NotificationOwners
+	// maintenance, bakım pencereleridir (bkz. maintenance_handlers.go).
+	maintenance *store.MaintenanceWindows
 
 	// errorBodyBytes, hata alan (4xx/5xx) bir isteğin loga yazılan istek/yanıt gövdesinin azami boyutudur; 0 gövde
 	// yazmaz. Bkz. requestlog.go.
@@ -164,6 +166,7 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 		refreshTokens: store.NewRefreshTokens(pool),
 		resets:        store.NewPasswordResets(pool),
 		owners:        store.NewNotificationOwners(pool),
+		maintenance:   store.NewMaintenanceWindows(pool),
 	}
 	d.SetAgentPolicy(AgentPolicy{})
 	d.SetPanelBaseURL("")

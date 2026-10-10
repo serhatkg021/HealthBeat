@@ -757,3 +757,103 @@ func TestProtocol4MigrationAndRollback(t *testing.T) {
 		t.Fatalf("upgrading again: applied=%d err=%v, want 000007 re-applied", len(applied), err)
 	}
 }
+
+// 000008: bakım pencereleri. İzinler rollere dağıtılır, pencere kısıtları çalışır; .down.sql tabloları, sütunları ve
+// izinleri geri alır, eski binary yeniden açılır ve tekrar yükseltilebilir.
+func TestMaintenanceWindowsMigrationAndRollback(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.NewEmpty(t)
+	runner := func(fsys fs.FS) *migrate.Runner {
+		t.Helper()
+		r, err := migrate.New(pool, fsys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	latest, old := runner(upTo(t, "000008")), runner(upTo(t, "000007"))
+	if _, err := latest.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var grants string
+	if err := pool.QueryRow(ctx, `SELECT string_agg(role || ':' || permission_key, ',' ORDER BY role, permission_key)
+		FROM role_permissions WHERE permission_key LIKE 'maintenance.%'`).Scan(&grants); err != nil {
+		t.Fatal(err)
+	}
+	if want := "operator:maintenance.view,org_admin:maintenance.manage,org_admin:maintenance.view,super_admin:maintenance.manage,super_admin:maintenance.view"; grants != want {
+		t.Fatalf("maintenance grants = %q, want %q", grants, want)
+	}
+
+	host := testdb.PushHost(t, pool, testdb.Org(t, pool, "o"), "h", "hash")
+	var weekly uuid.UUID
+	if _, err := pool.Exec(ctx, `INSERT INTO maintenance_windows (title, recurrence, starts_at, ends_at)
+		VALUES ('x', 'once', now(), now() + interval '1 hour')`); err != nil {
+		t.Fatalf("a one-off window was rejected: %v", err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO maintenance_windows (title, recurrence, start_minute, duration_minutes, repeat_every, weekdays, valid_from)
+		VALUES ('y', 'weekly', 120, 90, 2, 10, current_date) RETURNING id`).Scan(&weekly); err != nil {
+		t.Fatalf("a weekly window was rejected: %v", err)
+	}
+	for _, ok := range []string{
+		`INSERT INTO maintenance_window_hosts (window_id, host_id) VALUES ($1, $2)`,
+		`INSERT INTO maintenance_occurrence_overrides (window_id, occurrence_start) VALUES ($1, now())`,
+	} {
+		args := []any{weekly}
+		if strings.Contains(ok, "host_id") {
+			args = append(args, host)
+		}
+		if _, err := pool.Exec(ctx, ok, args...); err != nil {
+			t.Fatalf("rejected: %s: %v", ok, err)
+		}
+	}
+	for _, bad := range []string{
+		`INSERT INTO maintenance_windows (title, recurrence, starts_at, ends_at) VALUES ('x', 'yearly', now(), now() + interval '1 hour')`,
+		`INSERT INTO maintenance_windows (title, recurrence, starts_at, ends_at) VALUES ('x', 'once', now(), now())`,
+		`INSERT INTO maintenance_windows (title, recurrence, start_minute, duration_minutes, valid_from) VALUES ('x', 'daily', 1440, 60, current_date)`,
+		`INSERT INTO maintenance_windows (title, recurrence, start_minute, duration_minutes, valid_from) VALUES ('x', 'weekly', 0, 60, current_date)`,
+		`INSERT INTO maintenance_windows (title, recurrence, start_minute, duration_minutes, valid_from) VALUES ('x', 'monthly', 0, 60, current_date)`,
+		`INSERT INTO maintenance_windows (title, recurrence, start_minute, duration_minutes, valid_from, month_week, month_weekday) VALUES ('x', 'monthly', 0, 60, current_date, 5, 1)`,
+		`INSERT INTO maintenance_windows (title, recurrence, start_minute, duration_minutes, repeat_every, valid_from) VALUES ('x', 'daily', 0, 60, 31, current_date)`,
+		`INSERT INTO maintenance_windows (title, recurrence, start_minute, duration_minutes, valid_from) VALUES ('x', 'weekly', 0, 10081, current_date)`,
+		`UPDATE app_settings SET timezone = repeat('x', 65)`,
+	} {
+		if _, err := pool.Exec(ctx, bad); err == nil {
+			t.Errorf("accepted: %s", bad)
+		}
+	}
+	if _, err := pool.Exec(ctx, `UPDATE alerts SET notify_pending = true`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.RequireUpToDate(ctx); !errors.Is(err, migrate.ErrDatabaseNewer) {
+		t.Fatalf("old binary on the new schema: err=%v, want ErrDatabaseNewer", err)
+	}
+
+	down, err := fs.ReadFile(migrations.FS, "000008_maintenance_windows.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM healthbeat_migrations WHERE version = 8`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.RequireUpToDate(ctx); err != nil {
+		t.Fatalf("old binary after the down migration: %v, want it to start", err)
+	}
+	var tables, columns, perms int
+	if err := pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM pg_tables WHERE schemaname = current_schema() AND tablename LIKE 'maintenance_%'),
+		(SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema()
+		    AND ((table_name = 'alerts' AND column_name = 'notify_pending') OR (table_name = 'app_settings' AND column_name = 'timezone'))),
+		(SELECT count(*) FROM permissions WHERE key LIKE 'maintenance.%')`).Scan(&tables, &columns, &perms); err != nil {
+		t.Fatal(err)
+	}
+	if tables != 0 || columns != 0 || perms != 0 {
+		t.Fatalf("after the down migration: tables=%d columns=%d permissions=%d, want all 0", tables, columns, perms)
+	}
+	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 {
+		t.Fatalf("upgrading again: applied=%d err=%v, want 000008 re-applied", len(applied), err)
+	}
+}

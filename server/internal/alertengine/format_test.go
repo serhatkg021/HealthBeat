@@ -31,10 +31,34 @@ func TestFormatAlertReadingPicksUnitByMetric(t *testing.T) {
 	}
 }
 
-func TestFormatAlertTimeIncludesUTCSuffix(t *testing.T) {
+// Zaman kurulumun saat diliminde, adı ve o andaki ofsetiyle yazılır; saat dilimi yoksa UTC.
+func TestFormatAlertTimeNamesTheZoneAndOffset(t *testing.T) {
 	ts := time.Date(2026, 9, 22, 19, 53, 49, 0, time.UTC)
-	if got := formatAlertTime(ts); got != "22.09.2026 19:53:49 (UTC)" {
-		t.Fatalf("formatAlertTime = %q", got)
+	berlin, err := time.LoadLocation("Europe/Berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	istanbul, err := time.LoadLocation("Europe/Istanbul")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		at   time.Time
+		loc  *time.Location
+		want string
+	}{
+		{ts, nil, "22.09.2026 19:53:49 (UTC)"},
+		{ts, time.UTC, "22.09.2026 19:53:49 (UTC)"},
+		{ts, istanbul, "22.09.2026 22:53:49 (Europe/Istanbul, UTC+3)"},
+		{ts, berlin, "22.09.2026 21:53:49 (Europe/Berlin, UTC+2)"},
+		{time.Date(2026, 12, 15, 10, 0, 0, 0, time.UTC), berlin, "15.12.2026 11:00:00 (Europe/Berlin, UTC+1)"},
+		// Geri dönüş gecesi 02:30 iki kez yaşanır; ofset hangisi olduğunu söyler.
+		{time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC), berlin, "25.10.2026 02:30:00 (Europe/Berlin, UTC+2)"},
+		{time.Date(2026, 10, 25, 1, 30, 0, 0, time.UTC), berlin, "25.10.2026 02:30:00 (Europe/Berlin, UTC+1)"},
+	} {
+		if got := formatAlertTime(c.at, c.loc); got != c.want {
+			t.Errorf("formatAlertTime(%s, %v) = %q, want %q", c.at.Format(time.RFC3339), c.loc, got, c.want)
+		}
 	}
 }
 

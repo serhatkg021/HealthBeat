@@ -26,6 +26,7 @@ const values: SettingsValues = {
   log_error_body_bytes: 4096,
   log_file_max_age_days: 14,
   log_file_max_total_mb: 1024,
+  timezone: '',
 }
 
 test('every setting appears in exactly one section', () => {

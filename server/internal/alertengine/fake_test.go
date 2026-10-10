@@ -109,6 +109,36 @@ func (f *fakeAlerts) Resolve(_ context.Context, id uuid.UUID, value, threshold *
 	return *a, nil
 }
 
+func (f *fakeAlerts) GetByID(_ context.Context, id uuid.UUID) (model.Alert, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if a := f.byID(id); a != nil {
+		return *a, nil
+	}
+	return model.Alert{}, store.ErrNotFound
+}
+
+func (f *fakeAlerts) SetNotifyPending(_ context.Context, id uuid.UUID, pending bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if a := f.byID(id); a != nil {
+		a.NotifyPending = pending
+	}
+	return nil
+}
+
+func (f *fakeAlerts) ListNotifyPending(context.Context) ([]model.Alert, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []model.Alert
+	for _, a := range f.alerts {
+		if a.NotifyPending && a.Status != model.AlertStatusResolved {
+			out = append(out, *a)
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeAlerts) ResolveActiveByHostAndMetric(ctx context.Context, hostID uuid.UUID, alertType string) (model.Alert, error) {
 	a, err := f.GetActive(ctx, hostID, alertType)
 	if err != nil {

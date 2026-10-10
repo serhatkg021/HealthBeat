@@ -67,7 +67,7 @@ Panel: https://panel.example.com/hosts/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee?sekm
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			msg := buildMessage(tc.alert, tc.mc, tc.panel)
+			msg := buildMessage(tc.alert, tc.mc, tc.panel, time.UTC)
 			if msg.Subject != tc.wantSubject {
 				t.Errorf("subject:\n got %q\nwant %q", msg.Subject, tc.wantSubject)
 			}
@@ -118,7 +118,7 @@ func TestBuildMessageProtocol4Types(t *testing.T) {
 			[]string{"Mount: /data\n"}},
 	}
 	for _, tc := range cases {
-		msg := buildMessage(tc.alert, mc, "")
+		msg := buildMessage(tc.alert, mc, "", time.UTC)
 		if msg.Subject != tc.wantSubject {
 			t.Errorf("%s subject:\n got %q\nwant %q", tc.alert.AlertType, msg.Subject, tc.wantSubject)
 		}

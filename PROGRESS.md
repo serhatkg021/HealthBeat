@@ -4,7 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-10 — Agent Go 1.27.2'ye geçti (Go 1.22'deki standart kütüphane açıkları); CI agent'ı da
+**Son güncelleme:** 2026-10-11 — **Bakım pencereleri** (server + panel): tek seferlik ya da günlük / haftalık / aylık
+tekrarlı pencereler, kapsam sunucular ve/veya organizasyonlar; bakımda alert'ler kaydediliyor, bildirim bakım bitince
+(hâlâ açıksa) gidiyor; "Pencereyi bitir", "Bu tekrarı bitir", "Sıradaki tekrarı atla". Kurulum geneli **saat dilimi**
+ayarı (tekrarlar ve e-postadaki saatler buna göre, ofsetiyle); panelin alt çubuğunda server saati. Migration `000008`.
+hbe2e'de uçtan uca denendi (mailpit). Önceki: 2026-10-10 — Agent Go 1.27.2'ye geçti (Go 1.22'deki standart kütüphane açıkları); CI agent'ı da
 staticcheck ve govulncheck ile denetliyor. Aynı gün: Server container'ında sağlık kontrolünün bıraktığı zombi süreçler giderildi: kontrolü
 artık server binary'si yapıyor (`healthbeat-server healthcheck`). Aynı gün: **Sunucu sayfası konuya göre** (panel):
 Performans 7 konuya ayrıldı (şu an kutuları, alert kuralları, eşik çizgili ve büyütülebilir grafikler, son rapor yan yana; menüde açık alert noktası), Envanter dört kart (Makine,
@@ -49,7 +53,8 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 - **Server (`server/`)**: `config`, `db`, `migrate`, `authsvc`, `rbac`, `store`, `alertengine` (cpu/ram/disk[mount başına]/docker_restart
   [container başına]/offline/disk_missing; protokol 4: disk gecikmesi/sıcaklık/servis yeniden başlatma/saat farkı [konu başına,
   süre koşulu `alert_pending`'de] ve durum kuralları; sistem sahipleri + toplanan kurallar; alıcı başına kalıcı kuyruk), `notify` (SMTP),
-  `settings` (panelden değişen ayarlar ve bildirim kanalları; bellekte, yeniden başlatmadan uygulanır), `offlinemonitor`,
+  `settings` (panelden değişen ayarlar ve bildirim kanalları; bellekte, yeniden başlatmadan uygulanır), `maintenance` (bakım
+  pencerelerinin tekrar hesabı; saf), `tz` (kurulumun saat dilimi, gömülü tzdata), `offlinemonitor`,
   `pullscheduler`, `retention`, `secretbox`, `tlsreload`, `ratelimit`, `httpapi`, `testdb`/`testsmtp`; migration'lar binary'ye gömülü.
 - **Agent (`agent/`)**: yalnızca stdlib; `config`, `collector` (cpu, memory, disk, docker, envanter; protokol 4: G/Ç ve ağ oranları,
   PSI, RAID, servisler, sıcaklık, süreçler, güncellemeler, kapasite, saat senkronu), `report` (hızlı kaynaklar rapor anında,
@@ -69,6 +74,8 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
   yalnızca fiziksel makinede gelir.
 - Bildirim kanalı yalnızca e-posta; SMS/Slack/Discord/Telegram için model hazır (kanal satırı + gönderici eklenir), uygulama yok.
   İki faktörlü doğrulama alanları yalnızca saklanır.
+- Bakım bitince ertelenen bildirim en geç ~30 sn sonra gider (denetim aralığı). Bakım bütün alert türlerini kapsar; tür
+  başına susturma yok. Bakımda açılıp çözülen alert'ler ve bakımda çözülen alert'in çözülmesi hiç bildirilmez.
 - Server tek kopya çalışır: panelden yapılan ayar değişikliği başka server kopyalarına duyurulmaz.
 - Operatör organizasyon düzeyinde bir şey (iletişim kişileri, kurallar listesi) göremez; yalnızca atandığı sunucuların kurallarını okur.
 - Bildirim → İletişim kişileri tüm organizasyonları tek tek sorgular (server'da toplu uç nokta yok); organizasyon sayısı çok
@@ -89,7 +96,7 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 1. Sistem Araçları şimdilik salt okunur; kuyrukta "yeniden dene / iptal", cache'te "önbelleği boşalt" ileride ele alınabilir.
    Log Analiz bir günü baştan sona tarar: çok büyük günlerde (yüzlerce MB) yavaşlar, 15 sn'de zaman aşımına uğrar.
 2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
-3. Panelde "Yakında" olarak yeri hazır olan özellikler: bakım pencereleri ve "bu alert kime gider?" önizlemesi.
+3. Panelde "Yakında" olarak yeri hazır olan özellik: "bu alert kime gider?" önizlemesi.
 4. Panel: sunucu ayarlarındaki salt okunur "Geçerli alert kuralları" da konuya göre gruplanabilir; Genel sekmesinin üstündeki
    Mod/Aralık kutuları sadeleşebilir. Çok dar ekranda (~420 px) sunucu sayfası başlığında ad görünmüyor (durum rozeti ve
    alert sayaçları yer kaplıyor).

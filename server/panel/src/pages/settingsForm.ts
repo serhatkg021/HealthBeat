@@ -8,7 +8,7 @@ export interface FieldDef {
   field: SettingsField
   label: string
   hint: string
-  kind: 'number' | 'text' | 'select'
+  kind: 'number' | 'text' | 'select' | 'timezone'
   // Sayısal alanlarda gösterim biriminin API birimi karşılığı (ör. dakika = 60 saniye); yoksa 1.
   scale?: number
   unit?: string
@@ -72,6 +72,19 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
     title: 'Panel adresi',
     description: 'Kullanıcıların tarayıcıda gördüğü adres. Alert e-postalarındaki bağlantının ve “Şifremi unuttum” bağlantısının kökü; boşsa e-posta ile şifre sıfırlama kapalıdır.',
     fields: [{ field: 'panel_base_url', label: 'Adres', hint: 'Ör. https://panel.example.com (yol olmadan).', kind: 'text', placeholder: 'https://panel.example.com' }],
+  },
+  {
+    id: 'saat',
+    title: 'Saat dilimi',
+    description: 'Bakım pencerelerinin tekrarları ve bildirim e-postalarındaki saatler bu saat dilimine göredir. Değişiklik hemen uygulanır.',
+    fields: [
+      {
+        field: 'timezone',
+        label: 'Bölge',
+        hint: 'Boş bırakılırsa server’ın kendi saat dilimi (TZ), o da yoksa UTC kullanılır.',
+        kind: 'timezone',
+      },
+    ],
   },
   {
     id: 'log',
