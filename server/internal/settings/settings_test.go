@@ -39,7 +39,7 @@ func TestFieldsMatchStoreColumns(t *testing.T) {
 	}
 	for _, f := range Fields {
 		if _, isInt := intRanges[f]; !isInt && !slices.Contains([]Field{FieldLatestAgentVersion, FieldMinSupportedAgentVersion,
-			FieldPanelBaseURL, FieldLogLevel}, f) {
+			FieldPanelBaseURL, FieldLogLevel, FieldTimezone}, f) {
 			t.Errorf("%s has no validation", f)
 		}
 	}
@@ -274,5 +274,42 @@ func TestParsePanelBaseURL(t *testing.T) {
 		if got, err := ParsePanelBaseURL(bad); err == nil {
 			t.Errorf("ParsePanelBaseURL(%q) = %q, want an error", bad, got)
 		}
+	}
+}
+
+// Saat dilimi: geçersiz ad reddedilir; geçerli ad Location'ı hemen değiştirir; varsayılana dönünce TZ'ye ya da UTC'ye
+// düşülür.
+func TestTimezoneSetting(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv("TZ", "")
+	s, _, admin := newService(t)
+	if got := s.Location(); got != time.UTC {
+		t.Fatalf("fresh install: Location = %s, want UTC", got)
+	}
+	for _, bad := range []string{"Mars/Olympus", "Local", "europe/istanbul"} {
+		var fe *FieldError
+		if _, err := s.Update(ctx, &admin, Patch{Timezone: &bad}); !errors.As(err, &fe) || fe.Field != FieldTimezone {
+			t.Errorf("timezone %q: err = %v, want a timezone field error", bad, err)
+		}
+	}
+	ist := " Europe/Istanbul "
+	if _, err := s.Update(ctx, &admin, Patch{Timezone: &ist}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Current().Timezone; got != "Europe/Istanbul" {
+		t.Errorf("stored timezone = %q, want it trimmed", got)
+	}
+	if got := s.Location().String(); got != "Europe/Istanbul" {
+		t.Errorf("Location = %s", got)
+	}
+	if !slices.Contains(s.Changed(), FieldTimezone) {
+		t.Errorf("changed = %v, want timezone", s.Changed())
+	}
+	t.Setenv("TZ", "Europe/Berlin")
+	if _, err := s.Reset(ctx, &admin, []Field{FieldTimezone}); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Location().String(); got != "Europe/Berlin" {
+		t.Errorf("after reset with TZ set: Location = %s, want Europe/Berlin", got)
 	}
 }

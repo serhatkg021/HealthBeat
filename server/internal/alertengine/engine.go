@@ -41,6 +41,9 @@ type Engine struct {
 	// panelBaseURL, bildirimlerde alert'e doğrudan giden bir bağlantı eklemek için (boşsa satır hiç eklenmez). Panelden
 	// değişebilir (SetPanelBaseURL); her bildirim kuyruğa yazılırken okunur.
 	panelBaseURL atomic.Pointer[string]
+	// location, bildirimlerdeki zamanların saat dilimidir (kurulumun saat dilimi; varsayılan UTC). Panelden değişebilir
+	// (SetLocation).
+	location atomic.Pointer[time.Location]
 	// worker, alert bildirimlerini kuyruktan teslim eder; DB'siz testlerde nil.
 	worker *outbox.Worker
 	// now, süre koşullarının saatidir (testler değiştirir).
@@ -81,6 +84,7 @@ func newEngineWith(st Stores, notifiers []notify.Notifier, panelBaseURL string, 
 		now:           time.Now,
 	}
 	e.SetPanelBaseURL(panelBaseURL)
+	e.SetLocation(time.UTC)
 	for _, n := range notifiers {
 		e.notifiers[n.Channel()] = n
 	}
@@ -100,6 +104,14 @@ func (e *Engine) Notifier(channel string) (personal, implemented bool) {
 func (e *Engine) SetPanelBaseURL(url string) {
 	url = strings.TrimSuffix(url, "/")
 	e.panelBaseURL.Store(&url)
+}
+
+// SetLocation, bildirimlerdeki zamanların saat dilimini değiştirir (nil = UTC).
+func (e *Engine) SetLocation(loc *time.Location) {
+	if loc == nil {
+		loc = time.UTC
+	}
+	e.location.Store(loc)
 }
 
 // Report, bir agent raporunun alert motorunu ilgilendiren kısmıdır. Metrik satırı EvaluateReport'tan önce yazılmış

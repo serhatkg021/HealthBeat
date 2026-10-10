@@ -13,11 +13,13 @@ import (
 	"slices"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/store"
+	"healthbeat-server/internal/tz"
 )
 
 // ErrNothingToChange, ne değer ne de sıfırlanacak alan verilmediğinde döner.
@@ -62,6 +64,9 @@ func New(ctx context.Context, st *store.Settings) (*Service, error) {
 
 // Current, güncel ayarlardır (kopya; kilitsiz).
 func (s *Service) Current() model.AppSettings { return *s.cur.Load() }
+
+// Location, kurulumun saat dilimidir: ayar doluysa o, değilse server'ın TZ'si, o da yoksa UTC (bkz. internal/tz).
+func (s *Service) Location() *time.Location { return tz.Resolve(s.Current().Timezone) }
 
 // Defaults, veritabanındaki varsayılanlardır.
 func (s *Service) Defaults() model.AppSettings { return s.defaults }

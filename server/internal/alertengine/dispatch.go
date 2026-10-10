@@ -60,7 +60,7 @@ func (e *Engine) enqueue(ctx context.Context, tx Tx, p pending, event string, al
 	if len(p.recipients) == 0 {
 		return nil
 	}
-	msg := buildMessage(alert, p.mc, *e.panelBaseURL.Load())
+	msg := buildMessage(alert, p.mc, *e.panelBaseURL.Load(), e.location.Load())
 	alertID := alert.ID
 	for _, r := range p.recipients {
 		if _, err := tx.Outbox().Enqueue(ctx, store.OutboxMessage{

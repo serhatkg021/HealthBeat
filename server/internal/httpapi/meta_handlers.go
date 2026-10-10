@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"healthbeat-server/internal/tz"
 	"healthbeat-server/internal/version"
 )
 
@@ -17,17 +18,37 @@ type metaResponse struct {
 	// bunlara göre "güncel / güncellenmeli / desteklenmiyor" diye sınıflandırır.
 	LatestAgentVersion string `json:"latest_agent_version"`
 	MinAgentVersion    string `json:"min_agent_version"`
+	// Kurulumun saat dilimi (bakım pencereleri ve bildirimler buna göre) ve server'ın saati: panel alt çubukta server
+	// saatini bilgisayarın saatinden bağımsız gösterir. UTCOffset "UTC+3" biçimindedir, UTCOffsetSeconds aynı ofsettir.
+	Timezone         string    `json:"timezone"`
+	UTCOffset        string    `json:"utc_offset"`
+	UTCOffsetSeconds int       `json:"utc_offset_seconds"`
+	ServerTime       time.Time `json:"server_time"`
+}
+
+// location, kurulumun saat dilimidir (ayarlar bağlanmamışsa server'ın TZ'si ya da UTC).
+func (d *Deps) location() *time.Location {
+	if d.appSettings == nil {
+		return tz.Resolve("")
+	}
+	return d.appSettings.Location()
 }
 
 // handleMeta, panelin sürüm bilgisini (server sürümü ve agent sürüm politikası) verir. Herhangi
 // bir oturum açmış kullanıcı okuyabilir: hassas bir şey içermez.
 func (d *Deps) handleMeta(w http.ResponseWriter, r *http.Request) {
 	policy := d.agentPolicy.Load()
+	loc, now := d.location(), time.Now()
+	_, offset := now.In(loc).Zone()
 	writeJSON(w, http.StatusOK, metaResponse{
 		ServerVersion:      version.Version,
 		Protocol:           version.Protocol,
 		LatestAgentVersion: policy.Latest,
 		MinAgentVersion:    policy.Min,
+		Timezone:           loc.String(),
+		UTCOffset:          tz.FormatOffset(offset),
+		UTCOffsetSeconds:   offset,
+		ServerTime:         now.UTC(),
 	})
 }
 

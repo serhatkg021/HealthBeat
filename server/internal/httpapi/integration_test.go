@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2218,6 +2219,39 @@ func TestMetaEndpointReportsVersionPolicy(t *testing.T) {
 	// Sıradan bir kullanıcı da okuyabilir.
 	op, _ := a.login("op@x.test", "operator")
 	a.expect(200, "GET", "/api/v1/meta", op, nil, nil)
+}
+
+// /meta kurulumun saat dilimini, o anki ofsetini ve server saatini verir; saat dilimi Ayarlar'dan değişince hemen
+// yansır, geçersiz ad alanı adlandıran 400'le reddedilir.
+func TestMetaReportsTimezoneAndServerTime(t *testing.T) {
+	t.Setenv("TZ", "")
+	a := newAPI(t)
+	root, _ := a.login("root@x.test", "super_admin")
+	var m struct {
+		Timezone   string    `json:"timezone"`
+		Offset     string    `json:"utc_offset"`
+		OffsetSec  int       `json:"utc_offset_seconds"`
+		ServerTime time.Time `json:"server_time"`
+	}
+	a.expect(200, "GET", "/api/v1/meta", root, nil, &m)
+	if m.Timezone != "UTC" || m.Offset != "UTC" || m.OffsetSec != 0 || time.Since(m.ServerTime).Abs() > time.Minute {
+		t.Fatalf("default meta = %+v, want UTC and the current time", m)
+	}
+
+	a.expect(400, "PATCH", "/api/v1/settings", root, map[string]any{"timezone": "Mars/Olympus"}, nil)
+	a.expect(200, "PATCH", "/api/v1/settings", root, map[string]any{"timezone": "Europe/Istanbul"}, nil)
+	a.expect(200, "GET", "/api/v1/meta", root, nil, &m)
+	if m.Timezone != "Europe/Istanbul" || m.Offset != "UTC+3" || m.OffsetSec != 3*3600 {
+		t.Fatalf("meta after setting Istanbul = %+v", m)
+	}
+	var s struct {
+		Values  map[string]any `json:"values"`
+		Changed []string       `json:"changed"`
+	}
+	a.expect(200, "GET", "/api/v1/settings", root, nil, &s)
+	if s.Values["timezone"] != "Europe/Istanbul" || !slices.Contains(s.Changed, "timezone") {
+		t.Fatalf("settings = values %v changed %v", s.Values["timezone"], s.Changed)
+	}
 }
 
 // Özet uç noktası host başına agent sürümünü de taşır (panel "güncellenmesi gerekenler"i süzer).
