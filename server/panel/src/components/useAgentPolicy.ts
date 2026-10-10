@@ -6,18 +6,24 @@ import type { Meta } from '../types/api'
 // Server'ın /meta yanıtı (sürüm politikası, server sürümü) oturum boyunca değişmez (server yapılandırması); her
 // sayfa yüklenişinde yeniden istemek yerine tek istek paylaşılır. Başarısızlık kritik değildir: meta olmadan panel
 // yalnızca "sürüm bilgisi yok / bilinmiyor" gibi politikasız durumları gösterir.
-let shared: Promise<Meta | null> | null = null
+// fetchedAt, yanıtın alındığı tarayıcı saatidir: server saati bundan sonra tarayıcıda ilerletilir (useServerClock).
+export type LoadedMeta = Meta & { fetchedAt: number }
 
-function loadMeta(): Promise<Meta | null> {
-  shared ??= metaApi.get().catch(() => {
-    shared = null // bir sonraki çağrıda yeniden dene
-    return null
-  })
+let shared: Promise<LoadedMeta | null> | null = null
+
+function loadMeta(): Promise<LoadedMeta | null> {
+  shared ??= metaApi
+    .get()
+    .then((m) => ({ ...m, fetchedAt: Date.now() }))
+    .catch(() => {
+      shared = null // bir sonraki çağrıda yeniden dene
+      return null
+    })
   return shared
 }
 
-function useMeta(): Meta | null {
-  const [meta, setMeta] = useState<Meta | null>(null)
+export function useMeta(): LoadedMeta | null {
+  const [meta, setMeta] = useState<LoadedMeta | null>(null)
   useEffect(() => {
     let alive = true
     void loadMeta().then((m) => alive && setMeta(m))

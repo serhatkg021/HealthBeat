@@ -30,6 +30,8 @@ export type Permission =
   | 'system.queue.view'
   | 'system.cache.view'
   | 'system.logs.view'
+  | 'maintenance.view'
+  | 'maintenance.manage'
 
 // hasPermission, kullanıcının izni olup olmadığıdır. İzinler henüz yüklenmediyse (eski oturumdan kalan kullanıcı, /me
 // yanıtı gelmeden) hiçbir izin yok sayılır: düğme bir an geç görünür ama hiçbir zaman yetkisiz birine görünmez.
