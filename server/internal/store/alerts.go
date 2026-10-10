@@ -390,3 +390,20 @@ func (s *Alerts) ClearPending(ctx context.Context, hostID uuid.UUID, alertType, 
 		hostID, alertType, subject)
 	return err
 }
+
+// SetNotifyPending, alert'in bir olayının bildirimi bakım yüzünden gönderilmediğinde true, ertelenen bildirim
+// gönderildiğinde false yazar (bkz. migration 000008).
+func (s *Alerts) SetNotifyPending(ctx context.Context, id uuid.UUID, pending bool) error {
+	_, err := s.pool.Exec(ctx, `UPDATE alerts SET notify_pending = $2 WHERE id = $1`, id, pending)
+	return err
+}
+
+// ListNotifyPending, bildirimi bakım yüzünden ertelenmiş aktif alert'leri (en eskisi önce) döndürür.
+func (s *Alerts) ListNotifyPending(ctx context.Context) ([]model.Alert, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT `+alertColumns+` FROM alerts WHERE notify_pending AND status IN ('open', 'acknowledged') ORDER BY created_at, id`)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, scanAlert)
+}
