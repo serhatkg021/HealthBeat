@@ -3,6 +3,7 @@ import { Link, Navigate } from 'react-router-dom'
 import { Activity } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { useDocumentTitle } from '../components/useDocumentTitle'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 export function LoginPage() {
   const { user, login, loading, error } = useAuth()
@@ -23,6 +24,9 @@ export function LoginPage() {
 
   return (
     <div className="login-shell">
+      <div className="login-theme">
+        <ThemeToggle />
+      </div>
       <form className="card login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
           <span className="brand-mark">

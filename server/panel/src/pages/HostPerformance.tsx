@@ -1,45 +1,71 @@
-import { useEffect, useState } from 'react'
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { Activity, HardDrive } from 'lucide-react'
-import { hostsApi } from '../api/endpoints'
-import type { DiskUsage, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
+import { useEffect, useState, type ReactNode } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { Gauge, HardDrive, Layers, Network, Thermometer } from 'lucide-react'
+import { alertsApi, hostsApi } from '../api/endpoints'
+import { useAuth } from '../auth/AuthContext'
+import type { Alert, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
+import { alertRulesPath } from '../navigation'
 import { DiskGroupCard } from '../components/DiskGroupCard'
 import { EmptyState } from '../components/EmptyState'
 import { MountMeter } from '../components/MountMeter'
+import { StatTile } from '../components/StatTile'
+import { TopicMenu } from '../components/TopicMenu'
+import { useNow } from '../components/useNow'
 import { supportsHardwareSummary } from './agentStatus'
+import { healthEmptyText, supportsHealth } from './inventory'
 import { diskLayout } from './diskLayout'
-import { DiskIoPreview, NetworkPreview, ProcessesPreview, TemperaturePreview } from './HostComingSoon'
-import { RANGES, cpuRamRows, diskMounts, diskRows, formatPoint, isLongSpan, toInputValue, type RangeKey } from './metricHistory'
+import { RANGES, toInputValue, type RangeKey } from './metricHistory'
+import { busiestDisk, busiestInterface, ioDisks, netInterfaces } from './perfSeries'
+import {
+  CpuDetailChart,
+  DiskIOChart,
+  DiskUsageChart,
+  NetTrafficChart,
+  Picker,
+  PressureChart,
+  RetransChart,
+  SwapChart,
+  UsageChart,
+  type ChartProps,
+} from './PerfCharts'
+import { CapacityList, InterfacesTable, PanelCard, ProcessList, RaidTable, RuleList, SensorsTable } from './PerfPanels'
+import { useHostRules } from './useHostRules'
+import {
+  PERF_TOPICS,
+  chartLayout,
+  openAlertsByTopic,
+  perfRuleItems,
+  perfTiles,
+  perfTopicInfo,
+  resolvePerfTopic,
+  topicNow,
+  type PerfTopicId,
+} from './perfTopics'
 import { mountLevels } from './usage'
-
-// Sabit kategorik tonlar (doğrulanmış varsayılan paletin 1. ve 2. yuvaları — bkz. dataviz
-// skill'i): renk her zaman aynı seriyi tanımlar, grafik başına yeniden seçilmez.
-const CPU_COLOR = '#2a78d6'
-const RAM_COLOR = '#eb6834'
-const DISK_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948']
 
 const HOUR_MS = 60 * 60 * 1000
 
-interface Series {
-  key: string
-  label: string
-  color: string
+// Aralıkta görülenlerden biri seçilir; seçili olan aralıktan çıkarsa varsayılana (en yoğun) döner.
+function useChoice(options: string[], fallback: string | undefined): [string | undefined, (v: string) => void] {
+  const [chosen, setChosen] = useState<string>()
+  return [chosen && options.includes(chosen) ? chosen : fallback, setChosen]
 }
 
-// Sunucu sayfasının "Performans" sekmesi: zamana bağlı her şey tek zaman seçicinin altında. Bir kez yüklenen metrik
-// noktaları hem CPU/RAM hem disk doluluğu grafiğini besler; X ekseni seçilen aralığın TAMAMINI kapsar (veri olmayan
-// kısımlar dahil), böylece verinin nerede başlayıp bittiği görülür. Altında fiziksel diskler (son rapor) ve henüz
-// gelmemiş metriklerin "Yakında" kartları durur.
-export function HostPerformance({
-  host,
-  disk,
-  thresholds,
-}: {
-  host: Host
-  // Son raporlanan mount kullanımı (Genel sekmesiyle aynı veri).
-  disk: DiskUsage[]
-  thresholds: HostThresholdsResponse | null
-}) {
+interface Block {
+  key: string
+  // Satırı tek başına doldurur (ör. tablo); yoksa en çok iki blok yan yana durur.
+  wide?: boolean
+  node: ReactNode
+}
+
+// Sunucu sayfasının "Performans" sekmesi, konuya göre: üstte tek zaman seçici, solda konu menüsü (Özet, CPU, Bellek,
+// Disk, Ağ, Sıcaklık, Sistem sınırları), sağda seçili konunun "şu an" kutuları ve blokları. Bir konunun geçmişi
+// (grafikler) ile son raporu (süreçler, mount'lar, arayüzler, sensörler) yan yanadır; ana grafikte alert eşikleri kesikli
+// çizgidir. Bir kez yüklenen metrik noktaları bütün grafikleri besler ve grafikler imleci paylaşır; X ekseni seçilen
+// aralığın TAMAMINI kapsar. Seçili konu adreste (`?konu=`) tutulur.
+export function HostPerformance({ host, latest, thresholds }: { host: Host; latest: MetricPoint | null; thresholds: HostThresholdsResponse | null }) {
+  const [params, setParams] = useSearchParams()
+  const topic = resolvePerfTopic(params.get('konu'))
   const [preset, setPreset] = useState<RangeKey | 'custom'>('1h')
   const [fromInput, setFromInput] = useState('')
   const [toInput, setToInput] = useState('')
@@ -47,6 +73,41 @@ export function HostPerformance({
   const [points, setPoints] = useState<MetricPoint[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const now = useNow(60_000)
+  const { can } = useAuth()
+  const canSeeAlerts = can('alert.view')
+  const rules = useHostRules(host, thresholds)
+  const [openAlerts, setOpenAlerts] = useState<Alert[]>([])
+
+  // Menüdeki açık alert noktaları.
+  useEffect(() => {
+    if (!canSeeAlerts) return
+    let cancelled = false
+    alertsApi
+      .list({ status: 'open', hostId: host.id, q: '', limit: 200, offset: 0 })
+      .then((page) => !cancelled && setOpenAlerts(page.items))
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [host.id, canSeeAlerts])
+
+  const disks = ioDisks(points)
+  const [disk, setDisk] = useChoice(disks, busiestDisk(points))
+  const ifaces = netInterfaces(points)
+  const [iface, setIface] = useChoice(ifaces, busiestInterface(points))
+
+  function selectTopic(id: PerfTopicId) {
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (id === PERF_TOPICS[0].id) next.delete('konu')
+        else next.set('konu', id)
+        return next
+      },
+      { replace: true },
+    )
+  }
 
   function load(from: Date, to: Date) {
     setFromInput(toInputValue(from))
@@ -89,12 +150,146 @@ export function HostPerformance({
     load(from, to)
   }
 
-  const mounts = diskMounts(points)
-  const layout = diskLayout(host.physical_disks, disk)
+  const state = host.system_state
+  const chart: ChartProps = { points, range, loading, ...(supportsHealth(host) ? {} : { emptyText: healthEmptyText(host, 'Bu grafik') }) }
+  const info = perfTopicInfo(topic)
+  // Aralıkta veri yoksa (sunucu sessiz) kutular son rapordaki en yoğun disk ve arayüzü gösterir.
+  const reported = latest ? [latest] : []
+  const tiles = perfTiles(topic, {
+    latest,
+    state,
+    cores: host.cpu_cores ?? undefined,
+    ramTotalMB: host.ram_total_mb ?? undefined,
+    info: host.host_info,
+    disk: disk ?? busiestDisk(reported),
+    iface: iface ?? busiestInterface(reported),
+    now,
+  })
+  const alertDots = openAlertsByTopic(openAlerts)
+  const menu = PERF_TOPICS.map((t) => {
+    const value = topicNow(t.id, latest, state)
+    const open = alertDots[t.id]
+    return {
+      id: t.id,
+      title: t.title,
+      hint: t.desc,
+      ...(value ? { meta: value, metaTitle: 'son rapor' } : {}),
+      ...(open ? { dot: { label: `${open.count} açık alert`, tone: open.level === 'critical' ? ('critical' as const) : open.level === 'warning' ? ('warning' as const) : ('accent' as const) } } : {}),
+    }
+  })
+  // Konunun alert kuralları.
+  const ruleLines = rules.linesFor(perfRuleItems(topic))
+  const ruleTopic = info.rules?.topic
+  const stateMissing = (what: string) => (
+    <p className="form-hint">{healthEmptyText(host, what)}</p>
+  )
+
+  function blocks(): Block[] {
+    switch (topic) {
+      case 'ozet':
+        return [
+          { key: 'cpu', node: <UsageChart kind="cpu" thresholds={thresholds} {...chart} /> },
+          { key: 'ram', node: <UsageChart kind="ram" thresholds={thresholds} {...chart} /> },
+          { key: 'disk', node: <DiskUsageChart thresholds={thresholds} {...chart} /> },
+          { key: 'net', node: <NetTrafficChart iface={iface} {...chart} /> },
+        ]
+      case 'cpu':
+        return [
+          { key: 'usage', node: <UsageChart kind="cpu" thresholds={thresholds} {...chart} /> },
+          {
+            key: 'procs',
+            node: (
+              <PanelCard title="En çok CPU kullananlar · son rapor" icon={Gauge}>
+                {state ? <ProcessList state={state} kind="cpu" /> : stateMissing('Süreç listesi')}
+              </PanelCard>
+            ),
+          },
+          { key: 'detail', node: <CpuDetailChart {...chart} /> },
+          { key: 'psi', node: <PressureChart resource="cpu" {...chart} /> },
+        ]
+      case 'bellek':
+        return [
+          { key: 'usage', node: <UsageChart kind="ram" thresholds={thresholds} {...chart} /> },
+          {
+            key: 'procs',
+            node: (
+              <PanelCard title="En çok bellek kullananlar · son rapor" icon={Gauge}>
+                {state ? <ProcessList state={state} kind="ram" /> : stateMissing('Süreç listesi')}
+              </PanelCard>
+            ),
+          },
+          { key: 'psi', node: <PressureChart resource="memory" {...chart} /> },
+          { key: 'swap', node: <SwapChart {...chart} /> },
+        ]
+      case 'disk': {
+        const out: Block[] = [
+          { key: 'usage', node: <DiskUsageChart thresholds={thresholds} {...chart} /> },
+          { key: 'disks', node: <PhysicalDisks host={host} latest={latest} thresholds={thresholds} /> },
+          { key: 'latency', node: <DiskIOChart metric="latency" disk={disk} thresholds={thresholds} {...chart} /> },
+          { key: 'speed', node: <DiskIOChart metric="speed" disk={disk} thresholds={thresholds} {...chart} /> },
+          { key: 'iops', node: <DiskIOChart metric="iops" disk={disk} thresholds={thresholds} {...chart} /> },
+          { key: 'psi', node: <PressureChart resource="io" {...chart} /> },
+        ]
+        if (state?.raid && state.raid.length > 0) {
+          out.push({
+            key: 'raid',
+            wide: true,
+            node: (
+              <PanelCard title="Yazılım RAID · son rapor" icon={HardDrive}>
+                <RaidTable state={state} />
+              </PanelCard>
+            ),
+          })
+        }
+        return out
+      }
+      case 'ag':
+        return [
+          { key: 'traffic', node: <NetTrafficChart iface={iface} {...chart} /> },
+          {
+            key: 'ifaces',
+            node: (
+              <PanelCard title="Arayüzler · son rapor" icon={Network}>
+                <InterfacesTable latest={latest} selected={iface} />
+              </PanelCard>
+            ),
+          },
+          { key: 'retrans', node: <RetransChart {...chart} /> },
+        ]
+      case 'sicaklik':
+        return [
+          {
+            key: 'sensors',
+            wide: true,
+            node: (
+              <PanelCard title="Sensörler · son rapor" icon={Thermometer}>
+                {state ? <SensorsTable state={state} thresholds={thresholds} /> : stateMissing('Sıcaklık')}
+              </PanelCard>
+            ),
+          },
+        ]
+      case 'sinirlar':
+        return [
+          {
+            key: 'capacity',
+            wide: true,
+            node: (
+              <PanelCard title="Kapasite · son rapor" icon={Layers}>
+                {state ? <CapacityList state={state} /> : stateMissing('Kapasite sınırları')}
+              </PanelCard>
+            ),
+          },
+        ]
+    }
+  }
+
+  const list = blocks()
+  const full = chartLayout(list)
 
   return (
-    <div>
-      <div className="card">
+    <div className="stack-col">
+      {/* Tek satır: solda hazır aralıklar, sağda tarih aralığı. Aralık ve imleç bütün konulardaki grafiklerde ortak. */}
+      <div className="card perf-range">
         <div className="segmented" role="group" aria-label="Hazır aralık">
           {RANGES.map((r) => (
             <button key={r.key} type="button" aria-pressed={preset === r.key} onClick={() => applyPreset(r.key)}>
@@ -102,7 +297,7 @@ export function HostPerformance({
             </button>
           ))}
         </div>
-        <div className="row" style={{ marginTop: 10 }}>
+        <div className="row row-tight perf-range-dates">
           <label className="visually-hidden" htmlFor="perf-from">
             Başlangıç
           </label>
@@ -115,139 +310,76 @@ export function HostPerformance({
           <button className="btn btn-sm" type="button" onClick={applyCustom}>
             Uygula
           </button>
-          <span className="muted" style={{ fontSize: 13 }}>
-            Aralık bu sekmedeki tüm grafiklere uygulanır.
-          </span>
         </div>
       </div>
 
       {error && <div className="error-banner">{error}</div>}
 
-      <div className="card">
-        <h2 className="card-title">
-          <Activity size={16} strokeWidth={1.75} />
-          CPU ve RAM
-        </h2>
-        <HistoryChart
-          loading={loading}
-          rows={cpuRamRows(points)}
-          series={[
-            { key: 'cpu', label: 'CPU', color: CPU_COLOR },
-            { key: 'ram', label: 'RAM', color: RAM_COLOR },
-          ]}
-          range={range}
-          emptyIcon={Activity}
-        />
+      <div className="topic-layout">
+        <TopicMenu items={menu} active={topic} onSelect={selectTopic} panelId="perf-paneli" />
+        <section className="perf-panel" id="perf-paneli" role="tabpanel" aria-labelledby={`konu-${topic}`}>
+          {/* Seçili konunun adı soldaki menüde; panelde yalnızca konunun seçicisi (disk, arayüz) durur. */}
+          {topic === 'disk' && disks.length > 1 && (
+            <div className="perf-head">
+              <Picker id="perf-disk" label="Disk" options={disks} value={disk} onChange={setDisk} />
+            </div>
+          )}
+          {(topic === 'ag' || topic === 'ozet') && ifaces.length > 1 && (
+            <div className="perf-head">
+              <Picker id="perf-iface" label="Arayüz" options={ifaces} value={iface} onChange={setIface} />
+            </div>
+          )}
+          {tiles.length > 0 && (
+            <div className="perf-tiles">
+              {tiles.map((t) => (
+                <StatTile key={t.label} label={t.label} value={t.value} hint={t.hint} small={t.value.length > 12} />
+              ))}
+            </div>
+          )}
+          {ruleLines.length > 0 && ruleTopic && (
+            <RuleList lines={ruleLines} to={alertRulesPath({ kind: 'sunucu', id: host.id }, ruleTopic)} canEdit={rules.canEdit} />
+          )}
+          <div className="perf-grid">
+            {list.map((b, i) => (
+              <div key={b.key} className={full[i] ? 'perf-block full' : 'perf-block'}>
+                {b.node}
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
+    </div>
+  )
+}
 
-      <div className="card">
-        <h2 className="card-title">
-          <HardDrive size={16} strokeWidth={1.75} />
-          Disk doluluğu
-        </h2>
-        <HistoryChart
-          loading={loading}
-          rows={diskRows(points, mounts)}
-          series={mounts.map((m, i) => ({ key: m, label: m, color: DISK_COLORS[i % DISK_COLORS.length] }))}
-          range={range}
-          emptyIcon={HardDrive}
-        />
-      </div>
-
-      <h2 className="section-title">
-        <HardDrive size={16} strokeWidth={1.75} />
-        Fiziksel diskler
-      </h2>
-      {layout.groups.length === 0 ? (
-        <div className="card">
-          <EmptyState icon={HardDrive}>
-            {!supportsHardwareSummary(host)
-              ? 'Bu agent donanım özetini göndermiyor; fiziksel diskler, çekirdek sayısı ve toplam RAM için agent güncellenmeli.'
-              : 'Fiziksel disk bilgisi yok (diskler keşfedilemedi).'}
-          </EmptyState>
-        </div>
-      ) : (
-        <div className="grid-2 disk-groups">
-          {layout.groups.map((g) => (
-            <DiskGroupCard key={g.disk.name} group={g} thresholds={thresholds} />
-          ))}
-        </div>
-      )}
-
-      {layout.groups.length > 0 && layout.unassigned.length > 0 && (
-        <div className="card">
-          <h2 className="card-title">Diğer bağlama noktaları</h2>
-          <p className="card-desc">Fiziksel bir diske bağlanamayan dosya sistemleri (ağ paylaşımı, sanal dosya sistemi vb.).</p>
+// Fiziksel diskler ve üzerlerindeki mount'lar (son rapor); bir diske bağlanamayanlar ayrı kartta.
+function PhysicalDisks({ host, latest, thresholds }: { host: Host; latest: MetricPoint | null; thresholds: HostThresholdsResponse | null }) {
+  const layout = diskLayout(host.physical_disks, latest?.disk ?? [])
+  if (layout.groups.length === 0) {
+    return (
+      <PanelCard title="Fiziksel diskler · son rapor" icon={HardDrive}>
+        <EmptyState icon={HardDrive}>
+          {!supportsHardwareSummary(host)
+            ? 'Bu agent donanım özetini göndermiyor; fiziksel diskler için agent güncellenmeli.'
+            : 'Fiziksel disk bilgisi yok (diskler keşfedilemedi).'}
+        </EmptyState>
+      </PanelCard>
+    )
+  }
+  return (
+    <div className="stack-col">
+      {layout.groups.map((g) => (
+        <DiskGroupCard key={g.disk.name} group={g} thresholds={thresholds} />
+      ))}
+      {layout.unassigned.length > 0 && (
+        <PanelCard title="Diğer bağlama noktaları" icon={HardDrive} desc="Fiziksel bir diske bağlanamayan dosya sistemleri (ağ paylaşımı, sanal dosya sistemi vb.).">
           <div className="mount-grid">
             {layout.unassigned.map((u) => (
               <MountMeter key={u.mount} mount={u.mount} usage={u} levels={mountLevels(thresholds?.thresholds, thresholds?.mount_thresholds, u.mount)} />
             ))}
           </div>
-        </div>
+        </PanelCard>
       )}
-
-      <DiskIoPreview />
-      <div className="grid-2">
-        <NetworkPreview />
-        <TemperaturePreview />
-      </div>
-      <ProcessesPreview />
     </div>
-  )
-}
-
-function HistoryChart({
-  loading,
-  rows,
-  series,
-  range,
-  emptyIcon,
-}: {
-  loading: boolean
-  rows: Record<string, number>[]
-  series: Series[]
-  range: { start: number; end: number }
-  emptyIcon: typeof Activity
-}) {
-  if (loading) return <div className="muted">Yükleniyor…</div>
-  if (rows.length === 0 || series.length === 0) return <EmptyState icon={emptyIcon}>Bu aralıkta metrik verisi yok.</EmptyState>
-  const span = range.end - range.start
-  const long = isLongSpan(span)
-  const labelOf = (key: string) => series.find((s) => s.key === key)?.label ?? key
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <LineChart data={rows} margin={{ top: 8, right: 8, bottom: 8, left: -12 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-        <XAxis
-          dataKey="ts"
-          type="number"
-          scale="time"
-          domain={[range.start, range.end]}
-          tickFormatter={(ms: number) => formatPoint(ms, span)}
-          tick={{ fontSize: 11 }}
-          stroke="var(--text-muted)"
-          minTickGap={long ? 70 : 48}
-          angle={long ? -20 : 0}
-          textAnchor={long ? 'end' : 'middle'}
-          height={long ? 40 : 24}
-        />
-        <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke="var(--text-muted)" unit="%" />
-        <Tooltip
-          contentStyle={{
-            fontSize: 12,
-            borderRadius: 8,
-            background: 'var(--surface-1)',
-            border: '1px solid var(--border)',
-            color: 'var(--text-primary)',
-          }}
-          labelFormatter={(label) => formatPoint(Number(label), span)}
-          formatter={(value, name) => [`${value}%`, labelOf(String(name))]}
-        />
-        {series.length > 1 && <Legend formatter={(value: string) => labelOf(value)} wrapperStyle={{ fontSize: 12 }} />}
-        {series.map((s) => (
-          <Line key={s.key} type="monotone" dataKey={s.key} name={s.key} stroke={s.color} strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-        ))}
-      </LineChart>
-    </ResponsiveContainer>
   )
 }

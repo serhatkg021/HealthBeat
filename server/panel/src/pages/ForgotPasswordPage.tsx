@@ -6,6 +6,7 @@ import { ApiError } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 import { useDocumentTitle } from '../components/useDocumentTitle'
 import { plausibleEmail } from './passwordReset'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 // "Şifremi unuttum": e-posta adresi girilir, server tek kullanımlık bir sıfırlama bağlantısı e-postalar. Yanıt her
 // zaman aynıdır (hesabın var olup olmadığı dışarıdan anlaşılmaz). Kurulumda e-posta (mail kanalı ve panel adresi, Ayarlar)
@@ -58,6 +59,9 @@ export function ForgotPasswordPage() {
 
   return (
     <div className="login-shell">
+      <div className="login-theme">
+        <ThemeToggle />
+      </div>
       <div className="card login-card">
         <div className="login-brand">
           <span className="brand-mark">

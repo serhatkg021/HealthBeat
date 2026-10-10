@@ -1,7 +1,8 @@
 // Sunucu sayfasındaki salt okunur "Geçerli alert kuralları"nın saf mantığı: sunucunun eşik yanıtını, her kuralın
 // geçerli değeri ve nereden geldiğiyle satırlara çevirir. React içermez; Node'un çalıştırıcısıyla birim test edilir.
-import type { HostThresholdsResponse } from '../types/api.ts'
-import { METRICS, formatLevels } from './thresholds.ts'
+import type { HostStatusRuleView, HostThresholdsResponse } from '../types/api.ts'
+import { ruleInfo, settingText } from './statusRules.ts'
+import { METRICS, formatLevels, metricInfo } from './thresholds.ts'
 
 export type RuleSource = 'custom' | 'inherited' | 'none'
 
@@ -13,7 +14,8 @@ export interface EffectiveRule {
   source: RuleSource
 }
 
-// Metrik başına bir satır (özel değer devralınanı ezer), ardından mount'ların ve container'ların kendi eşikleri.
+// Metrik başına bir satır (özel değer devralınanı ezer), ardından mount'ların, container'ların ve protokol 4 konularının
+// (disk, sensör, servis) kendi eşikleri.
 export function effectiveRules(res: HostThresholdsResponse): EffectiveRule[] {
   const rows: EffectiveRule[] = METRICS.map((m) => {
     const view = res.thresholds.find((t) => t.metric_type === m.type)
@@ -27,7 +29,27 @@ export function effectiveRules(res: HostThresholdsResponse): EffectiveRule[] {
   for (const t of [...res.container_thresholds].sort((a, b) => a.container.localeCompare(b.container))) {
     rows.push({ key: `container:${t.container}`, label: `Docker restart · ${t.container}`, value: formatLevels('docker_restart', t.custom), source: 'custom' })
   }
+  const subjects = [...(res.subject_thresholds ?? [])].sort((a, b) => a.metric_type.localeCompare(b.metric_type) || a.subject.localeCompare(b.subject))
+  for (const t of subjects) {
+    rows.push({
+      key: `${t.metric_type}:${t.subject}`,
+      label: `${metricInfo(t.metric_type).label} · ${t.subject}`,
+      value: formatLevels(t.metric_type, t.custom),
+      source: 'custom',
+    })
+  }
   return rows
+}
+
+// Durum kuralı başına bir satır: sunucunun kendi ayarı devralınanı ezer; hiçbiri yoksa kural kapalıdır.
+export function statusEffectiveRules(views: HostStatusRuleView[]): EffectiveRule[] {
+  return views.map((v) => {
+    const label = ruleInfo(v.rule)?.label ?? v.rule
+    const key = `status:${v.rule}`
+    if (v.custom) return { key, label, value: settingText(v.rule, v.custom), source: 'custom' }
+    if (v.default) return { key, label, value: settingText(v.rule, v.default), source: 'inherited' }
+    return { key, label, value: null, source: 'none' }
+  })
 }
 
 // Hangi mount'ların disk alert'i üretebileceğinin tek satırlık özeti.

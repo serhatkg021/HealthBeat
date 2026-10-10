@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useDocumentTitle } from '../components/useDocumentTitle'
 import { validateNewPassword } from './password'
 import { KeyRound } from 'lucide-react'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 // Kenar çubuğundan herkes tarafından ulaşılır ve şifresi başka bir şeyden önce değiştirilmesi
 // gereken hesaplar için (bkz. App.tsx'teki RequireAuth) zorunlu tutulur — ör. ilk yönetici.
@@ -41,6 +42,9 @@ export function ChangePasswordPage() {
 
   return (
     <div className="login-shell">
+      <div className="login-theme">
+        <ThemeToggle />
+      </div>
       <form className="card login-card" onSubmit={handleSubmit}>
         <div className="login-brand">
           <span className="brand-mark">

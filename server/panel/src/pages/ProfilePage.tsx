@@ -45,7 +45,7 @@ export function ProfilePage() {
 
   return (
     <div className="page-readable">
-      <PageHeader title="Profil" subtitle="Hesap bilgileriniz; ad ve telefonu kendiniz değiştirebilirsiniz" />
+      <PageHeader title="Profil" />
       {error && <div className="error-banner">{error}</div>}
 
       <form className="card form-card" onSubmit={handleSubmit}>

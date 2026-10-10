@@ -408,3 +408,40 @@ func TestCollectOnTheRealHost(t *testing.T) {
 		t.Errorf("host_info is %d bytes; it is sent on every report and should stay small", len(b))
 	}
 }
+
+// Start'tan sonra Collect yavaş komutları beklemez: ilk sonuç gelene kadar yavaş alanlar bilinmiyor, sonra dolu.
+func TestStartMovesSlowFieldsToTheBackground(t *testing.T) {
+	release := make(chan struct{})
+	c, calls := newFakeHost(t).ubuntu().mkdir("run/systemd/system").collector(func(name string, _ ...string) (string, error) {
+		<-release
+		if name == "timedatectl" {
+			return "yes\n", nil
+		}
+		return "a.service loaded failed failed A\n", nil
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	c.Start(ctx)
+
+	begin := time.Now()
+	info := c.Collect(ctx)
+	if time.Since(begin) > time.Second {
+		t.Fatal("Collect waited for the slow commands after Start")
+	}
+	if info.TimeSynced != nil || info.FailedUnits != nil || info.Hostname == "" {
+		t.Fatalf("before the first background run: time_synced=%v failed_units=%v hostname=%q; want slow fields unknown, the rest present",
+			info.TimeSynced, info.FailedUnits, info.Hostname)
+	}
+
+	close(release)
+	c.WaitReady(ctx, 2*time.Second)
+	info = c.Collect(ctx)
+	if info.TimeSynced == nil || !*info.TimeSynced || info.FailedUnits == nil || *info.FailedUnits != 1 {
+		t.Fatalf("after the background run: time_synced=%v failed_units=%v", info.TimeSynced, info.FailedUnits)
+	}
+	before := calls.Load()
+	c.Collect(ctx)
+	if calls.Load() != before {
+		t.Fatal("Collect ran commands itself after Start")
+	}
+}

@@ -14,6 +14,17 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - **Yedek al.** Migration `000006` (Sistem Araçları izinleri) açılışta uygulanır; yalnızca izin satırları ekler. Eski sürüm
   bu veritabanıyla açılmaz: geri dönüş `000006_system_tools_permissions.down.sql` ile (yalnızca bu izinleri siler) ya da
   yedekle olur (`docs/DISTRIBUTION.md` §8.3).
+- Migration `000007` (protokol 4: sistem sağlığı ve performans) de açılışta uygulanır. Yalnızca ekleme yapar: `metrics`'e
+  üç, `host_status`'a bir, `docker_containers`'a dört, eşik tablolarına bir boş bırakılabilir sütun; `host_services`,
+  `host_watched_services`, `status_alert_rules` ve `alert_pending` tabloları. `alerts.alert_type` ve eşiklerin
+  `metric_type` / `subject` CHECK'leri yeni türleri kabul edecek şekilde genişler; güncelleme sırasında hâlâ çalışan eski
+  server süreci bu şemayla çalışır (`docs/COMPATIBILITY.md` §4). Geri dönüş
+  `000007_protocol4_health_performance.down.sql` (önce `000007`, sonra `000006`'nınki) ya da yedekle: `.down.sql` yeni
+  türlerdeki alert'leri ve eşikleri, servis listelerini, izlenen servis seçimini, durum kurallarını ve protokol 4 zaman
+  serisini siler.
+- **Yeni alert türleri kapalı gelir.** Disk gecikmesi, sıcaklık, servis yeniden başlatma ve saat farkı için eşik; servis
+  çalışmıyor, container sağlıksız, RAID bozuk gibi durumlar için durum kuralı tanımlanmadıkça alert açılmaz (sistem
+  varsayılanı yoktur). Panelde Alert kuralları'ndan açılır.
 
 ### Eklendi
 - **Panel: Sistem Araçları** (sol menüde Ayarlar'ın üstünde; araçlar sayfanın içinde sekmelerle ayrılır). İlk araç **Kuyruk
@@ -38,7 +49,46 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - Panel: **Ctrl+K (⌘K) araması**: sunuculara (ad ya da IP), organizasyonlara ve sayfalara yazarak gidilir; yalnızca
   kullanıcının görebildikleri listelenir.
 - Panel: uzun listelerde (organizasyon, sunucu, üst şirket seçimi) yazarak aranabilen seçim kutuları.
+- Panel: **tema seçimi** (Sistem / Açık / Koyu): üst çubuktaki simge, profil menüsü ve giriş sayfaları. Seçim bu tarayıcıda
+  saklanır; "Sistem" işletim sisteminin ayarını izler ve değişince panel de değişir.
 - Yeni izinler `system.queue.view`, `system.cache.view` ve `system.logs.view`; varsayılan olarak yalnızca süper admindedir.
+- **Protokol 4: sistem sağlığı ve performans** (agent'ın yeni sürümüyle gelir; eski agent'lar olduğu gibi çalışır). Server
+  protokol 4 raporlarını kabul eder ve saklar: CPU ve bellek ayrıntısı, kaynak baskısı (PSI), disk ve ağ G/Ç'si, TCP, swap
+  zaman serisi olarak (metrik satırında); sıcaklık, RAID, kapasite sınırları, en çok kaynak kullanan süreçler, bekleyen
+  güncellemeler, saat senkronu ve OOM sayacı son durum olarak; systemd servisleri ayrı listede; container'ların
+  healthcheck sonucu, çıkış kodu ve OOM bilgisi. Değerler ölçüldüğü gibi saklanır, yuvarlama panelde yapılır. Bozuk bir
+  bölüm yalnızca kendisini düşürür; CPU, RAM ve disk metriği kaybolmaz.
+- **Yeni sayısal alert'ler:** disk gecikmesi (disk başına, ms), sıcaklık (sensör başına, °C), servis yeniden başlatma
+  döngüsü (izlenen servisin son 10 dakikadaki yeniden başlatma sayısı) ve saat farkı (ms). Uyarı/kritik eşikleri
+  sistem → organizasyon → sunucu zinciriyle devralınır; sunucu kapsamında disk, sensör ya da servis başına ayrı eşik
+  verilebilir. **Süre koşulu:** eşik ancak bu kadar süre kesintisiz aşılırsa alert açılır (boşsa hemen).
+- **Durum kuralları:** eşiği olmayan alert'lerin seviyesi (kapalı / bilgi / uyarı / kritik) ve süresi, aynı kapsam
+  zinciriyle: izlenen servis çalışmıyor, container sağlıksız, container bellek yetmezliği, çekirdek OOM ile süreç öldürdü,
+  dosya sistemi salt okunur oldu, RAID bozuk, RAID yeniden kuruluyor, saat senkron değil, saat kaynağı sorunlu, yeniden
+  başlatma gerekli, güvenlik güncellemesi bekliyor. Bir kapsamdaki "kapalı" üst kapsamdaki kuralı orada kapatır. Saat
+  senkronu ve yeniden başlatma bilgisi protokol 3 agent'larından da değerlendirilir.
+- Yeni alert türlerinin bildirim metinleri (açıldı / seviye değişti / çözüldü); konu satırında disk, sensör, servis, RAID
+  dizisi ya da saat sorununun türü yazar.
+- **API:** `GET/PUT /api/v1/status-rules` ve `GET/PUT /api/v1/hosts/:id/status-rules` (`threshold.view` / `threshold.edit`;
+  denetim `status_rule.update`, `host.update_status_rules`); `GET /api/v1/hosts/:id/services` ve
+  `PUT /api/v1/hosts/:id/watched-services` (`host.view` / `host.update`; denetim `host.update_watched_services`); eşiklerde
+  `duration_seconds` (PUT'ta verilmezse değişmez, `null` kaldırır) ve sunucu eşiklerinde `subject_thresholds`; metrik
+  noktalarında `system`, `disk_io`, `net_io`; `GET /api/v1/hosts/:id`'de `system_state`; `/docker` yanıtında `health`,
+  `health_failing_streak`, `exit_code`, `oom_killed`.
+- **Panel: Alert kuralları** dört yeni eşik türü (süre alanıyla) ve **durum kuralları** tablosu, üç kapsamda. Sunucu
+  kapsamında disk, sensör ve servis başına eşik; sensörün donanım sınırı biliniyorsa yanında gösterilir ve "Öneriyi kullan"
+  ile alanlara yazılır. Sunucu ayarlarındaki "Geçerli alert kuralları" bunları da listeler.
+- **Panel: Servisler → Sistem servisleri:** systemd servisleri (durum, ne zamandan beri, yeniden başlatma, açılışta),
+  arama ve "yalnızca sorunlu / izlenen" süzgeçleri, servis başına "İzle" seçimi; raporlanmayan bir servis de adıyla
+  izlenebilir. "Servis çalışmıyor" kuralı kapalıyken izlenen servis varsa uyarı gösterilir. Docker tablosunda sağlık
+  sütunu, duran container'ın çıkış kodu ve OOM bilgisi.
+- **Panel: Performans:** CPU ayrıntısı (iowait, steal), kaynak baskısı (PSI; CPU, bellek, G/Ç aynı ölçekte), disk başına
+  G/Ç (gecikme, hız, IOPS), arayüz başına ağ trafiği (aralıktaki hata ve düşen paketlerle), swap ve TCP yeniden iletim
+  grafikleri. Sekmedeki bütün grafikler imleci paylaşır.
+- **Panel: Envanter:** sıcaklık (donanım sınırı ve alert eşiğiyle), kapasite sınırları, bekleyen güncellemeler, OOM, saat
+  senkronu ayrıntısı (kaynaklarıyla), en çok kaynak kullanan süreçler ve yazılım RAID. **Genel:** bozuk RAID, salt okunur
+  mount ve son 24 saatteki OOM için uyarı şeridi; disk kartında fiziksel disk başına son G/Ç. **Özet**'in alert türü
+  süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
 - **Panel: yeni düzen.** Sol menü üç gruba ayrıldı: **İzleme** (Özet, Sunucular, Alert'ler), **Alert Yönetimi** (Alert
@@ -46,22 +96,40 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - **Sunucular:** görülebilen tüm sunucuların süzülebilir listesi ve sunucu ekleme tek sayfada; operatörün "Sunucularım"
     sayfası bununla birleşti. **Özet** sayaçlara, sorunlu sunuculara ve açık alert'lere odaklandı; sayaçlar Sunucular'ı
     ilgili süzgeçle açar.
-  - **Sunucu sayfası** sabit altı sekme: Genel (açık sorunlar dahil), Performans (geçmiş grafikleri tek zaman seçiciyle ve
-    fiziksel diskler; eski "Detay" penceresinin yerine), Servisler (Docker), Envanter (eski "Sistem"), Alert'ler, Ayarlar.
-  - **Alert kuralları:** sistem, organizasyon ve sunucu eşikleri ile disk alert seçimi tek sayfada, kapsam seçiciyle. Sunucu
-    ayarlarında geçerli kurallar ve nereden geldikleri (devralındı / bu sunucuya özel) salt okunur gösterilir.
+  - **Sunucu sayfası** sabit altı sekme: Genel (açık sorunlar dahil), Performans, Servisler (Docker ve systemd), Envanter
+    (eski "Sistem"), Alert'ler, Ayarlar. Kayıtlı IP başlıkta, adın yanında.
+  - **Performans** konuya göre: üstte tek satır zaman seçici, solda konu menüsü (Özet, CPU, Bellek, Disk, Ağ, Sıcaklık,
+    Sistem sınırları; yanında son rapor değeri, açık alert'i olan konuda seviye renginde nokta). Her konuda şu an kutuları,
+    o konunun alert kuralları (Alert kurallarında konuyu açan bağlantıyla), grafikler ve ana grafiğin yanında son rapor
+    (süreçler, fiziksel diskler, ağ arayüzleri, sensörler, kapasite, RAID). Ana grafiklerde uyarı/kritik eşikleri kesikli
+    çizgi; her grafik büyütülebilir; yan yana en çok iki grafik. Eski "Detay" penceresinin yerine.
+  - **Envanter** dört kart: Makine, İşletim sistemi ve ağ, Saat (senkron ayrıntısıyla), Bakım (güncellemeler, yeniden
+    başlatma, çalışma süresi); Saat ve Bakım'da alert kuralları. Kaynak kullanımı Performans'tadır.
+  - Sayfa başlarındaki açıklama satırları kaldırıldı. Kart ve form alanı açıklamaları başlığın ya da etiketin yanındaki ⓘ
+    düğmesinde (Ayarlar'da alanın varsayılanı da orada; "Varsayılana dön" etiketin yanında). Boş durum yazıları, sayılar,
+    silme uyarıları ve sunucu ekleme sihirbazının yönlendirmeleri görünür kalır.
+  - **Alert kuralları:** sistem, organizasyon ve sunucu eşikleri, durum kuralları ve disk alert seçimi tek sayfada, kapsam
+    seçiciyle. Kurallar üç kapsamda da konuya göre gruplu: solda konu menüsü (CPU ve bellek, Disk, Sıcaklık, Servisler,
+    Container, Saat, Sistem bakımı, Erişilebilirlik; konu başına etkin/toplam kural sayısı), sağda o konunun eşikleri,
+    durum kuralları ve seçimleri; seçili konu adreste (`?konu=`). Satırda Özelleştir / Düzenle / Devral (sistemde Tanımla /
+    Kaldır) ve Geri al; disk alert seçimi ve mount, disk, sensör, servis, container başına değerler ilgili satırın altında.
+    Değişiklikler konular arasında korunur ve alttaki tek Kaydet çubuğuyla birlikte kaydedilir; kapsam ya da sunucu
+    değişince kaydedilmemiş değişiklikler atılır. Devralınan değerin kaynağı yazılır ("Devralındı · Ana Şirket"). Sunucu
+    ayarlarında geçerli kurallar ve nereden geldikleri (devralındı / bu sunucuya özel) salt okunur gösterilir. Kuralların ve
+    kapsam özetinin açıklaması adın yanındaki ⓘ düğmesinde.
   - **Bildirim:** kanallar, sistem sahipleri, bildirim kuralları (organizasyon ya da sunucu kapsamı) ve tüm organizasyonların
     iletişim kişileri (salt okunur, aranabilir) tek sayfada. Kişiler organizasyon sayfasında düzenlenir.
   - **Organizasyon ayarları** (ad, adres, üst şirket, silme) organizasyon listesindeki ve organizasyon sayfasındaki çarkla
     açılan pencerede; silme pencerenin içinde ikinci bir onay ister.
   - **Denetim Kaydı** Sistem Araçları'na taşındı; **Ayarlar** yalnızca kurulum yapılandırmasıdır (agent sürümleri, saklama,
     oturum, panel adresi, loglama).
-  - Henüz gelmemiş özelliklerin yerleri (sistem servisleri, disk G/Ç, ağ, sıcaklık, süreçler, bekleyen güncellemeler, yeni
-    kural türleri, bakım pencereleri, Telegram/Webhook, "bu alert kime gider?") "Yakında · örnek veri" olarak gösterilir;
-    örnek veri gerçek sayaçlara ve özetlere karışmaz.
+  - Henüz gelmemiş özelliklerin yerleri (bakım pencereleri, Telegram/Webhook, "bu alert kime gider?") "Yakında · örnek veri"
+    olarak gösterilir; örnek veri gerçek sayaçlara ve özetlere karışmaz.
   - Eski adresler (`/thresholds`, `/audit`, `/settings/system`, `/my-hosts` ve eski sekme/bölüm adresleri) yeni yerlerine
     yönlenir.
 - Proje MIT lisansıyla yayınlanıyor (`LICENSE`); Docker imajları `org.opencontainers.image.licenses=MIT` etiketini taşıyor.
+- Server ingest protokolü 4 oldu (`/api/v1/meta` → `protocol`). Alert motoru rapor başına iki sorgu daha yapar (durum
+  kuralları ve süre koşulu bekleyen alert'ler).
 
 ### Düzeltildi
 - `SECRETS_ENCRYPTION_KEY` değiştiğinde (ya da veritabanı başka bir anahtarla geri yüklendiğinde) kayıtlı SMTP şifresi
@@ -76,6 +144,13 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   artık sonucunu (agent'ın `agent.json` güncellenip yeniden başlatılana kadar bağlanamayacağını) anlatan bir onay
   penceresi açılıyor.
 - Panel: pencereler, odak pencerenin dışına düştüğünde (ör. odaktaki düğme ekrandan kalktığında) Esc ile kapanmıyordu.
+- Bir alert türünün eşiği kaldırılınca (CPU, RAM, disk, docker restart ve yeni türler) o türün açık alert'leri sonsuza dek
+  açık kalıyordu; artık sonraki raporda "çözüldü" bildirimiyle kapanıyor. Disk ve docker restart alert'leri rapor disk ya
+  da container listesi taşımasa da kapanıyor.
+- Bildirimde ve panelde iki ondalıktan küçük bir eşik yuvarlanıp kayboluyordu ("eşik: 0,00 ms"); artık girildiği gibi
+  yazılıyor. Normal eşiklerin biçimi değişmedi.
+- Panel: Envanter'de eski agent için "agent 1.3.0 ya da üstü gerekir" yazıyordu; sürüm numarası depo yeniden başlatılmadan
+  önceki numaralandırmadan kalmaydı. Artık "agent güncellenince görünür" yazıyor.
 - Panel: kendi bildirim kuralı olmayan sunucu ya da organizasyonda "bildirimler yalnızca sistem sahiplerine gider"
   yazıyordu; organizasyon ya da üst organizasyon kuralları da geçerli olduğu için yanıltıcıydı. Artık "bu sunucuya /
   organizasyona özel ek alıcı yok" yazıyor.

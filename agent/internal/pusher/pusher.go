@@ -28,6 +28,8 @@ type DiskUsage struct {
 	// InodesUsedPct protokol 3'tür; bilinmiyorsa gönderilmez. Core() bunu soyar: bilinmeyen alanı 400 ile
 	// reddeden eski server'lar disk girdisindeki alanı da reddederdi (bkz. docs/COMPATIBILITY.md).
 	InodesUsedPct *float64 `json:"inodes_used_pct,omitempty"`
+	// ReadOnly protokol 4'tür: dosya sistemi salt okunur bağlıysa (disk hatasında çekirdek böyle yapar) true.
+	ReadOnly *bool `json:"read_only,omitempty"`
 }
 
 // PhysicalDisk, bir fiziksel diski ve üzerindeki raporlanan mount'ları anlatır. Mount birden çok
@@ -48,6 +50,12 @@ type DockerContainer struct {
 	RAMMB         float64 `json:"ram_mb"`
 	RestartCount  int     `json:"restart_count"`
 	UptimeSeconds int64   `json:"uptime_seconds"`
+	// Protokol 4: Docker healthcheck sonucu (healthy | unhealthy | starting; healthcheck yoksa gönderilmez), üst üste
+	// başarısız kontrol sayısı, son çıkış kodu ve bellek yetmediği için öldürülüp öldürülmediği.
+	Health              string `json:"health,omitempty"`
+	HealthFailingStreak *int   `json:"health_failing_streak,omitempty"`
+	ExitCode            *int   `json:"exit_code,omitempty"`
+	OOMKilled           *bool  `json:"oom_killed,omitempty"`
 }
 
 type MetricsPayload struct {
@@ -63,21 +71,46 @@ type MetricsPayload struct {
 	// HostInfo makine envanteri ve anlık durumudur (protokol 3); toplanamadıysa gönderilmez.
 	HostInfo         *collector.HostInfo `json:"host_info,omitempty"`
 	DockerContainers []DockerContainer   `json:"docker_containers"`
+
+	// Protokol 4 (bkz. payload_v4.go).
+	CPUDetail    *CPUDetail    `json:"cpu_detail,omitempty"`
+	MemoryDetail *MemoryDetail `json:"memory_detail,omitempty"`
+	Pressure     *Pressure     `json:"pressure,omitempty"`
+	DiskIO       []DiskIO      `json:"disk_io,omitempty"`
+	NetIO        []NetIO       `json:"net_io,omitempty"`
+	TCP          *TCP          `json:"tcp,omitempty"`
+	Temperatures []Temperature `json:"temperatures,omitempty"`
+	RAID         []RAID        `json:"raid,omitempty"`
+	Capacity     *Capacity     `json:"capacity,omitempty"`
+	Processes    *Processes    `json:"processes,omitempty"`
+	Updates      *Updates      `json:"updates,omitempty"`
+	Services     *Services     `json:"services,omitempty"`
+	TimeSync     *TimeSync     `json:"time_sync,omitempty"`
 }
 
 // Core, yalnızca her server sürümünün kabul ettiği çekirdek alanları (CPU, RAM, disk, Docker)
 // içeren bir kopya döndürür: donanım özeti gibi sonradan eklenen alanlar çıkarılır. Tam payload'ı
-// 400 ile reddeden eski bir server'a karşı geri dönüş için kullanılır (bkz. Compat).
+// 400 ile reddeden eski bir server'a karşı geri dönüş için kullanılır (bkz. Compat). Eski server iç içe
+// nesnelerdeki bilinmeyen alanı da reddettiği için disk ve container girdileri de çekirdek alanlarına indirilir.
 func (m MetricsPayload) Core() MetricsPayload {
-	// Disk girdilerinin kopyası: protokol 3'ün eklediği inode alanı çekirdek değildir.
-	disks := make([]DiskUsage, len(m.Disk))
-	for i, d := range m.Disk {
-		disks[i] = DiskUsage{Mount: d.Mount, UsedPct: d.UsedPct, Total: d.Total, Free: d.Free}
+	// Disk girdilerinin kopyası: inode (protokol 3) ve salt okunur (protokol 4) alanları çekirdek değildir.
+	var disks []DiskUsage
+	if m.Disk != nil {
+		disks = make([]DiskUsage, len(m.Disk))
+		for i, d := range m.Disk {
+			disks[i] = DiskUsage{Mount: d.Mount, UsedPct: d.UsedPct, Total: d.Total, Free: d.Free}
+		}
 	}
-	if m.Disk == nil {
-		disks = nil
+	// Container girdilerinin kopyası: sağlık, çıkış kodu ve OOM alanları (protokol 4) çekirdek değildir.
+	var containers []DockerContainer
+	if m.DockerContainers != nil {
+		containers = make([]DockerContainer, len(m.DockerContainers))
+		for i, c := range m.DockerContainers {
+			containers[i] = DockerContainer{Name: c.Name, Image: c.Image, Status: c.Status, CPUPct: c.CPUPct, RAMMB: c.RAMMB,
+				RestartCount: c.RestartCount, UptimeSeconds: c.UptimeSeconds}
+		}
 	}
-	return MetricsPayload{CPUUsagePct: m.CPUUsagePct, RAMUsagePct: m.RAMUsagePct, Disk: disks, DockerContainers: m.DockerContainers}
+	return MetricsPayload{CPUUsagePct: m.CPUUsagePct, RAMUsagePct: m.RAMUsagePct, Disk: disks, DockerContainers: containers}
 }
 
 // ServerInfo, server'ın ingest yanıt başlıklarında bildirdiği sürüm bilgisidir. Başlık yoksa

@@ -4,6 +4,8 @@ import { ApiError } from '../api/client'
 import { channelsApi, ownersApi, type OwnerInput } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import { EmptyState } from '../components/EmptyState'
+import { FieldLabel } from '../components/FieldLabel'
+import { InfoTip } from '../components/InfoTip'
 import { Modal } from '../components/Modal'
 import { StatusBadge } from '../components/StatusBadge'
 import { alertLevelLabel } from '../labels'
@@ -142,11 +144,12 @@ function EmailChannelCard({
       <h2 className="card-title">
         <Mail size={16} strokeWidth={1.75} />
         E-posta (SMTP)
+        <InfoTip label="E-posta (SMTP)">
+          Alert bildirimleri ve “Şifremi unuttum” e-postaları bu sunucu üzerinden gönderilir. Kaydettikten sonra “Deneme gönder” ile ayarı
+          doğrulayın.
+        </InfoTip>
         <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
       </h2>
-      <p className="card-desc">
-        Alert bildirimleri ve “Şifremi unuttum” e-postaları bu sunucu üzerinden gönderilir. Kaydettikten sonra “Deneme gönder” ile ayarı doğrulayın.
-      </p>
       {channel.secret_unreadable && (
         <div className="notice">
           Kayıtlı şifre çözülemiyor: server’ın şifreleme anahtarı (SECRETS_ENCRYPTION_KEY) şifre kaydedildikten sonra değişmiş. Şifre yeniden
@@ -171,9 +174,8 @@ function EmailChannelCard({
         {field('config.host')}
       </div>
       <div className="form-row">
-        <label htmlFor="smtp-port">Port</label>
+        <FieldLabel htmlFor="smtp-port" label="Port" hint="465 örtük TLS; diğer portlarda sunucu sunuyorsa STARTTLS kullanılır." />
         <input id="smtp-port" value={port} disabled={!canEdit} inputMode="numeric" onChange={(e) => setPort(e.target.value)} />
-        <p className="form-hint">465 örtük TLS; diğer portlarda sunucu sunuyorsa STARTTLS kullanılır.</p>
         {field('config.port')}
       </div>
       <div className="form-row">
@@ -182,9 +184,8 @@ function EmailChannelCard({
         {field('config.from')}
       </div>
       <div className="form-row">
-        <label htmlFor="smtp-user">Kullanıcı adı</label>
+        <FieldLabel htmlFor="smtp-user" label="Kullanıcı adı" hint="Boşsa kimlik doğrulama yapılmaz." />
         <input id="smtp-user" value={username} disabled={!canEdit} autoComplete="off" onChange={(e) => setUsername(e.target.value)} />
-        <p className="form-hint">Boşsa kimlik doğrulama yapılmaz.</p>
         {field('config.username')}
       </div>
       {canEdit && (
@@ -209,7 +210,11 @@ function EmailChannelCard({
         </div>
       )}
       <div className="form-row">
-        <label htmlFor="smtp-owner-level">Sistem sahiplerine</label>
+        <FieldLabel
+          htmlFor="smtp-owner-level"
+          label="Sistem sahiplerine"
+          hint="Organizasyon ve sunucu kurallarındaki ek alıcılar kendi seviyelerini kullanır."
+        />
         <select id="smtp-owner-level" value={ownerLevel} disabled={!canEdit} onChange={(e) => setOwnerLevel(e.target.value as AlertLevel)}>
           {LEVELS.map((l) => (
             <option key={l} value={l}>
@@ -217,7 +222,6 @@ function EmailChannelCard({
             </option>
           ))}
         </select>
-        <p className="form-hint">Organizasyon ve sunucu kurallarındaki ek alıcılar kendi seviyelerini kullanır.</p>
       </div>
       {canEdit && (
         <div className="form-actions">
@@ -309,11 +313,13 @@ export function OwnersSection({ canEdit }: { canEdit: boolean }) {
     <div className="card table-card">
       <div className="card-head">
         <div>
-          <h2 className="card-title">Sistem sahipleri</h2>
-          <p className="card-desc">
-            Her alert bu kişilere gider (kanalın sahip seviyesinden itibaren). Panel kullanıcısı olmaları gerekmez; organizasyon ve sunucu kuralları
-            bunlara ek alıcı ekler.
-          </p>
+          <h2 className="card-title">
+            Sistem sahipleri
+            <InfoTip label="Sistem sahipleri">
+              Her alert bu kişilere gider (kanalın sahip seviyesinden itibaren). Panel kullanıcısı olmaları gerekmez; organizasyon ve sunucu
+              kuralları bunlara ek alıcı ekler.
+            </InfoTip>
+          </h2>
         </div>
         {canEdit && (
           <button className="btn btn-primary" type="button" onClick={() => { setFormError(null); setEditing({ id: null, input: emptyOwner }) }}>
@@ -371,9 +377,8 @@ export function OwnersSection({ canEdit }: { canEdit: boolean }) {
           <form onSubmit={handleSave}>
             {formError && <div className="error-banner">{formError}</div>}
             <div className="form-row">
-              <label htmlFor="owner-name">Ad</label>
+              <FieldLabel htmlFor="owner-name" label="Ad" hint="Kişi ya da ortak adres (ör. “NOC masası”)." />
               <input id="owner-name" value={editing.input.name} maxLength={200} required onChange={(e) => set({ name: e.target.value })} />
-              <p className="form-hint">Kişi ya da ortak adres (ör. “NOC masası”).</p>
             </div>
             <div className="form-row">
               <label htmlFor="owner-email">E-posta</label>

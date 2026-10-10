@@ -4,39 +4,100 @@
 
 import type {
   HostThresholdView,
+  MetricPoint,
+  Temperature,
   ContainerThreshold,
   MetricType,
   MountOverrides,
   MountThreshold,
+  SubjectMetricType,
+  SubjectThreshold,
+  SubjectThresholdOverrides,
   ThresholdConfig,
   ThresholdLevels,
   ThresholdOverrides,
 } from '../types/api.ts'
 import { isValidMount } from './diskSelection.ts'
+import { decimal } from './units.ts'
+import { durationDraft, durationSeconds, emptyDuration, formatDuration, parseDuration, sameDuration, type DurationDraft } from './duration.ts'
 
 export interface MetricInfo {
   type: MetricType
   label: string
   unit: string
   percent: boolean
+  // Seviyelerin üst sınırı (server'ın model.ValidateThresholdLevels'ı).
+  max: number
+  // Süre koşulu verilebilir (protokol 4 türleri; CPU/RAM/disk/docker_restart anlık değerlendirilir).
+  duration?: boolean
   hint?: string
 }
 
+const MAX_RESTART_LEVEL = 1_000_000
+
 // Gösterim sırası; server'ın model.ThresholdMetricTypes'ını yansıtır.
 export const METRICS: MetricInfo[] = [
-  { type: 'cpu', label: 'CPU', unit: '%', percent: true },
-  { type: 'ram', label: 'RAM', unit: '%', percent: true },
-  { type: 'disk', label: 'Disk', unit: '%', percent: true, hint: 'Doluluk oranı; seçilen her disk için ayrı değerlendirilir.' },
+  { type: 'cpu', label: 'CPU', unit: '%', percent: true, max: 100 },
+  { type: 'ram', label: 'RAM', unit: '%', percent: true, max: 100 },
+  { type: 'disk', label: 'Disk', unit: '%', percent: true, max: 100, hint: 'Doluluk oranı; seçilen her disk için ayrı değerlendirilir.' },
   {
     type: 'docker_restart',
     label: 'Docker restart',
     unit: 'restart',
     percent: false,
+    max: MAX_RESTART_LEVEL,
     hint: 'Container başına kümülatif restart sayısı; container yeniden oluşturulunca sıfırlanır.',
+  },
+  {
+    type: 'disk_latency',
+    label: 'Disk gecikmesi',
+    unit: 'ms',
+    percent: false,
+    max: 600_000,
+    duration: true,
+    hint: 'Bir disk işleminin ortalama süresi; her fiziksel disk için ayrı değerlendirilir.',
+  },
+  {
+    type: 'temperature',
+    label: 'Sıcaklık',
+    unit: '°C',
+    percent: false,
+    max: 500,
+    duration: true,
+    hint: 'Her sensör için ayrı değerlendirilir. Donanımın bildirdiği sınırlar sunucu kapsamında sensörün yanında görünür.',
+  },
+  {
+    type: 'service_restart',
+    label: 'Servis yeniden başlatma',
+    unit: 'kez',
+    percent: false,
+    max: MAX_RESTART_LEVEL,
+    duration: true,
+    hint: 'İzlenen bir servisin son 10 dakikadaki yeniden başlatma sayısı. İzlenecek servisler sunucu sayfasında seçilir.',
+  },
+  {
+    type: 'time_offset',
+    label: 'Saat farkı',
+    unit: 'ms',
+    percent: false,
+    max: 86_400_000,
+    duration: true,
+    hint: 'Sunucu saatinin NTP kaynağına göre farkı (mutlak değer).',
   },
 ]
 
 export const metricInfo = (type: MetricType): MetricInfo => METRICS.find((m) => m.type === type)!
+
+// Server'ın bildiği bütün eşik türleri (model.ThresholdMetricTypes sırasıyla).
+export const METRIC_TYPES: readonly MetricType[] = METRICS.map((m) => m.type)
+
+// Süre alanının açıklaması (eşik satırlarında ortak).
+export const DURATION_HINT = 'Değer bu kadar süre kesintisiz aşılınca alert açılır; boşsa hemen. Kendi değeri olan kapsam süreyi de kendisi verir.'
+
+// Her eşik türü için bir değer.
+export function perMetric<T>(f: (type: MetricType) => T): Record<MetricType, T> {
+  return Object.fromEntries(METRIC_TYPES.map((m) => [m, f(m)])) as Record<MetricType, T>
+}
 
 export type Mode = 'default' | 'custom'
 
@@ -45,24 +106,39 @@ export interface Draft {
   mode: Mode
   warning: string
   critical: string
+  // Yalnızca süre koşulu alan türlerde kullanılır.
+  duration: DurationDraft
 }
 
 export type Drafts = Record<MetricType, Draft>
 export type Defaults = Partial<Record<MetricType, ThresholdLevels>>
 
-const emptyDraft = (): Draft => ({ mode: 'default', warning: '', critical: '' })
+const emptyDraft = (): Draft => ({ mode: 'default', warning: '', critical: '', duration: emptyDuration() })
+
+// Saklanan seviyelerin taslağı.
+export const levelsDraft = (l: ThresholdLevels): Pick<Draft, 'warning' | 'critical' | 'duration'> => ({
+  warning: String(l.warning_level),
+  critical: String(l.critical_level),
+  duration: durationDraft(l.duration_seconds),
+})
+
+// Geçerli bir taslağın seviyeleri; süre yalnızca süre alan türlerde ve doluysa eklenir.
+export function draftLevels(type: MetricType, d: Pick<Draft, 'warning' | 'critical' | 'duration'>): ThresholdLevels {
+  const out: ThresholdLevels = { warning_level: Number(d.warning), critical_level: Number(d.critical) }
+  const seconds = metricInfo(type).duration ? durationSeconds(d.duration) : undefined
+  if (seconds !== undefined) out.duration_seconds = seconds
+  return out
+}
 
 // Her metrik "varsayılan"da — yeni bir sunucunun başladığı yer.
 export function defaultDrafts(): Drafts {
-  return { cpu: emptyDraft(), ram: emptyDraft(), disk: emptyDraft(), docker_restart: emptyDraft() }
+  return perMetric(emptyDraft)
 }
 
 export function draftsFromServer(views: HostThresholdView[]): Drafts {
   const drafts = defaultDrafts()
   for (const v of views) {
-    if (v.custom) {
-      drafts[v.metric_type] = { mode: 'custom', warning: String(v.custom.warning_level), critical: String(v.custom.critical_level) }
-    }
+    if (v.custom) drafts[v.metric_type] = { mode: 'custom', ...levelsDraft(v.custom) }
   }
   return drafts
 }
@@ -103,7 +179,11 @@ export interface DefaultSource {
 
 // Bir metrik için geçerli varsayılan ve nereden geldiği; hiçbir yerde tanımlı değilse undefined (alert üretilmez).
 export function defaultSource(list: ThresholdConfig[], orgId: string | undefined, parents: ParentMap, metric: MetricType): DefaultSource | undefined {
-  const levelsOf = (t: ThresholdConfig): ThresholdLevels => ({ warning_level: t.warning_level, critical_level: t.critical_level })
+  const levelsOf = (t: ThresholdConfig): ThresholdLevels => ({
+    warning_level: t.warning_level,
+    critical_level: t.critical_level,
+    ...(t.duration_seconds ? { duration_seconds: t.duration_seconds } : {}),
+  })
   for (const id of orgChain(orgId, parents)) {
     const t = list.find((x) => x.metric_type === metric && x.organization_id === id)
     if (t) return { levels: levelsOf(t), fromOrganizationId: id }
@@ -111,8 +191,6 @@ export function defaultSource(list: ThresholdConfig[], orgId: string | undefined
   const global = list.find((x) => x.metric_type === metric && !x.organization_id)
   return global ? { levels: levelsOf(global) } : undefined
 }
-
-const MAX_RESTART_LEVEL = 1_000_000
 
 function parseLevel(text: string): number | null {
   if (text.trim() === '') return null
@@ -129,8 +207,15 @@ export function validateDraft(type: MetricType, draft: Draft): string | null {
   if (warning === null || critical === null) return 'Uyarı ve kritik seviyesi sayı olarak girilmeli.'
   if (warning < 0 || critical < 0) return 'Seviyeler negatif olamaz.'
   if (warning > critical) return 'Uyarı seviyesi kritik seviyeden büyük olamaz.'
-  if (info.percent && critical > 100) return 'Yüzde değerleri en fazla 100 olabilir.'
-  if (!info.percent && critical > MAX_RESTART_LEVEL) return `Restart sayısı en fazla ${MAX_RESTART_LEVEL} olabilir.`
+  if (critical > info.max) {
+    if (info.percent) return 'Yüzde değerleri en fazla 100 olabilir.'
+    if (type === 'docker_restart') return `Restart sayısı en fazla ${MAX_RESTART_LEVEL} olabilir.`
+    return `Seviye en fazla ${info.max.toLocaleString('tr-TR')} ${info.unit} olabilir.`
+  }
+  if (info.duration) {
+    const d = parseDuration(draft.duration)
+    if ('error' in d) return d.error
+  }
   return null
 }
 
@@ -150,7 +235,7 @@ export function toOverrides(drafts: Drafts): ThresholdOverrides {
   const out: ThresholdOverrides = {}
   for (const m of METRICS) {
     const d = drafts[m.type]
-    out[m.type] = d.mode === 'custom' ? { warning_level: Number(d.warning), critical_level: Number(d.critical) } : null
+    out[m.type] = d.mode === 'custom' ? draftLevels(m.type, d) : null
   }
   return out
 }
@@ -159,30 +244,47 @@ export function toOverrides(drafts: Drafts): ThresholdOverrides {
 export function customOnly(drafts: Drafts): ThresholdOverrides {
   const out: ThresholdOverrides = {}
   for (const m of METRICS) {
-    if (drafts[m.type].mode === 'custom') {
-      out[m.type] = { warning_level: Number(drafts[m.type].warning), critical_level: Number(drafts[m.type].critical) }
-    }
+    if (drafts[m.type].mode === 'custom') out[m.type] = draftLevels(m.type, drafts[m.type])
   }
   return out
 }
 
+// Seviyeler ya da (süre alan türlerde) süre değişti mi.
+function levelsChanged(x: Pick<Draft, 'warning' | 'critical' | 'duration'>, y: Pick<Draft, 'warning' | 'critical' | 'duration'>, duration: boolean): boolean {
+  if (x.warning.trim() !== y.warning.trim() || x.critical.trim() !== y.critical.trim()) return true
+  return duration && !sameDuration(x.duration, y.duration)
+}
+
+// Bir metriğin taslağı değişti mi (seçim ya da özel değer).
+export function isMetricDirty(type: MetricType, x: Draft, y: Draft): boolean {
+  if (x.mode !== y.mode) return true
+  return x.mode === 'custom' && levelsChanged(x, y, metricInfo(type).duration === true)
+}
+
 export function isDirty(a: Drafts, b: Drafts): boolean {
-  return METRICS.some((m) => {
-    const x = a[m.type]
-    const y = b[m.type]
-    if (x.mode !== y.mode) return true
-    return x.mode === 'custom' && (x.warning.trim() !== y.warning.trim() || x.critical.trim() !== y.critical.trim())
-  })
+  return METRICS.some((m) => isMetricDirty(m.type, a[m.type], b[m.type]))
 }
 
 export function formatLevels(type: MetricType, levels: ThresholdLevels): string {
   const unit = metricInfo(type).unit
-  return `uyarı ${levels.warning_level} ${unit} / kritik ${levels.critical_level} ${unit}`
+  const text = `uyarı ${levels.warning_level} ${unit} / kritik ${levels.critical_level} ${unit}`
+  return levels.duration_seconds ? `${text} · ${formatDuration(levels.duration_seconds)} boyunca` : text
+}
+
+// ---- sistem ve organizasyon eşiği -------------------------------------------------------------------------------
+// Bu kapsamlarda eşik satırı ya tanımlıdır ya da değildir (kaldırınca üst kapsamdan devralınır); her satır ayrı kaydedilir.
+
+export type RowDraft = Pick<Draft, 'warning' | 'critical' | 'duration'>
+
+// Kaydetme gövdesi. Süre alan türlerde süre her zaman gönderilir: boşsa null (süreyi kaldır, hemen).
+export function rowPayload(type: MetricType, draft: RowDraft): { warning_level: number; critical_level: number; duration_seconds?: number | null } {
+  const levels = { warning_level: Number(draft.warning), critical_level: Number(draft.critical) }
+  return metricInfo(type).duration ? { ...levels, duration_seconds: durationSeconds(draft.duration) ?? null } : levels
 }
 
 // Bir özet için tek satır: hangi değerin geçerli olduğunu ve — "varsayılan" için — şu an ne olduğunu söyler.
 export function describeDraft(type: MetricType, draft: Draft, defaults: Defaults): string {
-  if (draft.mode === 'custom') return `Özel: ${formatLevels(type, { warning_level: Number(draft.warning), critical_level: Number(draft.critical) })}`
+  if (draft.mode === 'custom') return `Özel: ${formatLevels(type, draftLevels(type, draft))}`
   const d = defaults[type]
   return d ? `Varsayılan: ${formatLevels(type, d)}` : 'Varsayılan (tanımlı değil — bu metrik için alert üretilmez)'
 }
@@ -195,10 +297,7 @@ export function withMode(drafts: Drafts, type: MetricType, mode: Mode, defaults:
   const next: Draft = { ...current, mode }
   if (mode === 'custom' && current.warning === '' && current.critical === '') {
     const d = defaults[type]
-    if (d) {
-      next.warning = String(d.warning_level)
-      next.critical = String(d.critical_level)
-    }
+    if (d) Object.assign(next, levelsDraft(d))
   }
   return { ...drafts, [type]: next }
 }
@@ -210,6 +309,8 @@ export function withMode(drafts: Drafts, type: MetricType, mode: Mode, defaults:
 export interface MountDraft {
   warning: string
   critical: string
+  // Yalnızca süre alan türlerin konularında (disk gecikmesi, sıcaklık, servis yeniden başlatma).
+  duration?: DurationDraft
 }
 
 export type MountDrafts = Record<string, MountDraft>
@@ -222,12 +323,19 @@ export function mountDraftsFromServer(list: MountThreshold[]): MountDrafts {
   return out
 }
 
+// Bir konunun (mount, container, disk, sensör, servis) taslağını kendi türünün kurallarıyla denetler.
+export function validateSubjectDraft(type: MetricType, draft: MountDraft): string | null {
+  return validateDraft(type, { mode: 'custom', ...draft, duration: draft.duration ?? emptyDuration() })
+}
+
+const subjectLevels = (type: MetricType, d: MountDraft): ThresholdLevels => draftLevels(type, { ...d, duration: d.duration ?? emptyDuration() })
+
 export function validateMountDraft(draft: MountDraft): string | null {
-  return validateDraft('disk', { mode: 'custom', ...draft })
+  return validateSubjectDraft('disk', draft)
 }
 
 export function validateContainerDraft(draft: MountDraft): string | null {
-  return validateDraft('docker_restart', { mode: 'custom', ...draft })
+  return validateSubjectDraft('docker_restart', draft)
 }
 
 // Sorunu olan mount başına bir mesaj, mount ile öneklenmiş.
@@ -243,18 +351,18 @@ export function validateMountDrafts(drafts: MountDrafts): string[] {
 }
 
 // Yalnızca kendi değerleri olan mount'lar — yeni bir sunucunun gönderdiği.
-export function customMounts(drafts: MountDrafts): MountOverrides {
+export function customMounts(drafts: MountDrafts, type: MetricType = 'disk'): MountOverrides {
   const out: MountOverrides = {}
-  for (const [mount, d] of Object.entries(drafts)) out[mount] = { warning_level: Number(d.warning), critical_level: Number(d.critical) }
+  for (const [mount, d] of Object.entries(drafts)) out[mount] = subjectLevels(type, d)
   return out
 }
 
 // Mevcut bir sunucu için güncelleme: değeri olan ve kaldırılan mount'lar null olur (sunucunun disk
-// eşiğine geri döner), gerisi değerlerini taşır.
-export function toMountOverrides(saved: MountDrafts, draft: MountDrafts): MountOverrides {
+// eşiğine geri döner), gerisi değerlerini taşır. Container ve protokol 4 konuları da aynı biçimdedir.
+export function toMountOverrides(saved: MountDrafts, draft: MountDrafts, type: MetricType = 'disk'): MountOverrides {
   const out: MountOverrides = {}
   for (const mount of Object.keys(saved)) if (!(mount in draft)) out[mount] = null
-  return { ...out, ...customMounts(draft) }
+  return { ...out, ...customMounts(draft, type) }
 }
 
 export function isMountsDirty(a: MountDrafts, b: MountDrafts): boolean {
@@ -263,7 +371,7 @@ export function isMountsDirty(a: MountDrafts, b: MountDrafts): boolean {
     const x = a[k]
     const y = b[k]
     if (!x || !y) return true
-    if (x.warning.trim() !== y.warning.trim() || x.critical.trim() !== y.critical.trim()) return true
+    if (levelsChanged({ ...x, duration: x.duration ?? emptyDuration() }, { ...y, duration: y.duration ?? emptyDuration() }, true)) return true
   }
   return false
 }
@@ -279,11 +387,10 @@ export function parseMountToAdd(text: string, existing: MountDrafts): { mount: s
 }
 
 // Yeni bir mount sunucunun disk değerlerinden (biliniyorsa) başlar; böylece kişi sıfırdan yazmak yerine düzenler.
-export function addMount(drafts: MountDrafts, mount: string, from?: ThresholdLevels): MountDrafts {
-  return {
-    ...drafts,
-    [mount]: from ? { warning: String(from.warning_level), critical: String(from.critical_level) } : { warning: '', critical: '' },
-  }
+export function addMount(drafts: MountDrafts, mount: string, from?: ThresholdLevels, withDuration = false): MountDrafts {
+  const start: MountDraft = from ? levelsDraft(from) : { warning: '', critical: '', duration: emptyDuration() }
+  if (!withDuration) delete start.duration
+  return { ...drafts, [mount]: start }
 }
 
 export function removeMount(drafts: MountDrafts, mount: string): MountDrafts {
@@ -297,7 +404,7 @@ export function describeMounts(drafts: MountDrafts): string[] {
     .sort()
     .map((mount) => {
       const d = drafts[mount]
-      return `Disk ${mount} — Özel: ${formatLevels('disk', { warning_level: Number(d.warning), critical_level: Number(d.critical) })}`
+      return `Disk ${mount} — Özel: ${formatLevels('disk', subjectLevels('disk', d))}`
     })
 }
 
@@ -340,7 +447,7 @@ export function parseContainerToAdd(text: string, existing: MountDrafts): { moun
 export function serverLevels(type: MetricType, draft: Draft, defaults: Defaults): ThresholdLevels | undefined {
   if (draft.mode === 'custom') {
     if (validateDraft(type, draft) !== null) return undefined
-    return { warning_level: Number(draft.warning), critical_level: Number(draft.critical) }
+    return draftLevels(type, draft)
   }
   return defaults[type]
 }
@@ -350,6 +457,91 @@ export function describeContainers(drafts: MountDrafts): string[] {
     .sort()
     .map((name) => {
       const d = drafts[name]
-      return `Docker restart ${name} — Özel: ${formatLevels('docker_restart', { warning_level: Number(d.warning), critical_level: Number(d.critical) })}`
+      return `Docker restart ${name} — Özel: ${formatLevels('docker_restart', subjectLevels('docker_restart', d))}`
     })
+}
+
+// ---- protokol 4 konu eşikleri (disk gecikmesi, sıcaklık, servis yeniden başlatma) --------------------------------
+// Mount eşikleriyle aynı mantık; konu bir fiziksel disk, sensör ya da servistir ve satırın kendi süresi vardır (server
+// konu eşiğini süresiyle saklar: konunun süresi boşsa o konuda hemen açılır).
+
+export const SUBJECT_METRICS: readonly SubjectMetricType[] = ['disk_latency', 'temperature', 'service_restart']
+
+// Konunun adı ve bayt sınırı (server: disk adı 64, sensör ve servis 256 bayt).
+const SUBJECT_NAME: Record<SubjectMetricType, { what: string; maxBytes: number }> = {
+  disk_latency: { what: 'Disk adı', maxBytes: 64 },
+  temperature: { what: 'Sensör adı', maxBytes: 256 },
+  service_restart: { what: 'Servis adı', maxBytes: 256 },
+}
+
+export type SubjectDrafts = Record<SubjectMetricType, MountDrafts>
+
+export const emptySubjectDrafts = (): SubjectDrafts => ({ disk_latency: {}, temperature: {}, service_restart: {} })
+
+export function subjectDraftsFromServer(list: SubjectThreshold[] | undefined): SubjectDrafts {
+  const out = emptySubjectDrafts()
+  for (const t of list ?? []) if (t.metric_type in out) out[t.metric_type][t.subject] = levelsDraft(t.custom)
+  return out
+}
+
+export function validateSubjectDrafts(drafts: SubjectDrafts): string[] {
+  const errors: string[] = []
+  for (const type of SUBJECT_METRICS) {
+    const names = Object.keys(drafts[type])
+    const label = metricInfo(type).label
+    if (names.length > MAX_MOUNTS) errors.push(`${label}: en fazla ${MAX_MOUNTS} konu için özel eşik girilebilir.`)
+    for (const name of names.sort()) {
+      const err = validateSubjectDraft(type, drafts[type][name])
+      if (err) errors.push(`${label} ${name}: ${err}`)
+    }
+  }
+  return errors
+}
+
+// Mevcut bir sunucu için güncelleme: kaldırılan konular null, gerisi değerleriyle; değişmeyen türler gönderilmez.
+export function toSubjectOverrides(saved: SubjectDrafts, draft: SubjectDrafts): SubjectThresholdOverrides {
+  const out: SubjectThresholdOverrides = {}
+  for (const type of SUBJECT_METRICS) {
+    if (isMountsDirty(saved[type], draft[type])) out[type] = toMountOverrides(saved[type], draft[type], type)
+  }
+  return out
+}
+
+// "Ekle"ye yazılan konu adını denetler: kullanılabilir bir ad ya da bir mesaj döner.
+export function parseSubjectToAdd(type: SubjectMetricType, text: string, existing: MountDrafts): { mount: string } | { error: string } {
+  const name = text.trim()
+  const { what, maxBytes } = SUBJECT_NAME[type]
+  if (name === '') return { error: `${what} girin.` }
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(name)) return { error: `${what} kontrol karakteri içeremez.` }
+  if (new TextEncoder().encode(name).length > maxBytes) return { error: `${what} ${maxBytes} bayttan uzun olamaz.` }
+  if (name in existing) return { error: `${name} için zaten bir değer var.` }
+  if (Object.keys(existing).length >= MAX_MOUNTS) return { error: `En fazla ${MAX_MOUNTS} konu eklenebilir.` }
+  return { mount: name }
+}
+
+export function describeSubjects(type: SubjectMetricType, drafts: MountDrafts): string[] {
+  const label = metricInfo(type).label
+  return Object.keys(drafts)
+    .sort()
+    .map((name) => `${label} ${name} — Özel: ${formatLevels(type, subjectLevels(type, drafts[name]))}`)
+}
+
+// Disk gecikmesi için önerilecek diskler: son metrik satırındaki G/Ç'si ölçülen diskler.
+export function diskIONames(point: Pick<MetricPoint, 'disk_io'> | null | undefined): string[] {
+  return [...new Set((point?.disk_io ?? []).map((d) => d.name))].sort()
+}
+
+// Sensörün donanım sınırı notu. İkisi de biliniyorsa (ve sıralıysa) öneri olarak uyarı = üst sınır, kritik = kritik
+// sınır sunulur; hiçbir şey kendiliğinden kurulmaz.
+export function temperatureNotes(temps: Temperature[] | undefined): Record<string, { text: string; levels?: ThresholdLevels }> {
+  const out: Record<string, { text: string; levels?: ThresholdLevels }> = {}
+  for (const t of temps ?? []) {
+    const c = (v: number) => `${Number.isInteger(v) ? v : decimal(v, 1)} °C`
+    const parts = [t.max !== undefined ? `üst sınır ${c(t.max)}` : '', t.crit !== undefined ? `kritik ${c(t.crit)}` : ''].filter(Boolean)
+    if (parts.length === 0) continue
+    const levels = t.max !== undefined && t.crit !== undefined && t.max <= t.crit ? { warning_level: t.max, critical_level: t.crit } : undefined
+    out[t.sensor] = { text: `Donanım: ${parts.join(' · ')}`, ...(levels ? { levels } : {}) }
+  }
+  return out
 }

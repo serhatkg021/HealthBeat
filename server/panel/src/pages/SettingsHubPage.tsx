@@ -19,7 +19,7 @@ export function SettingsHubPage() {
   if (!tab) return <Navigate to="/" replace />
   return (
     <div>
-      <PageHeader title="Ayarlar" subtitle={tab.description} />
+      <PageHeader title="Ayarlar" />
       <SettingsPage />
     </div>
   )

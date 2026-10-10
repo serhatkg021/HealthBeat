@@ -284,6 +284,9 @@ type DiskUsage struct {
 	// InodesUsedPct, dosya sisteminin inode doluluğudur (protokol 3); nil = bilinmiyor / dosya sistemi
 	// inode sayısı bildirmiyor (ör. btrfs). Disk yüzdesinden önce dolabilir; yalnızca bilgi içindir.
 	InodesUsedPct *float64 `json:"inodes_used_pct,omitempty"`
+	// ReadOnly (protokol 4), dosya sisteminin salt okunur bağlı olup olmadığıdır (disk hatasında çekirdek böyle
+	// yapar); nil = bilinmiyor.
+	ReadOnly *bool `json:"read_only,omitempty"`
 }
 
 type DockerContainerReport struct {
@@ -294,6 +297,12 @@ type DockerContainerReport struct {
 	RAMMB         float64 `json:"ram_mb"`
 	RestartCount  int     `json:"restart_count"`
 	UptimeSeconds int64   `json:"uptime_seconds"`
+	// Protokol 4: healthcheck sonucu (healthy | unhealthy | starting; healthcheck yoksa boş), üst üste başarısız kontrol
+	// sayısı, son çıkış kodu ve bellek yetmediği için öldürülüp öldürülmediği. nil = bilinmiyor.
+	Health              string `json:"health,omitempty"`
+	HealthFailingStreak *int   `json:"health_failing_streak,omitempty"`
+	ExitCode            *int   `json:"exit_code,omitempty"`
+	OOMKilled           *bool  `json:"oom_killed,omitempty"`
 }
 
 // ValidDockerStatus, docker_containers.status üzerindeki CHECK kısıtını yansıtır.
@@ -321,6 +330,21 @@ type MetricsIngestRequest struct {
 	// HostInfo (protokol 3) isteğe bağlıdır ve aynı "son bilinen değer" kuralına uyar.
 	HostInfo         *HostInfo               `json:"host_info,omitempty"`
 	DockerContainers []DockerContainerReport `json:"docker_containers"`
+
+	// Protokol 4 (bkz. ingest_v4.go): isteğe bağlıdır; bozuk bir bölüm raporu reddettirmez, yalnızca kendisi atılır.
+	CPUDetail    *CPUDetail    `json:"cpu_detail,omitempty"`
+	MemoryDetail *MemoryDetail `json:"memory_detail,omitempty"`
+	Pressure     *Pressure     `json:"pressure,omitempty"`
+	DiskIO       []DiskIO      `json:"disk_io,omitempty"`
+	NetIO        []NetIO       `json:"net_io,omitempty"`
+	TCP          *TCP          `json:"tcp,omitempty"`
+	Temperatures []Temperature `json:"temperatures,omitempty"`
+	RAID         []RAID        `json:"raid,omitempty"`
+	Capacity     *Capacity     `json:"capacity,omitempty"`
+	Processes    *Processes    `json:"processes,omitempty"`
+	Updates      *Updates      `json:"updates,omitempty"`
+	Services     *Services     `json:"services,omitempty"`
+	TimeSync     *TimeSync     `json:"time_sync,omitempty"`
 }
 
 // Hardware, isteğin donanım bölümünü saklanacak (temizlenmiş) hâliyle döndürür.
@@ -350,6 +374,12 @@ type MetricPoint struct {
 	CPUUsagePct float64     `json:"cpu_usage_pct"`
 	RAMUsagePct float64     `json:"ram_usage_pct"`
 	Disk        []DiskUsage `json:"disk"`
+	// Protokol 4 zaman serisi (ölçüldüğü gibi): System bir SystemSample, DiskIO bir []DiskIO, NetIO bir []NetIO'dur.
+	// Saklandığı gibi (çözülmeden) döner; uzun aralıklarda binlerce satır yeniden kodlanmasın diye. Eski agent'ın
+	// satırlarında yoktur.
+	System json.RawMessage `json:"system,omitempty"`
+	DiskIO json.RawMessage `json:"disk_io,omitempty"`
+	NetIO  json.RawMessage `json:"net_io,omitempty"`
 }
 
 // AuditLog kaydedilmiş tek bir kritik eylemdir (docs/MIMARI.md bölüm 5). ActorEmail bir
@@ -372,6 +402,11 @@ const (
 	MetricTypeRAM           = "ram"
 	MetricTypeDisk          = "disk"
 	MetricTypeDockerRestart = "docker_restart"
+	// Protokol 4'ün sayısal eşikleri (bkz. alert_rules.go).
+	MetricTypeDiskLatency    = "disk_latency"    // ms, disk başına
+	MetricTypeTemperature    = "temperature"     // °C, sensör başına
+	MetricTypeServiceRestart = "service_restart" // izlenen servisin son 10 dakikadaki yeniden başlatma sayısı
+	MetricTypeTimeOffset     = "time_offset"     // ms, saat farkının mutlak değeri
 	// AlertTypeHostOffline yalnızca alert'lerde kullanılır, eşik tablolarında asla (onun için anlamlı
 	// bir eşik değeri yok).
 	AlertTypeHostOffline = "host_offline"
@@ -385,7 +420,8 @@ const (
 // başına restart sayısı eşiğidir (bkz. alertengine.EvaluateDocker).
 func ValidThresholdMetricType(metricType string) bool {
 	switch metricType {
-	case MetricTypeCPU, MetricTypeRAM, MetricTypeDisk, MetricTypeDockerRestart:
+	case MetricTypeCPU, MetricTypeRAM, MetricTypeDisk, MetricTypeDockerRestart,
+		MetricTypeDiskLatency, MetricTypeTemperature, MetricTypeServiceRestart, MetricTypeTimeOffset:
 		return true
 	default:
 		return false
@@ -415,17 +451,36 @@ func ValidateThresholdLevels(metricType string, warning, critical float64) error
 		if critical > maxDockerRestartLevel {
 			return errors.New("docker_restart seviyeleri restart sayısıdır ve en fazla 1000000 olabilir")
 		}
+	case MetricTypeDiskLatency:
+		if critical > maxLatencyLevelMs {
+			return fmt.Errorf("disk_latency seviyeleri milisaniyedir ve en fazla %d olabilir", maxLatencyLevelMs)
+		}
+	case MetricTypeTemperature:
+		if critical > maxTemperatureLevel {
+			return fmt.Errorf("temperature seviyeleri °C'dir ve en fazla %d olabilir", maxTemperatureLevel)
+		}
+	case MetricTypeServiceRestart:
+		if critical > maxDockerRestartLevel {
+			return errors.New("service_restart seviyeleri yeniden başlatma sayısıdır ve en fazla 1000000 olabilir")
+		}
+	case MetricTypeTimeOffset:
+		if critical > maxTimeOffsetLevelMs {
+			return fmt.Errorf("time_offset seviyeleri milisaniyedir ve en fazla %d olabilir", maxTimeOffsetLevelMs)
+		}
 	}
 	return nil
 }
 
 // ThresholdMetricTypes, eşik taşıyan metrik türleridir, gösterim sırasıyla.
-var ThresholdMetricTypes = []string{MetricTypeCPU, MetricTypeRAM, MetricTypeDisk, MetricTypeDockerRestart}
+var ThresholdMetricTypes = []string{MetricTypeCPU, MetricTypeRAM, MetricTypeDisk, MetricTypeDockerRestart,
+	MetricTypeDiskLatency, MetricTypeTemperature, MetricTypeServiceRestart, MetricTypeTimeOffset}
 
-// ThresholdLevels tek bir uyarı/kritik çiftidir.
+// ThresholdLevels tek bir uyarı/kritik çiftidir. DurationSeconds, eşiğin kesintisiz bu kadar saniye aşılınca alert
+// açmasıdır (nil = hemen); yalnızca süre koşulu destekleyen türlerde (bkz. ValidateThresholdDuration).
 type ThresholdLevels struct {
-	WarningLevel  float64 `json:"warning_level"`
-	CriticalLevel float64 `json:"critical_level"`
+	WarningLevel    float64 `json:"warning_level"`
+	CriticalLevel   float64 `json:"critical_level"`
+	DurationSeconds *int    `json:"duration_seconds,omitempty"`
 }
 
 // ThresholdOverrides bir host'ın kendi eşikleridir, metrik türüne göre. Nil değer
@@ -436,12 +491,12 @@ type ThresholdOverrides map[string]*ThresholdLevels
 func (o ThresholdOverrides) Validate() error {
 	for metricType, levels := range o {
 		if !ValidThresholdMetricType(metricType) {
-			return fmt.Errorf("%q bir eşik metriği değil (cpu, ram, disk veya docker_restart kullanın)", metricType)
+			return fmt.Errorf("%q bir eşik metriği değil (%s kullanın)", metricType, strings.Join(ThresholdMetricTypes, ", "))
 		}
 		if levels == nil {
 			continue
 		}
-		if err := ValidateThresholdLevels(metricType, levels.WarningLevel, levels.CriticalLevel); err != nil {
+		if err := levels.validate(metricType); err != nil {
 			return fmt.Errorf("%s: %w", metricType, err)
 		}
 	}
@@ -475,7 +530,7 @@ func validateSubjectLevels(m map[string]*ThresholdLevels, metricType string, wha
 		if levels == nil {
 			continue
 		}
-		if err := ValidateThresholdLevels(metricType, levels.WarningLevel, levels.CriticalLevel); err != nil {
+		if err := levels.validate(metricType); err != nil {
 			return fmt.Errorf("%s: %w", subject, err)
 		}
 	}
@@ -533,11 +588,13 @@ type ThresholdConfig struct {
 	HostID         *uuid.UUID `json:"host_id,omitempty"`
 	MetricType     string     `json:"metric_type"`
 	// Subject, host'ın mount başına disk eşiği için mount yoludur; aksi halde boştur.
-	Subject       string    `json:"subject,omitempty"`
-	WarningLevel  float64   `json:"warning_level"`
-	CriticalLevel float64   `json:"critical_level"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	Subject       string  `json:"subject,omitempty"`
+	WarningLevel  float64 `json:"warning_level"`
+	CriticalLevel float64 `json:"critical_level"`
+	// DurationSeconds, eşiğin kesintisiz bu kadar saniye aşılınca alert açmasıdır; nil = hemen.
+	DurationSeconds *int      `json:"duration_seconds,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 const (

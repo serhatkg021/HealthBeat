@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react'
 import { Search } from 'lucide-react'
+import { InfoTip } from '../components/InfoTip'
 import type { AlertLevel, AlertType } from '../types/api'
 import { alertLevelLabel, alertMetricLabel, hostStatusLabel } from '../labels'
-import { LEVELS, METRICS, SINCE_LABELS, SINCE_WINDOWS, type DashboardFilters, type SinceKey } from './dashboardFilters'
+import { LEVELS, METRIC_GROUPS, SINCE_LABELS, SINCE_WINDOWS, type DashboardFilters, type SinceKey } from './dashboardFilters'
 
 const cap = (s: string) => s.charAt(0).toLocaleUpperCase('tr') + s.slice(1)
 
@@ -33,8 +34,10 @@ function Choice<T extends string>({
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
     <fieldset className="filter-section">
-      <legend>{title}</legend>
-      {hint && <p className="form-hint filter-hint">{hint}</p>}
+      <legend>
+        {title}
+        {hint && <InfoTip label={title}>{hint}</InfoTip>}
+      </legend>
       {children}
     </fieldset>
   )
@@ -133,15 +136,20 @@ export function DashboardFilterPanel({
           </div>
         </div>
         <div className="filter-field">
-          <span className="filter-label">Metrik</span>
-          <div className="filter-checks">
-            {METRICS.map((m: AlertType) => (
-              <label key={m} className="check-row">
-                <input type="checkbox" checked={filters.metrics.includes(m)} onChange={() => set({ metrics: toggle(filters.metrics, m) })} />
-                {alertMetricLabel(m)}
-              </label>
-            ))}
-          </div>
+          <span className="filter-label">Alert türü</span>
+          {METRIC_GROUPS.map((g) => (
+            <div key={g.label} className="filter-group">
+              <span className="filter-group-label">{g.label}</span>
+              <div className="filter-checks">
+                {g.types.map((m: AlertType) => (
+                  <label key={m} className="check-row">
+                    <input type="checkbox" checked={filters.metrics.includes(m)} onChange={() => set({ metrics: toggle(filters.metrics, m) })} />
+                    {alertMetricLabel(m)}
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
         <div className="filter-field">
           <span className="filter-label">Alert zamanı</span>

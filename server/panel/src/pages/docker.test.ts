@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { dockerSummary, formatMB } from './docker.ts'
+import { dockerSummary, exitNote, formatMB, healthBadge } from './docker.ts'
 import type { DockerContainerReport } from '../types/api.ts'
 
 const c = (name: string, status: string, cpu: number, ram: number, restarts = 0): DockerContainerReport => ({
@@ -21,4 +21,18 @@ test('formatMB switches to GB at 1024 MB', () => {
   assert.equal(formatMB(1023.6), '1024 MB')
   assert.equal(formatMB(1024), '1 GB')
   assert.equal(formatMB(1536), '1.5 GB')
+})
+
+test('healthBadge: only containers with a healthcheck get one', () => {
+  assert.equal(healthBadge({}), null)
+  assert.deepEqual(healthBadge({ health: 'healthy' }), { label: 'sağlıklı', tone: 'good' })
+  assert.deepEqual(healthBadge({ health: 'unhealthy', health_failing_streak: 4 }), { label: 'sağlıksız · 4 kontrol', tone: 'critical' })
+  assert.deepEqual(healthBadge({ health: 'starting' }), { label: 'başlıyor', tone: 'warning' })
+})
+
+test('exitNote explains why a stopped container stopped', () => {
+  assert.equal(exitNote({ status: 'running', exit_code: 0 }), null)
+  assert.equal(exitNote({ status: 'exited' }), null)
+  assert.equal(exitNote({ status: 'exited', exit_code: 137, oom_killed: true }), 'çıkış kodu 137 · bellek yetmediği için öldürüldü (OOM)')
+  assert.equal(exitNote({ status: 'exited', exit_code: 0, oom_killed: false }), 'çıkış kodu 0')
 })

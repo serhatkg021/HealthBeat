@@ -18,6 +18,8 @@ const (
 	hostStaticTTL = time.Hour
 	hostSlowTTL   = 5 * time.Minute
 	execTimeout   = 3 * time.Second
+	// hostSlowTimeout, yavaş alanların bir toplamasının tamamıdır: iki komut ve Docker sürümü, her biri 3 sn.
+	hostSlowTimeout = 10 * time.Second
 )
 
 // HostInfoCollector, makine envanterini ve anlık durumunu toplar. Yalnızca YETKİSİZ okunabilen bilgiler:
@@ -34,6 +36,8 @@ type HostInfoCollector struct {
 	static   HostInfo
 	slowAt   time.Time
 	slow     HostInfo
+	// slowBG, Start çağrıldıysa yavaş alanları arka planda toplar; nil = Collect onları kendisi toplar.
+	slowBG *Background[HostInfo]
 }
 
 // NewHostInfoCollector, gerçek makine için bir toplayıcı kurar. docker nil olabilir.
@@ -65,6 +69,28 @@ func (c *HostInfoCollector) exists(p string) bool {
 	return err == nil
 }
 
+// Start, yavaş alanların (alt süreçler, Docker sürümü) toplamasını ctx bitene kadar arka plana alır: bundan sonra
+// Collect onları beklemez, son sonucu kullanır. Start çağrılmazsa (ör. --print-inventory) Collect onları eskisi gibi
+// kendisi toplar.
+func (c *HostInfoCollector) Start(ctx context.Context) {
+	bg := NewBackground("host inventory", func() time.Duration { return hostSlowTTL }, hostSlowTimeout,
+		func(ctx context.Context) (HostInfo, error) { return c.collectSlow(ctx), nil })
+	c.mu.Lock()
+	c.slowBG = bg
+	c.mu.Unlock()
+	bg.Start(ctx)
+}
+
+// WaitReady, Start'tan sonraki ilk yavaş toplamayı en çok d kadar bekler; Start çağrılmadıysa hemen döner.
+func (c *HostInfoCollector) WaitReady(ctx context.Context, d time.Duration) {
+	c.mu.Lock()
+	bg := c.slowBG
+	c.mu.Unlock()
+	if bg != nil {
+		bg.WaitReady(ctx, d)
+	}
+}
+
 // Collect, envanteri döndürür. Hiçbir okuma başarısız olsa bile panik etmez; okunamayan alan boş kalır.
 // Eşzamanlı çağrılabilir (pull modunda istekler paralel gelir).
 func (c *HostInfoCollector) Collect(ctx context.Context) *HostInfo {
@@ -76,9 +102,13 @@ func (c *HostInfoCollector) Collect(ctx context.Context) *HostInfo {
 		c.static = c.collectStatic()
 		c.staticAt = now
 	}
-	if c.slowAt.IsZero() || now.Sub(c.slowAt) >= hostSlowTTL {
+	slow := c.slow
+	if c.slowBG != nil {
+		slow, _ = c.slowBG.Latest() // henüz yok ya da bayat: yavaş alanlar bilinmiyor
+	} else if c.slowAt.IsZero() || now.Sub(c.slowAt) >= hostSlowTTL {
 		c.slow = c.collectSlow(ctx)
 		c.slowAt = now
+		slow = c.slow
 	}
 
 	info := c.static // değer kopyası: önbellek alanlarına işaretçi paylaşımı yok (aşağıda derin kopyalanır)
@@ -87,10 +117,10 @@ func (c *HostInfoCollector) Collect(ctx context.Context) *HostInfo {
 	info.Virtualization = copyPtr(c.static.Virtualization)
 	info.Machine = copyPtr(c.static.Machine)
 
-	info.RebootRequired = copyPtr(c.slow.RebootRequired)
-	info.TimeSynced = copyPtr(c.slow.TimeSynced)
-	info.FailedUnits = copyPtr(c.slow.FailedUnits)
-	info.DockerVersion = c.slow.DockerVersion
+	info.RebootRequired = copyPtr(slow.RebootRequired)
+	info.TimeSynced = copyPtr(slow.TimeSynced)
+	info.FailedUnits = copyPtr(slow.FailedUnits)
+	info.DockerVersion = slow.DockerVersion
 
 	c.collectFast(&info, now)
 	return &info
@@ -326,7 +356,12 @@ func (c *HostInfoCollector) collectFast(h *HostInfo, now time.Time) {
 // runCommand, dış bir komutu kısa bir zaman aşımıyla ve asgari bir ortamla çalıştırır. Komut yoksa ya da
 // hata verirse hata döner; çağıran alanı "bilinmiyor" bırakır.
 func runCommand(ctx context.Context, name string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(ctx, execTimeout)
+	return runCommandTimeout(ctx, execTimeout, name, args...)
+}
+
+// runCommandTimeout, runCommand'ın verilen zaman aşımıyla çalışanıdır (ör. apt gibi daha yavaş komutlar için).
+func runCommandTimeout(ctx context.Context, timeout time.Duration, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = []string{"PATH=/usr/sbin:/usr/bin:/sbin:/bin", "LC_ALL=C"}

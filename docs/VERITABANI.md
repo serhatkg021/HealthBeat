@@ -14,7 +14,11 @@ uygulanarak** üretilmiştir; şema değişince tablo ayrıntılarını yeniden 
   değişir), `host_status` (anlık durum, her raporda güncellenen küçük satır) ve `host_inventory` (yavaş değişen envanter,
   yalnızca içerik değişince yazılır). Panelde görünen ad `hosts.title`'dır; makinenin kendi hostname'i envanterdedir.
 - **Eşik mirası.** Bir sunucu için geçerli eşik: sunucunun kendi eşiği → organizasyonun varsayılanı → üst şirketlerin
-  varsayılanı (en yakın olan) → genel varsayılan. Hiçbiri yoksa o metrik alert üretmez.
+  varsayılanı (en yakın olan) → genel varsayılan. Hiçbiri yoksa o metrik alert üretmez. Eşiği olmayan durum alert'lerinin
+  seviyesi ve süresi (`status_alert_rules`, `000007`) aynı zincirle çözülür; hiç satır yoksa kural kapalıdır.
+- **Protokol 4 verisi** (`000007`): zaman serisi metrik satırının JSONB sütunlarında (`system_json`, `disk_io_json`,
+  `net_io_json`), geçmişi tutulmayan anlık durumlar `host_status.system_state`'te, systemd servisleri `host_services`'te.
+  Değerler ölçüldüğü gibi saklanır; yuvarlama panelde yapılır.
 - **Bildirimler.** Her alert'in bildirimi **sistem sahiplerine** (`notification_owners`) gider; `notification_routes`
   kuralları bunlara **ek alıcı** ekler. Alıcılar sahipler, sunucunun organizasyon zincirindeki (üst şirketler dahil) ve
   sunucunun kendi kurallarının **toplamıdır**; varsayılan alıcı yoktur. Kanallar (`notification_channels`) sistem
@@ -46,6 +50,11 @@ erDiagram
     hosts ||--o{ host_custom_mounts_alerts : ""
     hosts ||--o{ metrics : ""
     hosts ||--o{ docker_containers : ""
+    hosts ||--o{ host_services : ""
+    hosts ||--o{ host_watched_services : ""
+    hosts ||--o{ alert_pending : ""
+    hosts ||--o{ status_alert_rules : ""
+    organizations ||--o{ status_alert_rules : ""
     organizations ||--o{ threshold_defaults : ""
     hosts ||--o{ host_custom_thresholds : ""
     users ||--o{ alerts : ""
@@ -232,6 +241,8 @@ Operatörün atandığı sunucular (organizasyon bazlı toplu atama da satır sa
 ### `host_status`
 
 Anlık durum ve her raporda değişen bilgiler (`runtime`: uptime, yük, swap…). Her rapor yalnızca bu küçük satırı günceller.
+`system_state` (`000007`): protokol 4'ün geçmişi tutulmayan anlık durumları (sıcaklık, RAID, kapasite, süreçler, bekleyen
+güncellemeler, saat senkronu, OOM sayacı ve son artış anı); her rapor son bildirilenle değiştirir.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -243,6 +254,7 @@ Anlık durum ve her raporda değişen bilgiler (`runtime`: uptime, yük, swap…
 | `unsupported_fields` | jsonb | evet |  |
 | `runtime` | jsonb | evet |  |
 | `updated_at` | timestamptz | hayır | `now()` |
+| `system_state` | jsonb | evet |  |
 
 - **CHECK** `host_status_status_check`: ((status = ANY (ARRAY['online'::text, 'offline'::text])))
 - **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
@@ -282,6 +294,8 @@ Yavaş değişen envanter (hostname, machine-id özeti, CPU/RAM, fiziksel diskle
 ### `metrics`
 
 Zaman serisi: sunucu başına CPU/RAM/disk örnekleri. Doğal anahtar `(host_id, recorded_at)`; ileride zamana göre partition'a açık.
+Protokol 4 sütunları (`000007`; eski agent'ın satırlarında NULL): `system_json` CPU ve bellek ayrıntısı, PSI ve TCP;
+`disk_io_json` fiziksel disk başına G/Ç; `net_io_json` arayüz başına trafik.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -290,6 +304,9 @@ Zaman serisi: sunucu başına CPU/RAM/disk örnekleri. Doğal anahtar `(host_id,
 | `cpu_usage_pct` | numeric | hayır |  |
 | `ram_usage_pct` | numeric | hayır |  |
 | `disk_json` | jsonb | hayır | `'[]'::jsonb` |
+| `system_json` | jsonb | evet |  |
+| `disk_io_json` | jsonb | evet |  |
+| `net_io_json` | jsonb | evet |  |
 
 - **CHECK** `metrics_cpu_usage_pct_check`: (((cpu_usage_pct >= (0)::numeric) AND (cpu_usage_pct <= (100)::numeric)))
 - **CHECK** `metrics_ram_usage_pct_check`: (((ram_usage_pct >= (0)::numeric) AND (ram_usage_pct <= (100)::numeric)))
@@ -299,7 +316,8 @@ Zaman serisi: sunucu başına CPU/RAM/disk örnekleri. Doğal anahtar `(host_id,
 
 ### `docker_containers`
 
-Container'ların **son durumu** (geçmiş tutulmaz).
+Container'ların **son durumu** (geçmiş tutulmaz). Protokol 4 (`000007`): healthcheck sonucu ve üst üste başarısız kontrol
+sayısı, durmuş container'ın son çıkış kodu ve bellek yetmediği için öldürülüp öldürülmediği (NULL = bilinmiyor).
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -312,8 +330,14 @@ Container'ların **son durumu** (geçmiş tutulmaz).
 | `restart_count` | integer | hayır | `0` |
 | `uptime_seconds` | bigint | hayır | `0` |
 | `reported_at` | timestamptz | hayır | `now()` |
+| `health` | text | evet |  |
+| `health_failing_streak` | integer | evet |  |
+| `exit_code` | integer | evet |  |
+| `oom_killed` | boolean | evet |  |
 
 - **CHECK** `docker_containers_cpu_pct_check`: ((cpu_pct >= (0)::numeric))
+- **CHECK** `docker_containers_health_check`: ((health = ANY (ARRAY['healthy'::text, 'unhealthy'::text, 'starting'::text])))
+- **CHECK** `docker_containers_health_failing_streak_check`: ((health_failing_streak >= 0))
 - **CHECK** `docker_containers_ram_mb_check`: ((ram_mb >= (0)::numeric))
 - **CHECK** `docker_containers_restart_count_check`: ((restart_count >= 0))
 - **CHECK** `docker_containers_status_check`: ((status = ANY (ARRAY['created'::text, 'running'::text, 'paused'::text, 'restarting'::text, 'exited'::text, 'dead'::text, 'removing'::text])))
@@ -321,9 +345,49 @@ Container'ların **son durumu** (geçmiş tutulmaz).
 - **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
 - **PK** (host_id, name)
 
+### `host_services`
+
+systemd servislerinin **son durumu** (protokol 4, `000007`). Tam rapor listeyi değiştirir (listede olmayan silinir), kısmi
+rapor yalnızca gelen servisleri günceller; `updated_at` içerik değişince ilerler (değişmeyen satır yazılmaz).
+`restart_history`: son 1 saatteki yeniden başlatma sayacı artışları (`[[unix_sn, önceki, yeni], …]`; servis yeniden
+başlatma döngüsü alert'i).
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `host_id` | uuid | hayır |  |
+| `name` | text | hayır |  |
+| `description` | text | evet |  |
+| `active` | text | hayır |  |
+| `sub` | text | evet |  |
+| `since` | timestamptz | evet |  |
+| `restarts` | integer | evet |  |
+| `enabled` | text | evet |  |
+| `updated_at` | timestamptz | hayır | `now()` |
+| `restart_history` | jsonb | evet |  |
+
+- **CHECK** `host_services_restarts_check`: ((restarts >= 0))
+- **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
+- **PK** (host_id, name)
+
+### `host_watched_services`
+
+Alert üretecek (izlenen) servisler, sunucu bazında (`000007`; izin `host.update`). Şu an raporlanmayan bir servis de
+seçilebilir.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `host_id` | uuid | hayır |  |
+| `name` | text | hayır |  |
+| `created_at` | timestamptz | hayır | `now()` |
+
+- **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
+- **PK** (host_id, name)
+
 ### `threshold_defaults`
 
 Varsayılan eşikler: genel (`organization_id` NULL) ya da bir organizasyonun (alt dallara miras kalır). Çözümleme: sunucu özel → organizasyon → üst şirketler (en yakın) → genel.
+`duration_seconds` (`000007`): eşik bu kadar saniye kesintisiz aşılırsa alert açılır; NULL = hemen (yalnızca protokol 4
+türlerinde verilir: `disk_latency`, `temperature`, `service_restart`, `time_offset`).
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -334,16 +398,20 @@ Varsayılan eşikler: genel (`organization_id` NULL) ya da bir organizasyonun (a
 | `critical_level` | numeric | hayır |  |
 | `created_at` | timestamptz | hayır | `now()` |
 | `updated_at` | timestamptz | hayır | `now()` |
+| `duration_seconds` | integer | evet |  |
 
+- **CHECK** `threshold_defaults_duration_seconds_check`: ((duration_seconds > 0))
 - **CHECK** `threshold_defaults_levels_chk`: ((warning_level <= critical_level))
-- **CHECK** `threshold_defaults_metric_type_check`: ((metric_type = ANY (ARRAY['cpu'::text, 'ram'::text, 'disk'::text, 'docker_restart'::text])))
+- **CHECK** `threshold_defaults_metric_type_check`: ((metric_type = ANY (ARRAY['cpu'::text, 'ram'::text, 'disk'::text, 'docker_restart'::text, 'disk_latency'::text, 'temperature'::text, 'service_restart'::text, 'time_offset'::text])))
 - **FK** (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 - **PK** (id)
 - **UNIQUE** `threshold_defaults_scope_metric_key`: NULLS NOT DISTINCT (organization_id, metric_type)
 
 ### `host_custom_thresholds`
 
-Bir sunucunun kendi eşikleri; `subject` doluysa mount (disk) ya da container (docker_restart) başına.
+Bir sunucunun kendi eşikleri; `subject` doluysa mount (`disk`), container (`docker_restart`), fiziksel disk
+(`disk_latency`), sensör (`temperature`) ya da servis (`service_restart`) başına. `duration_seconds` için bkz.
+`threshold_defaults`.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -355,13 +423,45 @@ Bir sunucunun kendi eşikleri; `subject` doluysa mount (disk) ya da container (d
 | `critical_level` | numeric | hayır |  |
 | `created_at` | timestamptz | hayır | `now()` |
 | `updated_at` | timestamptz | hayır | `now()` |
+| `duration_seconds` | integer | evet |  |
 
+- **CHECK** `host_custom_thresholds_duration_seconds_check`: ((duration_seconds > 0))
 - **CHECK** `host_custom_thresholds_levels_chk`: ((warning_level <= critical_level))
-- **CHECK** `host_custom_thresholds_metric_type_check`: ((metric_type = ANY (ARRAY['cpu'::text, 'ram'::text, 'disk'::text, 'docker_restart'::text])))
-- **CHECK** `host_custom_thresholds_subject_chk`: (((subject IS NULL) OR (metric_type = ANY (ARRAY['disk'::text, 'docker_restart'::text]))))
+- **CHECK** `host_custom_thresholds_metric_type_check`: ((metric_type = ANY (ARRAY['cpu'::text, 'ram'::text, 'disk'::text, 'docker_restart'::text, 'disk_latency'::text, 'temperature'::text, 'service_restart'::text, 'time_offset'::text])))
+- **CHECK** `host_custom_thresholds_subject_chk`: (((subject IS NULL) OR (metric_type = ANY (ARRAY['disk'::text, 'docker_restart'::text, 'disk_latency'::text, 'temperature'::text, 'service_restart'::text]))))
 - **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
 - **PK** (id)
 - **UNIQUE** `host_custom_thresholds_key`: NULLS NOT DISTINCT (host_id, metric_type, subject)
+
+### `status_alert_rules`
+
+Durum kuralları (`000007`): eşiği olmayan alert'lerin seviyesi (`off` / `info` / `warning` / `critical`) ve süresi. Kapsam
+genel (iki kimlik de NULL), organizasyon (alt dallara miras kalır) ya da tek sunucu; en özel olan geçerlidir, `off` üst
+kapsamdaki kuralı o kapsamda kapatır. Hiç satır yoksa kural kapalıdır. `duration_seconds`: koşul bu kadar sürerse alert
+açılır (`oom_kill`'de: bu kadar süre yeni olay olmazsa kapanır); anlık olaylara (`container_oom`, `fs_readonly`,
+`reboot_required`) süre verilmez.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `id` | uuid | hayır | `gen_random_uuid()` |
+| `organization_id` | uuid | evet |  |
+| `host_id` | uuid | evet |  |
+| `rule` | text | hayır |  |
+| `level` | text | hayır |  |
+| `duration_seconds` | integer | evet |  |
+| `created_at` | timestamptz | hayır | `now()` |
+| `updated_at` | timestamptz | hayır | `now()` |
+
+- **CHECK** `status_alert_rules_duration_chk`: (((duration_seconds IS NULL) OR (rule <> ALL (ARRAY['container_oom'::text, 'fs_readonly'::text, 'reboot_required'::text]))))
+- **CHECK** `status_alert_rules_duration_seconds_check`: ((duration_seconds > 0))
+- **CHECK** `status_alert_rules_level_check`: ((level = ANY (ARRAY['off'::text, 'info'::text, 'warning'::text, 'critical'::text])))
+- **CHECK** `status_alert_rules_one_scope_chk`: (((organization_id IS NULL) OR (host_id IS NULL)))
+- **CHECK** `status_alert_rules_rule_check`: ((rule = ANY (ARRAY['service_failed'::text, 'container_unhealthy'::text, 'container_oom'::text, 'oom_kill'::text, 'fs_readonly'::text, 'raid_degraded'::text, 'raid_rebuilding'::text, 'time_unsynced'::text, 'time_source'::text, 'reboot_required'::text, 'security_updates'::text])))
+- **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
+- **FK** (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+- **PK** (id)
+- **UNIQUE** `status_alert_rules_key`: NULLS NOT DISTINCT (organization_id, host_id, rule)
+- **İndeks** `status_alert_rules_host_idx`: `btree (host_id) WHERE (host_id IS NOT NULL)`
 
 ### `alerts`
 
@@ -382,7 +482,7 @@ Alert kayıtları. Sunucu+tür+subject başına en fazla **bir açık** alert (k
 | `acknowledged_by` | uuid | evet |  |
 | `resolved_at` | timestamptz | evet |  |
 
-- **CHECK** `alerts_alert_type_check`: ((alert_type = ANY (ARRAY['cpu'::text, 'ram'::text, 'disk'::text, 'docker_restart'::text, 'host_offline'::text, 'disk_missing'::text])))
+- **CHECK** `alerts_alert_type_check`: ((alert_type = ANY (ARRAY['cpu'::text, 'ram'::text, 'disk'::text, 'docker_restart'::text, 'host_offline'::text, 'disk_missing'::text, 'service_failed'::text, 'service_restart_loop'::text, 'container_unhealthy'::text, 'container_oom'::text, 'disk_latency'::text, 'oom_kill'::text, 'fs_readonly'::text, 'raid_degraded'::text, 'temperature'::text, 'time_sync'::text, 'reboot_required'::text, 'security_updates'::text])))
 - **CHECK** `alerts_level_check`: ((level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
 - **CHECK** `alerts_status_check`: ((status = ANY (ARRAY['open'::text, 'acknowledged'::text, 'resolved'::text])))
 - **FK** (acknowledged_by) REFERENCES users(id) ON DELETE SET NULL
@@ -392,6 +492,24 @@ Alert kayıtları. Sunucu+tür+subject başına en fazla **bir açık** alert (k
 - **Benzersiz indeks** `alerts_one_active_uidx`: `btree (host_id, alert_type, subject) NULLS NOT DISTINCT WHERE (status <> 'resolved'::text)` — bir sunucu + tür + konu için en fazla bir aktif (açık ya da onaylanmış) alert (`000002`)
 - **İndeks** `alerts_resolved_at_idx`: `btree (resolved_at) WHERE (status = 'resolved'::text)` — çözülmüş alert saklama temizliği için (`000004`)
 - **İndeks** `alerts_status_idx`: `btree (status)`
+
+### `alert_pending`
+
+Süre koşulu henüz dolmamış durumlar (`000007`): eşik aşıldı ya da durum oluştu ama `duration_seconds` dolmadı. Koşul
+`since`'tan beri sürüyorsa alert açılır ve satır silinir; koşul kalkınca da silinir. Anahtar `alerts`'teki tek aktif alert
+kuralıyla aynıdır (sunucu + tür + konu). Server yeniden başlasa da süre korunur.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `host_id` | uuid | hayır |  |
+| `alert_type` | text | hayır |  |
+| `subject` | text | evet |  |
+| `level` | text | hayır |  |
+| `since` | timestamptz | hayır | `now()` |
+
+- **CHECK** `alert_pending_level_check`: ((level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
+- **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
+- **UNIQUE** `alert_pending_key`: NULLS NOT DISTINCT (host_id, alert_type, subject)
 
 ### `notification_routes`
 

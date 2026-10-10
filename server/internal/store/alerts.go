@@ -350,3 +350,43 @@ func (s *Alerts) PurgeResolvedBefore(ctx context.Context, cutoff time.Time, batc
 		     SELECT id FROM alerts WHERE status = 'resolved' AND resolved_at < $1 ORDER BY resolved_at LIMIT $2)`,
 		cutoff, batchSize)
 }
+
+// PendingCondition, süre koşulu henüz dolmamış bir alert koşuludur (alert_pending): koşul Since'ten beri sürüyor.
+type PendingCondition struct {
+	AlertType string
+	Subject   string // "" = sunucu geneli
+	Since     time.Time
+}
+
+// ListPending, sunucunun bekleyen koşullarıdır; alert motoru rapor başına bir kez okur.
+func (s *Alerts) ListPending(ctx context.Context, hostID uuid.UUID) ([]PendingCondition, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT alert_type, COALESCE(subject, ''), since FROM alert_pending WHERE host_id = $1`, hostID)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, func(row interface{ Scan(...any) error }) (PendingCondition, error) {
+		var p PendingCondition
+		err := row.Scan(&p.AlertType, &p.Subject, &p.Since)
+		return p, err
+	})
+}
+
+// MarkPending, koşulun başladığını kaydeder ve başlangıcını döndürür: koşul zaten bekliyorsa ilk başlangıç korunur
+// (yalnızca seviyesi güncellenir).
+func (s *Alerts) MarkPending(ctx context.Context, hostID uuid.UUID, alertType, subject, level string, at time.Time) (time.Time, error) {
+	var since time.Time
+	err := s.pool.QueryRow(ctx,
+		`INSERT INTO alert_pending (host_id, alert_type, subject, level, since) VALUES ($1, $2, NULLIF($3, ''), $4, $5)
+		 ON CONFLICT ON CONSTRAINT alert_pending_key DO UPDATE SET level = EXCLUDED.level
+		 RETURNING since`, hostID, alertType, subject, level, at).Scan(&since)
+	return since, err
+}
+
+// ClearPending, koşulun bekleme kaydını siler (koşul kalktı ya da alert açıldı).
+func (s *Alerts) ClearPending(ctx context.Context, hostID uuid.UUID, alertType, subject string) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM alert_pending WHERE host_id = $1 AND alert_type = $2 AND subject IS NOT DISTINCT FROM NULLIF($3, '')`,
+		hostID, alertType, subject)
+	return err
+}

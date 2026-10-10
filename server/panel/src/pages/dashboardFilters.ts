@@ -19,7 +19,16 @@ export const SINCE_WINDOWS = {
 export type SinceKey = keyof typeof SINCE_WINDOWS
 
 export const LEVELS: readonly AlertLevel[] = ['critical', 'warning', 'info']
-export const METRICS: readonly AlertType[] = ['cpu', 'ram', 'disk', 'docker_restart', 'host_offline', 'disk_missing']
+// Alert türleri süzgeçte üç başlık altında gösterilir; adres çubuğunda (`metrik`) türün adıyla tutulur.
+export const METRIC_GROUPS: readonly { label: string; types: readonly AlertType[] }[] = [
+  { label: 'Kaynak', types: ['cpu', 'ram', 'disk', 'disk_latency', 'temperature', 'time_sync'] },
+  { label: 'Servis ve container', types: ['service_failed', 'service_restart_loop', 'docker_restart', 'container_unhealthy', 'container_oom'] },
+  {
+    label: 'Sistem durumu',
+    types: ['host_offline', 'disk_missing', 'fs_readonly', 'raid_degraded', 'oom_kill', 'reboot_required', 'security_updates'],
+  },
+]
+export const METRICS: readonly AlertType[] = METRIC_GROUPS.flatMap((g) => g.types)
 const STATUSES: readonly HostStatus[] = ['online', 'offline']
 const MODES: readonly HostMode[] = ['push', 'pull']
 
@@ -207,7 +216,7 @@ export function activeChips(f: DashboardFilters, orgName: (id: string) => string
   if (f.withAlerts) chips.push({ key: 'withAlerts', label: "Yalnızca alert'i olanlar", without: { ...f, withAlerts: false } })
   if (f.agentUpdate) chips.push({ key: 'agentUpdate', label: "Yalnızca agent'ı güncellenmesi gerekenler", without: { ...f, agentUpdate: false } })
   for (const l of f.levels) chips.push({ key: `level:${l}`, label: `Seviye: ${alertLevelLabel(l)}`, without: { ...f, levels: f.levels.filter((x) => x !== l) } })
-  for (const m of f.metrics) chips.push({ key: `metric:${m}`, label: `Metrik: ${alertMetricLabel(m)}`, without: { ...f, metrics: f.metrics.filter((x) => x !== m) } })
+  for (const m of f.metrics) chips.push({ key: `metric:${m}`, label: `Tür: ${alertMetricLabel(m)}`, without: { ...f, metrics: f.metrics.filter((x) => x !== m) } })
   if (f.since) chips.push({ key: 'since', label: `Alert zamanı: ${SINCE_LABELS[f.since]}`, without: { ...f, since: '' } })
   return chips
 }

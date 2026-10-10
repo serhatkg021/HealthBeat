@@ -3,8 +3,10 @@ package ingest_test
 import (
 	"context"
 	"errors"
+	"os"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -122,5 +124,234 @@ func TestRecordStopsWhenMetricsCannotBeStored(t *testing.T) {
 	e.engine.Flush()
 	if n := e.openAlerts(t, missing); n != 0 {
 		t.Fatalf("alerts raised despite the failed insert: %d", n)
+	}
+}
+
+// Protokol 4 raporu: zaman serisi metrik satırına (ölçüldüğü gibi), anlık durumlar host_status'a, servisler ve container
+// sağlığı kendi tablolarına yazılır; ikinci raporda OOM sayacının artışı görülür.
+func TestRecordStoresProtocol4Report(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	body, err := os.ReadFile("../../testdata/payloads/v4_health_performance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, unknown, err := ingest.Decode(body)
+	if err != nil || unknown != nil {
+		t.Fatalf("Decode: unknown=%v err=%v", unknown, err)
+	}
+	record := func(p model.MetricsIngestRequest) {
+		t.Helper()
+		if err := e.svc.Record(ctx, ingest.Report{HostID: e.host, OrgID: e.org, Source: ingest.SourcePush, Payload: p,
+			Agent: model.AgentInfo{Version: "1.3.0", Protocol: 4}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record(payload)
+
+	var iowait, await, rx string
+	if err := e.pool.QueryRow(ctx, `SELECT system_json->'cpu_detail'->>'iowait_pct', disk_io_json->0->>'await_ms', net_io_json->0->>'rx_bps'
+		FROM metrics WHERE host_id = $1`, e.host).Scan(&iowait, &await, &rx); err != nil {
+		t.Fatal(err)
+	}
+	if iowait != "0.1670843776106934" || await != "0.8333333333333334" || rx != "10458.774401897601" {
+		t.Errorf("metric row: iowait=%s await=%s rx=%s, want the values as reported", iowait, await, rx)
+	}
+
+	st, err := e.hosts.SystemState(ctx, e.host)
+	if err != nil || st == nil || *st.OOMKills != 2 || st.OOMLastIncreaseAt != nil || st.Updates.Security != 3 ||
+		st.TimeSync == nil || *st.TimeSync.OffsetMs != 2.2285 || len(st.Temperatures) != 2 {
+		t.Fatalf("system state = %+v, %v", st, err)
+	}
+
+	var services, failed int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE active = 'failed') FROM host_services WHERE host_id = $1`, e.host).
+		Scan(&services, &failed); err != nil || services != 3 || failed != 1 {
+		t.Fatalf("services = %d (failed %d), err=%v; want 3 (1)", services, failed, err)
+	}
+	var unhealthy int
+	if err := e.pool.QueryRow(ctx, `SELECT count(*) FROM docker_containers WHERE host_id = $1 AND health = 'unhealthy' AND health_failing_streak = 3`, e.host).
+		Scan(&unhealthy); err != nil || unhealthy != 1 {
+		t.Fatalf("unhealthy containers = %d, %v", unhealthy, err)
+	}
+
+	// İkinci rapor: OOM sayacı arttı; servis listesi kısmi (yalnızca nginx düzeldi).
+	time.Sleep(time.Millisecond)
+	n := uint64(3)
+	payload.MemoryDetail.OOMKills = &n
+	payload.Services = &model.Services{Full: false, Items: []model.Service{{Name: "nginx.service", Active: "active", Sub: "running"}}}
+	record(payload)
+	if st, err := e.hosts.SystemState(ctx, e.host); err != nil || st.OOMLastIncreaseAt == nil {
+		t.Fatalf("after the counter increased: %+v, %v", st, err)
+	}
+	if err := e.pool.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE active = 'failed') FROM host_services WHERE host_id = $1`, e.host).
+		Scan(&services, &failed); err != nil || services != 3 || failed != 0 {
+		t.Fatalf("after the partial report: services = %d (failed %d), err=%v; want 3 (0)", services, failed, err)
+	}
+}
+
+// Durum kuralları açıkken v4 raporu durum alert'lerini açar; kural yoksa hiçbiri açılmaz.
+func TestRecordRaisesStatusAlerts(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	body, err := os.ReadFile("../../testdata/payloads/v4_health_performance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _, err := ingest.Decode(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := func() {
+		t.Helper()
+		time.Sleep(time.Millisecond)
+		if err := e.svc.Record(ctx, ingest.Report{HostID: e.host, OrgID: e.org, Source: ingest.SourcePush, Payload: payload,
+			Agent: model.AgentInfo{Version: "1.3.0", Protocol: 4}}); err != nil {
+			t.Fatal(err)
+		}
+		e.engine.Flush()
+	}
+	open := func() map[string]string {
+		t.Helper()
+		rows, err := e.pool.Query(ctx, `SELECT alert_type || COALESCE('/' || subject, ''), level FROM alerts WHERE host_id = $1 AND status = 'open'`, e.host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		out := map[string]string{}
+		for rows.Next() {
+			var k, l string
+			if err := rows.Scan(&k, &l); err != nil {
+				t.Fatal(err)
+			}
+			out[k] = l
+		}
+		return out
+	}
+
+	record()
+	if got := open(); len(got) != 0 {
+		t.Fatalf("alerts without any rule: %v", got)
+	}
+
+	th := store.NewThresholds(e.pool)
+	if err := th.SetStatusRules(ctx, &e.org, model.StatusRuleChanges{
+		model.RuleServiceFailed:      {Level: model.AlertLevelCritical},
+		model.RuleContainerUnhealthy: {Level: model.AlertLevelCritical},
+		model.RuleContainerOOM:       {Level: model.AlertLevelWarning},
+		model.RuleRAIDRebuilding:     {Level: model.AlertLevelWarning},
+		model.RuleSecurityUpdates:    {Level: model.AlertLevelInfo},
+		model.RuleRebootRequired:     {Level: model.AlertLevelInfo},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.hosts.SetWatchedServices(ctx, e.host, []string{"nginx.service"}); err != nil {
+		t.Fatal(err)
+	}
+	record()
+	want := map[string]string{
+		"service_failed/nginx.service": "critical", "container_unhealthy/db": "critical", "container_oom/migrate": "warning",
+		"raid_degraded/md0": "warning", "security_updates": "info",
+	}
+	got := open()
+	if len(got) != len(want) {
+		t.Fatalf("open alerts = %v, want %v", got, want)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s = %q, want %q (all: %v)", k, got[k], v, got)
+		}
+	}
+
+	// OOM: sayaç artınca açılır, artmayan ilk raporda (süre yok) kapanır.
+	if err := th.SetStatusRules(ctx, &e.org, model.StatusRuleChanges{model.RuleOOMKill: {Level: model.AlertLevelWarning}}); err != nil {
+		t.Fatal(err)
+	}
+	record() // sayaç aynı (2): artış yok
+	if _, ok := open()["oom_kill"]; ok {
+		t.Fatal("oom_kill opened without an increase")
+	}
+	n := uint64(5)
+	payload.MemoryDetail.OOMKills = &n
+	record()
+	if open()["oom_kill"] != "warning" {
+		t.Fatalf("oom_kill after the counter rose: %v", open())
+	}
+	record()
+	if _, ok := open()["oom_kill"]; ok {
+		t.Fatal("oom_kill still open after a report without an increase")
+	}
+}
+
+// Eşik tanımlanınca v4 raporunun sayısal değerleri alert açar: disk gecikmesi, sıcaklık (konu bazlı eşik), saat farkı
+// ve izlenen servisin yeniden başlatma döngüsü (sayaç geçmişinden).
+func TestRecordRaisesNumericAlerts(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	body, err := os.ReadFile("../../testdata/payloads/v4_health_performance.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _, err := ingest.Decode(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := func() {
+		t.Helper()
+		time.Sleep(time.Millisecond)
+		if err := e.svc.Record(ctx, ingest.Report{HostID: e.host, OrgID: e.org, Source: ingest.SourcePush, Payload: payload,
+			Agent: model.AgentInfo{Version: "1.3.0", Protocol: 4}}); err != nil {
+			t.Fatal(err)
+		}
+		e.engine.Flush()
+	}
+	th := store.NewThresholds(e.pool)
+	for _, p := range []store.CreateThresholdParams{
+		{OrganizationID: &e.org, MetricType: model.MetricTypeDiskLatency, WarningLevel: 0.5, CriticalLevel: 5},
+		{OrganizationID: &e.org, MetricType: model.MetricTypeTimeOffset, WarningLevel: 1, CriticalLevel: 2},
+		{OrganizationID: &e.org, MetricType: model.MetricTypeServiceRestart, WarningLevel: 2, CriticalLevel: 10},
+	} {
+		if _, err := th.Create(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := th.SetHostOverrides(ctx, e.host, model.ThresholdOverrides{}, nil, nil, model.SubjectThresholds{
+		model.MetricTypeTemperature: {"coretemp/Package id 0": {WarningLevel: 40, CriticalLevel: 45}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.hosts.SetWatchedServices(ctx, e.host, []string{"nginx.service"}); err != nil {
+		t.Fatal(err)
+	}
+
+	record() // nginx'in sayacı (5) ilk kez görülür: artış sayılmaz
+	open := func() map[string]string {
+		t.Helper()
+		rows, err := e.pool.Query(ctx, `SELECT alert_type || COALESCE('/' || subject, ''), level FROM alerts WHERE host_id = $1 AND status = 'open'`, e.host)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer rows.Close()
+		out := map[string]string{}
+		for rows.Next() {
+			var k, l string
+			if err := rows.Scan(&k, &l); err != nil {
+				t.Fatal(err)
+			}
+			out[k] = l
+		}
+		return out
+	}
+	want := map[string]string{"disk_latency/nvme0n1": "warning", "temperature/coretemp/Package id 0": "critical", "time_sync/offset": "critical"}
+	if got := open(); len(got) != len(want) || got["disk_latency/nvme0n1"] != "warning" ||
+		got["temperature/coretemp/Package id 0"] != "critical" || got["time_sync/offset"] != "critical" {
+		t.Fatalf("open alerts = %v, want %v", got, want)
+	}
+
+	n := 8 // nginx 3 kez daha yeniden başladı (5 → 8)
+	payload.Services = &model.Services{Items: []model.Service{{Name: "nginx.service", Active: "active", Sub: "running", Restarts: &n}}}
+	record()
+	if got := open()["service_restart_loop/nginx.service"]; got != "warning" {
+		t.Fatalf("restart loop = %q (all: %v)", got, open())
 	}
 }

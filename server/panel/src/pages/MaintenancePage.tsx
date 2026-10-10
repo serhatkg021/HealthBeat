@@ -9,7 +9,7 @@ import { SAMPLE_MAINTENANCE } from './comingSoonSamples'
 export function MaintenancePage() {
   return (
     <div>
-      <PageHeader title="Bakım pencereleri" subtitle="Planlı bakım sırasında alert bildirimlerini susturma" />
+      <PageHeader title="Bakım pencereleri" />
       <ComingSoon
         title="Planlı pencereler"
         icon={CalendarClock}

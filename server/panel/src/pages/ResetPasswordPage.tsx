@@ -5,6 +5,7 @@ import { authApi } from '../api/endpoints'
 import { ApiError } from '../api/client'
 import { useDocumentTitle } from '../components/useDocumentTitle'
 import { tokenFromHash, validateResetPassword } from './passwordReset'
+import { ThemeToggle } from '../components/ThemeToggle'
 
 // E-postadaki bağlantının açtığı sayfa ("/reset-password#token=…"): yeni şifre seçilir. Token adres çubuğundan ve
 // geçmişten kaldırılır (sayfa yeniden yüklenirse bağlantı e-postadan yeniden açılır). Başarıda tüm oturumlar
@@ -50,6 +51,9 @@ export function ResetPasswordPage() {
 
   return (
     <div className="login-shell">
+      <div className="login-theme">
+        <ThemeToggle />
+      </div>
       <div className="card login-card">
         <div className="login-brand">
           <span className="brand-mark">

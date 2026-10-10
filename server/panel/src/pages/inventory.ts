@@ -5,6 +5,13 @@ import type { HostInfo } from '../types/api.ts'
 // Agent envanteri (host_info) protokol 3 ile gelir.
 export const supportsInventory = (c: { agent_protocol?: number | null }): boolean => (c.agent_protocol ?? 0) >= 3
 
+// Sistem sağlığı ve performans verileri (servisler, disk/ağ G/Ç, PSI, sıcaklık …) protokol 4 ile gelir.
+export const supportsHealth = (c: { agent_protocol?: number | null }): boolean => (c.agent_protocol ?? 0) >= 4
+
+// Protokol 4 verisi olmayan sunucunun boş durum metni: eski agent'ta neden yok, yenisinde henüz gelmedi.
+export const healthEmptyText = (c: { agent_protocol?: number | null }, what: string): string =>
+  supportsHealth(c) ? `${what} henüz bildirilmedi.` : `${what} bu agent sürümünde toplanmıyor; agent güncellenince görünür (protokol 4).`
+
 export function osLabel(h?: HostInfo): string {
   const os = h?.os
   if (!os) return '—'
@@ -50,18 +57,6 @@ export function formatUptime(seconds?: number): string {
   if (days > 0) return hours > 0 ? `${days} gün ${hours} sa` : `${days} gün`
   if (hours > 0) return mins > 0 ? `${hours} sa ${mins} dk` : `${hours} sa`
   return mins > 0 ? `${mins} dk` : `${s} sn`
-}
-
-export function loadText(h?: HostInfo): string {
-  const la = h?.load_avg
-  if (!la || la.length !== 3) return '—'
-  return `${la.map((v) => v.toFixed(2)).join(' · ')} (1 / 5 / 15 dk)`
-}
-
-export function swapText(h?: HostInfo): string {
-  const s = h?.swap
-  if (!s) return 'Yok'
-  return `${s.used_mb} / ${s.total_mb} MB`
 }
 
 // Adresi ön eksiz ve karşılaştırılabilir hâle getirir (IPv6'da büyük/küçük harf ve sıfır sıkıştırması).

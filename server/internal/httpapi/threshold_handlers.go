@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -51,13 +53,18 @@ type thresholdRequest struct {
 	MetricType     string     `json:"metric_type"`
 	WarningLevel   float64    `json:"warning_level"`
 	CriticalLevel  float64    `json:"critical_level"`
+	// DurationSeconds: eşik kesintisiz bu kadar saniye aşılınca alert açılır; boş = hemen (bkz. model.DurationMetricTypes).
+	DurationSeconds *int `json:"duration_seconds"`
 }
 
 func (req *thresholdRequest) Validate() error {
 	if !model.ValidThresholdMetricType(req.MetricType) {
-		return errors.New("metric_type cpu, ram, disk veya docker_restart olmalı")
+		return errors.New("metric_type " + strings.Join(model.ThresholdMetricTypes, ", ") + " değerlerinden biri olmalı")
 	}
-	return model.ValidateThresholdLevels(req.MetricType, req.WarningLevel, req.CriticalLevel)
+	if err := model.ValidateThresholdLevels(req.MetricType, req.WarningLevel, req.CriticalLevel); err != nil {
+		return err
+	}
+	return model.ValidateThresholdDuration(req.MetricType, req.DurationSeconds)
 }
 
 func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) error {
@@ -81,6 +88,8 @@ func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) err
 		MetricType:     req.MetricType,
 		WarningLevel:   req.WarningLevel,
 		CriticalLevel:  req.CriticalLevel,
+
+		DurationSeconds: req.DurationSeconds,
 	})
 	if err != nil {
 		return storeError(err, "organizasyon bulunamadı", fail, "create threshold")
@@ -88,9 +97,10 @@ func (d *Deps) handleCreateThreshold(w http.ResponseWriter, r *http.Request) err
 
 	targetID := threshold.ID.String()
 	d.logAudit(r, "threshold.create", "threshold", &targetID, map[string]any{
-		"metric_type":    threshold.MetricType,
-		"warning_level":  threshold.WarningLevel,
-		"critical_level": threshold.CriticalLevel,
+		"metric_type":      threshold.MetricType,
+		"warning_level":    threshold.WarningLevel,
+		"critical_level":   threshold.CriticalLevel,
+		"duration_seconds": threshold.DurationSeconds,
 	})
 	writeJSON(w, http.StatusCreated, threshold)
 	return nil
@@ -146,6 +156,23 @@ func (d *Deps) managedThreshold(r *http.Request, id uuid.UUID, op string, fail f
 type updateThresholdRequest struct {
 	WarningLevel  *float64 `json:"warning_level"`
 	CriticalLevel *float64 `json:"critical_level"`
+	// DurationSeconds: verilmemiş = değişmez; null = kaldır (hemen); sayı = süre.
+	DurationSeconds json.RawMessage `json:"duration_seconds"`
+}
+
+// duration, DurationSeconds'ı çözer: set false ise alan verilmemiştir.
+func (req updateThresholdRequest) duration() (set bool, d *int, err error) {
+	if len(req.DurationSeconds) == 0 {
+		return false, nil, nil
+	}
+	if string(req.DurationSeconds) == "null" {
+		return true, nil, nil
+	}
+	var n int
+	if err := json.Unmarshal(req.DurationSeconds, &n); err != nil {
+		return false, nil, errors.New("duration_seconds bir tam sayı ya da null olmalı")
+	}
+	return true, &n, nil
 }
 
 func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) error {
@@ -177,16 +204,26 @@ func (d *Deps) handleUpdateThreshold(w http.ResponseWriter, r *http.Request) err
 			return badRequest(err.Error())
 		}
 	}
+	setDuration, duration, err := req.duration()
+	if err != nil {
+		return badRequest(err.Error())
+	}
+	if err := model.ValidateThresholdDuration(existing.MetricType, duration); err != nil {
+		return badRequest(err.Error())
+	}
 
-	threshold, err := d.thresholds.Update(r.Context(), id, req.WarningLevel, req.CriticalLevel)
+	threshold, err := d.thresholds.Update(r.Context(), id, store.ThresholdPatch{
+		WarningLevel: req.WarningLevel, CriticalLevel: req.CriticalLevel, SetDuration: setDuration, Duration: duration,
+	})
 	if err != nil {
 		return storeError(err, "eşik bulunamadı", fail, "update threshold")
 	}
 
 	targetID := threshold.ID.String()
 	d.logAudit(r, "threshold.update", "threshold", &targetID, map[string]any{
-		"warning_level":  threshold.WarningLevel,
-		"critical_level": threshold.CriticalLevel,
+		"warning_level":    threshold.WarningLevel,
+		"critical_level":   threshold.CriticalLevel,
+		"duration_seconds": threshold.DurationSeconds,
 	})
 	writeJSON(w, http.StatusOK, threshold)
 	return nil

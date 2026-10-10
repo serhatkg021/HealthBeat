@@ -25,8 +25,9 @@ func (c *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, _ pgx.T
 
 func (c *queryCounter) TraceQueryEnd(context.Context, *pgx.Conn, pgx.TraceQueryEndData) {}
 
-// Durum değişmeyen bir rapor, mount ve container sayısından bağımsız olarak üç sorgu çalıştırır: eşikler, aktif
-// alert'ler ve disk seçimi rapor başına bir kez okunur (kalem başına değil).
+// Durum değişmeyen bir rapor, mount ve container sayısından bağımsız olarak beş sorgu çalıştırır: eşikler, aktif
+// alert'ler, durum kuralları, süre koşulu bekleyen koşullar ve disk seçimi rapor başına bir kez okunur (kalem başına
+// değil).
 func TestEvaluateReportReadsOncePerReport(t *testing.T) {
 	ctx := context.Background()
 	cfg := testdb.New(t).Config()
@@ -54,8 +55,8 @@ func TestEvaluateReportReadsOncePerReport(t *testing.T) {
 		engine.EvaluateReport(ctx, host, org, report) // ilk rapor cpu alert'ini açar
 		counter.n.Store(0)
 		engine.EvaluateReport(ctx, host, org, report)
-		if got := counter.n.Load(); got != 3 {
-			t.Errorf("%d mounts and containers: %d queries per unchanged report, want 3", n, got)
+		if got := counter.n.Load(); got != 5 {
+			t.Errorf("%d mounts and containers: %d queries per unchanged report, want 5", n, got)
 		}
 	}
 }

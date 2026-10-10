@@ -49,8 +49,11 @@ type hostResponse struct {
 	// SameMachineAs, aynı /etc/machine-id özetini bildiren diğer sunucular (çift kayıt uyarısı); yalnızca tek sunucu
 	// yanıtında. Klonlanmış sanal makineler aynı kimliği taşıyabilir, bu yüzden yalnızca uyarıdır.
 	SameMachineAs []store.HostRef `json:"same_machine_as,omitempty"`
-	APIToken      *string         `json:"api_token,omitempty"`
-	PullSecret    *string         `json:"pull_secret,omitempty"`
+	// SystemState, agent'ın son raporundaki anlık durumlardır (protokol 4: sıcaklık, RAID, kapasite, süreçler,
+	// güncellemeler, saat senkronu, OOM sayacı); yalnızca tek sunucu yanıtında (listelerde her sunucu 1–2 KB büyürdü).
+	SystemState *model.SystemState `json:"system_state,omitempty"`
+	APIToken    *string            `json:"api_token,omitempty"`
+	PullSecret  *string            `json:"pull_secret,omitempty"`
 }
 
 // Validate, istek içinde kalan kuralları denetler; eşik girdileri handler'da çevrilir (çevrilmiş değerleri gerekir).
@@ -191,6 +194,11 @@ func (d *Deps) handleGetHost(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	resp := hostResponse{Host: host}
+	if st, err := d.hosts.SystemState(r.Context(), host.ID); err != nil {
+		slog.WarnContext(r.Context(), "get host: system state", "err", err) // tamamlayıcıdır; yokluğu yanıtı bozmamalı
+	} else {
+		resp.SystemState = st
+	}
 	if same, err := d.hosts.SameMachineHosts(r.Context(), host.ID); err != nil {
 		slog.WarnContext(r.Context(), "get host: same machine lookup", "err", err) // uyarı tamamlayıcıdır; yokluğu yanıtı bozmamalı
 	} else {

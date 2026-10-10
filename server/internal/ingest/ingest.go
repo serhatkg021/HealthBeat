@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -59,15 +60,16 @@ func New(metrics *store.Metrics, hosts *store.Hosts, engine *alertengine.Engine)
 	return &Service{metrics: metrics, hosts: hosts, engine: engine}
 }
 
-// Record, raporu şu sırayla işler: metrik satırı, container durumları, sunucunun çevrimiçi işaretlenmesi (donanım ve
-// agent sürümüyle), sonra alert motoru (offline alert'i kapatma, docker ve metrik değerlendirmesi).
+// Record, raporu şu sırayla işler: metrik satırı (protokol 4 zaman serisiyle), container durumları, sunucunun çevrimiçi
+// işaretlenmesi (donanım, agent sürümü ve anlık durumlarla), servis listesi, sonra alert motoru (offline alert'i
+// kapatma, docker ve metrik değerlendirmesi).
 //
 // Yalnızca metrik satırı yazılamazsa hata döner ve başka bir şey yapılmaz; çağıran onu kendi biçiminde loglar/yanıtlar.
 // Sonraki adımların hataları burada loglanır ve alımı durdurmaz: hatalı bir container raporu ya da çevrimiçi işareti
 // CPU/RAM/disk'i kaybettirmemeli.
 func (s *Service) Record(ctx context.Context, r Report) error {
 	p := r.Payload
-	if err := s.metrics.Insert(ctx, r.HostID, p.CPUUsagePct, p.RAMUsagePct, p.Disk); err != nil {
+	if err := s.metrics.Insert(ctx, r.HostID, p.CPUUsagePct, p.RAMUsagePct, p.Disk, p.Series()); err != nil {
 		return err
 	}
 	logErr := func(msg string, err error) {
@@ -76,12 +78,31 @@ func (s *Service) Record(ctx context.Context, r Report) error {
 	if err := s.metrics.ReplaceDockerContainers(ctx, r.HostID, p.DockerContainers); err != nil {
 		logErr("ingest: store docker containers", err)
 	}
-	if err := s.hosts.MarkOnline(ctx, r.HostID, p.Hardware(), r.Agent); err != nil {
+	// Önceki anlık durum okunamazsa yeni durum yalnızca bu rapordan kurulur (OOM sayacının artışı bir rapor kaçar).
+	prev, err := s.hosts.SystemState(ctx, r.HostID)
+	if err != nil {
+		logErr("ingest: read system state", err)
+	}
+	hw := p.Hardware()
+	state := model.NextSystemState(prev, p, time.Now())
+	if err := s.hosts.MarkOnline(ctx, r.HostID, hw, r.Agent, state); err != nil {
 		logErr("ingest: mark host online", err)
+	}
+	if err := s.hosts.SaveServices(ctx, r.HostID, p.Services); err != nil {
+		logErr("ingest: store services", err)
 	}
 
 	s.engine.EvaluateReport(ctx, r.HostID, r.OrgID, alertengine.Report{
 		CPUPct: p.CPUUsagePct, RAMPct: p.RAMUsagePct, Disks: p.Disk, Containers: p.DockerContainers,
+		State: state, OOMIncreased: oomIncreased(prev, state), HostInfo: hw.HostInfo, DiskIO: p.DiskIO,
 	})
 	return nil
+}
+
+// oomIncreased, OOM sayacının bu raporda arttığıdır: NextSystemState artışı gördüyse artış anını yeniler.
+func oomIncreased(prev, next *model.SystemState) bool {
+	if next == nil || next.OOMLastIncreaseAt == nil {
+		return false
+	}
+	return prev == nil || prev.OOMLastIncreaseAt == nil || !next.OOMLastIncreaseAt.Equal(*prev.OOMLastIncreaseAt)
 }

@@ -23,7 +23,9 @@ func NewMetrics(pool *pgxpool.Pool) *Metrics {
 	return &Metrics{pool: pool}
 }
 
-func (s *Metrics) Insert(ctx context.Context, hostID uuid.UUID, cpuPct, ramPct float64, disk []model.DiskUsage) error {
+// Insert, bir metrik satırı yazar. series protokol 4'ün zaman serisidir (bkz. model.MetricsIngestRequest.Series);
+// boş alanları NULL yazılır (eski agent ya da toplanamadı).
+func (s *Metrics) Insert(ctx context.Context, hostID uuid.UUID, cpuPct, ramPct float64, disk []model.DiskUsage, series model.MetricSeries) error {
 	if disk == nil {
 		disk = []model.DiskUsage{}
 	}
@@ -31,13 +33,39 @@ func (s *Metrics) Insert(ctx context.Context, hostID uuid.UUID, cpuPct, ramPct f
 	if err != nil {
 		return err
 	}
+	systemJSON, err := jsonOrNull(series.System, series.System == nil)
+	if err != nil {
+		return err
+	}
+	diskIOJSON, err := jsonOrNull(series.DiskIO, len(series.DiskIO) == 0)
+	if err != nil {
+		return err
+	}
+	netIOJSON, err := jsonOrNull(series.NetIO, len(series.NetIO) == 0)
+	if err != nil {
+		return err
+	}
 
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO metrics (host_id, cpu_usage_pct, ram_usage_pct, disk_json) VALUES ($1, $2, $3, $4)
+		`INSERT INTO metrics (host_id, cpu_usage_pct, ram_usage_pct, disk_json, system_json, disk_io_json, net_io_json)
+		 VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb)
 		 ON CONFLICT (host_id, recorded_at) DO NOTHING`,
-		hostID, cpuPct, ramPct, string(diskJSON),
+		hostID, cpuPct, ramPct, string(diskJSON), systemJSON, diskIOJSON, netIOJSON,
 	)
 	return err
+}
+
+// jsonOrNull, v'yi JSONB parametresi olarak kodlar; empty ise nil (NULL) döner.
+func jsonOrNull(v any, empty bool) (*string, error) {
+	if empty {
+		return nil, nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	str := string(b)
+	return &str, nil
 }
 
 // Makul bir raporun asla aşamayacağı sınırlar; bunların dışındaki değerler hatalı ya da
@@ -68,6 +96,14 @@ func sanitizeContainer(c model.DockerContainerReport) (model.DockerContainerRepo
 	}
 	if c.UptimeSeconds < 0 {
 		c.UptimeSeconds = 0
+	}
+	// Protokol 4 alanları bilgi içindir: bilinmeyen sağlık durumu ya da negatif sayaç container'ı reddettirmez, yalnızca
+	// o alan "bilinmiyor" olur.
+	if !model.ValidDockerHealth(c.Health) {
+		c.Health = ""
+	}
+	if c.HealthFailingStreak != nil && *c.HealthFailingStreak < 0 {
+		c.HealthFailingStreak = nil
 	}
 	return c, true
 }
@@ -104,13 +140,17 @@ func (s *Metrics) ReplaceDockerContainers(ctx context.Context, hostID uuid.UUID,
 	for _, name := range names {
 		c := byName[name]
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO docker_containers (host_id, name, image, status, cpu_pct, ram_mb, restart_count, uptime_seconds, reported_at)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+			`INSERT INTO docker_containers (host_id, name, image, status, cpu_pct, ram_mb, restart_count, uptime_seconds,
+			                                health, health_failing_streak, exit_code, oom_killed, reported_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11, $12, now())
 			 ON CONFLICT (host_id, name) DO UPDATE SET
 			     image = EXCLUDED.image, status = EXCLUDED.status, cpu_pct = EXCLUDED.cpu_pct,
 			     ram_mb = EXCLUDED.ram_mb, restart_count = EXCLUDED.restart_count,
-			     uptime_seconds = EXCLUDED.uptime_seconds, reported_at = EXCLUDED.reported_at`,
+			     uptime_seconds = EXCLUDED.uptime_seconds, health = EXCLUDED.health,
+			     health_failing_streak = EXCLUDED.health_failing_streak, exit_code = EXCLUDED.exit_code,
+			     oom_killed = EXCLUDED.oom_killed, reported_at = EXCLUDED.reported_at`,
 			hostID, c.Name, c.Image, c.Status, c.CPUPct, c.RAMMB, c.RestartCount, c.UptimeSeconds,
+			c.Health, c.HealthFailingStreak, c.ExitCode, c.OOMKilled,
 		); err != nil {
 			return err
 		}
@@ -129,7 +169,7 @@ func (s *Metrics) ReplaceDockerContainers(ctx context.Context, hostID uuid.UUID,
 // Her zaman HAM satırları döndürür — hiçbir kovalama/ortalama yapmaz.
 func (s *Metrics) ListByHostAndRange(ctx context.Context, hostID uuid.UUID, from, to time.Time) ([]model.MetricPoint, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT recorded_at, cpu_usage_pct, ram_usage_pct, disk_json
+		`SELECT `+metricPointColumns+`
 		 FROM metrics
 		 WHERE host_id = $1 AND recorded_at BETWEEN $2 AND $3
 		 ORDER BY recorded_at`,
@@ -142,19 +182,31 @@ func (s *Metrics) ListByHostAndRange(ctx context.Context, hostID uuid.UUID, from
 
 	points := []model.MetricPoint{}
 	for rows.Next() {
-		var p model.MetricPoint
-		var diskJSON []byte
-		if err := rows.Scan(&p.Timestamp, &p.CPUUsagePct, &p.RAMUsagePct, &diskJSON); err != nil {
+		p, err := scanMetricPoint(rows)
+		if err != nil {
 			return nil, err
-		}
-		if len(diskJSON) > 0 {
-			if err := json.Unmarshal(diskJSON, &p.Disk); err != nil {
-				return nil, err
-			}
 		}
 		points = append(points, p)
 	}
 	return points, rows.Err()
+}
+
+const metricPointColumns = `recorded_at, cpu_usage_pct, ram_usage_pct, disk_json, system_json, disk_io_json, net_io_json`
+
+// scanMetricPoint, metricPointColumns sırasıyla bir satırı okur. Protokol 4 sütunları çözülmeden (saklandığı gibi)
+// alınır; NULL ise alan boş kalır.
+func scanMetricPoint(row interface{ Scan(...any) error }) (model.MetricPoint, error) {
+	var p model.MetricPoint
+	var diskJSON []byte
+	if err := row.Scan(&p.Timestamp, &p.CPUUsagePct, &p.RAMUsagePct, &diskJSON, &p.System, &p.DiskIO, &p.NetIO); err != nil {
+		return model.MetricPoint{}, err
+	}
+	if len(diskJSON) > 0 {
+		if err := json.Unmarshal(diskJSON, &p.Disk); err != nil {
+			return model.MetricPoint{}, err
+		}
+	}
+	return p, nil
 }
 
 // PurgeOlderThan, cutoff'tan eski metrik örneklerini en eskiden başlayarak, tek bir ifade
@@ -171,7 +223,8 @@ func (s *Metrics) PurgeOlderThan(ctx context.Context, cutoff time.Time, batchSiz
 // docs/MIMARI.md bölüm 7: GET /hosts/:id/docker).
 func (s *Metrics) LatestDockerContainers(ctx context.Context, hostID uuid.UUID) ([]model.DockerContainerReport, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT name, image, status, cpu_pct, ram_mb, restart_count, uptime_seconds
+		`SELECT name, image, status, cpu_pct, ram_mb, restart_count, uptime_seconds,
+		        COALESCE(health, ''), health_failing_streak, exit_code, oom_killed
 		 FROM docker_containers
 		 WHERE host_id = $1
 		 ORDER BY name`,
@@ -185,7 +238,8 @@ func (s *Metrics) LatestDockerContainers(ctx context.Context, hostID uuid.UUID) 
 	containers := []model.DockerContainerReport{}
 	for rows.Next() {
 		var c model.DockerContainerReport
-		if err := rows.Scan(&c.Name, &c.Image, &c.Status, &c.CPUPct, &c.RAMMB, &c.RestartCount, &c.UptimeSeconds); err != nil {
+		if err := rows.Scan(&c.Name, &c.Image, &c.Status, &c.CPUPct, &c.RAMMB, &c.RestartCount, &c.UptimeSeconds,
+			&c.Health, &c.HealthFailingStreak, &c.ExitCode, &c.OOMKilled); err != nil {
 			return nil, err
 		}
 		containers = append(containers, c)
@@ -196,24 +250,12 @@ func (s *Metrics) LatestDockerContainers(ctx context.Context, hostID uuid.UUID) 
 // Latest, host'ın en son ham metrik örneğini döndürür; hiç örnek yoksa ErrNotFound. Panelin "Genel" sekmesindeki anlık
 // kartları besler (GET /hosts/:id/metrics/latest): tek satırdır, (host_id, recorded_at) birincil anahtarından okunur.
 func (s *Metrics) Latest(ctx context.Context, hostID uuid.UUID) (model.MetricPoint, error) {
-	var p model.MetricPoint
-	var diskJSON []byte
-	err := s.pool.QueryRow(ctx,
-		`SELECT recorded_at, cpu_usage_pct, ram_usage_pct, disk_json FROM metrics
-		 WHERE host_id = $1 ORDER BY recorded_at DESC LIMIT 1`, hostID).
-		Scan(&p.Timestamp, &p.CPUUsagePct, &p.RAMUsagePct, &diskJSON)
-	if err != nil {
-		if isNoRows(err) {
-			return model.MetricPoint{}, ErrNotFound
-		}
-		return model.MetricPoint{}, err
+	p, err := scanMetricPoint(s.pool.QueryRow(ctx,
+		`SELECT `+metricPointColumns+` FROM metrics WHERE host_id = $1 ORDER BY recorded_at DESC LIMIT 1`, hostID))
+	if isNoRows(err) {
+		return model.MetricPoint{}, ErrNotFound
 	}
-	if len(diskJSON) > 0 {
-		if err := json.Unmarshal(diskJSON, &p.Disk); err != nil {
-			return model.MetricPoint{}, err
-		}
-	}
-	return p, nil
+	return p, err
 }
 
 // LatestDisks, host'ın en son raporundaki mount'ları döndürür — panelin hangi mount'ların
@@ -261,4 +303,23 @@ func (s *Metrics) RecentReportedMounts(ctx context.Context, hostID uuid.UUID, n 
 		out = append(out, set)
 	}
 	return out, rows.Err()
+}
+
+// PreviousDisks, sunucunun bir önceki raporunun disk listesidir (son satırdan bir önceki; alert motoru son satır
+// yazıldıktan sonra çağırır). Önceki rapor yoksa boş.
+func (s *Metrics) PreviousDisks(ctx context.Context, hostID uuid.UUID) ([]model.DiskUsage, error) {
+	var raw []byte
+	err := s.pool.QueryRow(ctx,
+		`SELECT disk_json FROM metrics WHERE host_id = $1 ORDER BY recorded_at DESC LIMIT 1 OFFSET 1`, hostID).Scan(&raw)
+	if isNoRows(err) {
+		return []model.DiskUsage{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var disks []model.DiskUsage
+	if err := json.Unmarshal(raw, &disks); err != nil {
+		return nil, err
+	}
+	return disks, nil
 }

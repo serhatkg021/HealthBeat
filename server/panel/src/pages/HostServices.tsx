@@ -1,13 +1,12 @@
 import type { DockerContainerReport, Host, HostThresholdsResponse } from '../types/api'
-import { ComingSoonNote } from '../components/ComingSoon'
 import { useTab } from '../components/useTab'
 import { HostDocker } from './HostDocker'
-import { ServicesPreview } from './HostComingSoon'
+import { SystemServices } from './SystemServices'
 
 const KINDS = ['docker', 'sistem'] as const
 
-// Sunucu sayfasının "Servisler" sekmesi: sunucuda çalışan her şey. Docker container'ları bugün gerçek veriyle; systemd
-// servisleri henüz gelmediği için örnek veriyle "Yakında" olarak gösterilir. Seçili bölüm adreste (`?tur=`) tutulur.
+// Sunucu sayfasının "Servisler" sekmesi: sunucuda çalışan her şey — Docker container'ları ve systemd servisleri (protokol
+// 4). Seçili bölüm adreste (`?tur=`) tutulur.
 export function HostServices({
   host,
   containers,
@@ -25,18 +24,11 @@ export function HostServices({
           Docker · {containers.length}
         </button>
         <button type="button" aria-pressed={kind === 'sistem'} onClick={() => setKind('sistem')}>
-          Sistem servisleri · yakında
+          Sistem servisleri
         </button>
       </div>
 
-      {kind === 'docker' ? (
-        <>
-          <ComingSoonNote>Container sağlık durumu (healthcheck) ve yeniden başlatma döngüsü uyarısı.</ComingSoonNote>
-          <HostDocker host={host} containers={containers} thresholds={thresholds} />
-        </>
-      ) : (
-        <ServicesPreview />
-      )}
+      {kind === 'docker' ? <HostDocker host={host} containers={containers} thresholds={thresholds} /> : <SystemServices key={host.id} host={host} />}
     </div>
   )
 }

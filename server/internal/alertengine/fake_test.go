@@ -129,9 +129,64 @@ func (f fakeThresholds) ResolveHost(context.Context, uuid.UUID, uuid.UUID) (stor
 	return out, nil
 }
 
+func (f fakeThresholds) ResolveStatusRules(context.Context, uuid.UUID, uuid.UUID) (model.StatusRuleSet, error) {
+	return model.StatusRuleSet{}, nil
+}
+
+// fakePending, alert_pending'in bellek içi karşılığıdır.
+type fakePending struct {
+	mu    sync.Mutex
+	since map[[2]string]time.Time
+	marks int
+}
+
+func (f *fakePending) ListPending(context.Context, uuid.UUID) ([]store.PendingCondition, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []store.PendingCondition
+	for k, t := range f.since {
+		out = append(out, store.PendingCondition{AlertType: k[0], Subject: k[1], Since: t})
+	}
+	return out, nil
+}
+
+func (f *fakePending) MarkPending(_ context.Context, _ uuid.UUID, alertType, subject, _ string, at time.Time) (time.Time, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.marks++
+	if f.since == nil {
+		f.since = map[[2]string]time.Time{}
+	}
+	k := [2]string{alertType, subject}
+	if t, ok := f.since[k]; ok {
+		return t, nil
+	}
+	f.since[k] = at
+	return at, nil
+}
+
+func (f *fakePending) ClearPending(_ context.Context, _ uuid.UUID, alertType, subject string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.since, [2]string{alertType, subject})
+	return nil
+}
+
+// failingPending, bekleme kaydı yazılamayan bir veritabanıdır.
+type failingPending struct{ fakePending }
+
+func (*failingPending) MarkPending(context.Context, uuid.UUID, string, string, string, time.Time) (time.Time, error) {
+	return time.Time{}, errors.New("db down")
+}
+
 type fakeHosts struct {
-	host    model.Host
-	lookups int
+	host     model.Host
+	lookups  int
+	services []model.HostService
+}
+
+func (f *fakeHosts) Services(context.Context, uuid.UUID) ([]model.HostService, error) {
+	return f.services, nil
 }
 
 func (f *fakeHosts) DiskAlertMounts(context.Context, uuid.UUID) (bool, []string, error) {
@@ -143,10 +198,17 @@ func (f *fakeHosts) GetByID(context.Context, uuid.UUID) (model.Host, error) {
 	return f.host, nil
 }
 
-type fakeMetrics struct{}
+type fakeMetrics struct{ previous *[]model.DiskUsage }
 
 func (fakeMetrics) RecentReportedMounts(context.Context, uuid.UUID, int) ([]map[string]struct{}, error) {
 	return nil, nil
+}
+
+func (f fakeMetrics) PreviousDisks(context.Context, uuid.UUID) ([]model.DiskUsage, error) {
+	if f.previous == nil {
+		return nil, nil
+	}
+	return *f.previous, nil
 }
 
 type fakeOrgs struct{ org model.Organization }
@@ -232,20 +294,22 @@ func (t fakeTx) InTx(_ context.Context, fn func(Tx) error) error {
 }
 
 type fakeEnv struct {
-	engine *Engine
-	alerts *fakeAlerts
-	hosts  *fakeHosts
-	outbox *fakeOutbox
-	host   uuid.UUID
-	org    uuid.UUID
+	engine  *Engine
+	alerts  *fakeAlerts
+	pending *fakePending
+	hosts   *fakeHosts
+	outbox  *fakeOutbox
+	host    uuid.UUID
+	org     uuid.UUID
 }
 
 func newFakeEnv(t *testing.T, recipients fakeRecipients) *fakeEnv {
 	t.Helper()
-	f := &fakeEnv{alerts: &fakeAlerts{}, outbox: &fakeOutbox{}, host: uuid.New(), org: uuid.New()}
+	f := &fakeEnv{alerts: &fakeAlerts{}, pending: &fakePending{}, outbox: &fakeOutbox{}, host: uuid.New(), org: uuid.New()}
 	f.hosts = &fakeHosts{host: model.Host{ID: f.host, OrganizationID: f.org, Title: "web-1", IP: "10.0.0.5"}}
 	f.engine = newEngineWith(Stores{
 		Alerts:        f.alerts,
+		Pending:       f.pending,
 		Thresholds:    fakeThresholds{model.MetricTypeCPU: {MetricType: model.MetricTypeCPU, WarningLevel: 70, CriticalLevel: 90}},
 		Hosts:         f.hosts,
 		Metrics:       fakeMetrics{},

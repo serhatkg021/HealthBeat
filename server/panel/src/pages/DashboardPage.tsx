@@ -24,7 +24,7 @@ import { StatTile } from '../components/StatTile'
 import { StatusBadge } from '../components/StatusBadge'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import { agentKind, needsUpdate } from './agentStatus'
-import { alertLevelLabel, alertLevelTone, alertMetricLabel, hostStatusLabel } from '../labels'
+import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertSubjectText, hostStatusLabel } from '../labels'
 import { DashboardFilterPanel } from './DashboardFilterPanel'
 import {
   activeChips,
@@ -118,11 +118,8 @@ export function DashboardPage() {
     <div>
       <PageHeader
         title="Özet"
-        subtitle={
-          filterCount > 0 && counts
-            ? `Filtrelenmiş görünüm · ${counts.total} sunucu, ${counts.alerts} alert`
-            : 'Sunucuların ve açık alert’lerin anlık durumu'
-        }
+        // Açıklama yok; yalnızca süzgeç varken neyin gösterildiği yazar.
+        subtitle={filterCount > 0 && counts ? `Filtrelenmiş görünüm · ${counts.total} sunucu, ${counts.alerts} alert` : undefined}
         actions={
           <>
             {refresh}
@@ -230,7 +227,7 @@ export function DashboardPage() {
                       <Link to={`/hosts/${a.host_id}`}>{hostTitles.get(a.host_id) ?? a.host_id}</Link>
                       <span className="muted">
                         {alertMetricLabel(a.alert_type)}
-                        {a.subject && <span className="mono"> · {a.subject}</span>}
+                        {a.subject && <span className="mono"> · {alertSubjectText(a.alert_type, a.subject)}</span>}
                         {alertReading(a) && <span className="tnum"> · {alertReading(a)}</span>}
                       </span>
                     </div>

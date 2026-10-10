@@ -23,14 +23,14 @@ func NewThresholds(pool *pgxpool.Pool) *Thresholds {
 // İki tablo: threshold_defaults (genel ya da organizasyon varsayılanı; organizasyon ağacında alt dallara miras kalır) ve
 // host_custom_thresholds (tek bir sunucuya özel). Go tarafında ikisi de model.ThresholdConfig olarak görünür.
 const (
-	defaultColumns = `id, organization_id, NULL::uuid, metric_type, ''::text, warning_level, critical_level, created_at, updated_at`
-	hostColumnsThr = `id, NULL::uuid, host_id, metric_type, COALESCE(subject, ''), warning_level, critical_level, created_at, updated_at`
+	defaultColumns = `id, organization_id, NULL::uuid, metric_type, ''::text, warning_level, critical_level, duration_seconds, created_at, updated_at`
+	hostColumnsThr = `id, NULL::uuid, host_id, metric_type, COALESCE(subject, ''), warning_level, critical_level, duration_seconds, created_at, updated_at`
 )
 
 func scanThreshold(row interface{ Scan(...any) error }) (model.ThresholdConfig, error) {
 	var t model.ThresholdConfig
 	err := row.Scan(&t.ID, &t.OrganizationID, &t.HostID, &t.MetricType, &t.Subject, &t.WarningLevel,
-		&t.CriticalLevel, &t.CreatedAt, &t.UpdatedAt)
+		&t.CriticalLevel, &t.DurationSeconds, &t.CreatedAt, &t.UpdatedAt)
 	return t, err
 }
 
@@ -46,18 +46,19 @@ func orgChainCTE(param int) string {
 // CreateThresholdParams, bir varsayılan eşiktir (OrganizationID nil = genel). Sunucuya özel eşikler
 // SetHostOverrides ile yazılır.
 type CreateThresholdParams struct {
-	OrganizationID *uuid.UUID
-	MetricType     string
-	WarningLevel   float64
-	CriticalLevel  float64
+	OrganizationID  *uuid.UUID
+	MetricType      string
+	WarningLevel    float64
+	CriticalLevel   float64
+	DurationSeconds *int // nil = hemen
 }
 
 func (s *Thresholds) Create(ctx context.Context, p CreateThresholdParams) (model.ThresholdConfig, error) {
 	row := s.pool.QueryRow(ctx,
-		`INSERT INTO threshold_defaults (organization_id, metric_type, warning_level, critical_level)
-		 VALUES ($1, $2, $3, $4)
+		`INSERT INTO threshold_defaults (organization_id, metric_type, warning_level, critical_level, duration_seconds)
+		 VALUES ($1, $2, $3, $4, $5)
 		 RETURNING `+defaultColumns,
-		p.OrganizationID, p.MetricType, p.WarningLevel, p.CriticalLevel,
+		p.OrganizationID, p.MetricType, p.WarningLevel, p.CriticalLevel, p.DurationSeconds,
 	)
 	t, err := scanThreshold(row)
 	if err != nil {
@@ -108,15 +109,24 @@ func (s *Thresholds) ListForOrganizations(ctx context.Context, orgIDs []uuid.UUI
 	return collect(rows, scanThreshold)
 }
 
-func (s *Thresholds) Update(ctx context.Context, id uuid.UUID, warningLevel, criticalLevel *float64) (model.ThresholdConfig, error) {
+// ThresholdPatch, bir varsayılan eşiğin değişikliğidir: nil seviye değişmez; SetDuration true ise süre Duration olur
+// (nil = hemen), false ise değişmez.
+type ThresholdPatch struct {
+	WarningLevel, CriticalLevel *float64
+	SetDuration                 bool
+	Duration                    *int
+}
+
+func (s *Thresholds) Update(ctx context.Context, id uuid.UUID, p ThresholdPatch) (model.ThresholdConfig, error) {
 	row := s.pool.QueryRow(ctx,
 		`UPDATE threshold_defaults
 		 SET warning_level = COALESCE($2, warning_level),
 		     critical_level = COALESCE($3, critical_level),
+		     duration_seconds = CASE WHEN $4 THEN $5::int ELSE duration_seconds END,
 		     updated_at = now()
 		 WHERE id = $1
 		 RETURNING `+defaultColumns,
-		id, warningLevel, criticalLevel,
+		id, p.WarningLevel, p.CriticalLevel, p.SetDuration, p.Duration,
 	)
 	t, err := scanThreshold(row)
 	if err != nil {
@@ -159,7 +169,7 @@ func (s *Thresholds) Resolve(ctx context.Context, hostID, orgID uuid.UUID, metri
 // HostOverrides, host'ın kendi (özel) eşiklerini metrik türüne göre döndürür.
 func (s *Thresholds) HostOverrides(ctx context.Context, hostID uuid.UUID) (map[string]model.ThresholdLevels, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT metric_type, warning_level, critical_level FROM host_custom_thresholds WHERE host_id = $1 AND subject IS NULL`, hostID)
+		`SELECT metric_type, warning_level, critical_level, duration_seconds FROM host_custom_thresholds WHERE host_id = $1 AND subject IS NULL`, hostID)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +178,7 @@ func (s *Thresholds) HostOverrides(ctx context.Context, hostID uuid.UUID) (map[s
 	for rows.Next() {
 		var metricType string
 		var levels model.ThresholdLevels
-		if err := rows.Scan(&metricType, &levels.WarningLevel, &levels.CriticalLevel); err != nil {
+		if err := rows.Scan(&metricType, &levels.WarningLevel, &levels.CriticalLevel, &levels.DurationSeconds); err != nil {
 			return nil, err
 		}
 		out[metricType] = levels
@@ -182,7 +192,7 @@ func (s *Thresholds) HostOverrides(ctx context.Context, hostID uuid.UUID) (map[s
 func (s *Thresholds) DefaultsFor(ctx context.Context, orgID uuid.UUID) (map[string]model.ThresholdLevels, error) {
 	rows, err := s.pool.Query(ctx,
 		orgChainCTE(1)+`
-		 SELECT d.metric_type, d.warning_level, d.critical_level
+		 SELECT d.metric_type, d.warning_level, d.critical_level, d.duration_seconds
 		 FROM threshold_defaults d LEFT JOIN chain c ON c.id = d.organization_id
 		 WHERE d.organization_id IS NULL OR c.id IS NOT NULL
 		 ORDER BY d.metric_type, (d.organization_id IS NULL), c.depth`, orgID)
@@ -194,7 +204,7 @@ func (s *Thresholds) DefaultsFor(ctx context.Context, orgID uuid.UUID) (map[stri
 	for rows.Next() {
 		var metricType string
 		var levels model.ThresholdLevels
-		if err := rows.Scan(&metricType, &levels.WarningLevel, &levels.CriticalLevel); err != nil {
+		if err := rows.Scan(&metricType, &levels.WarningLevel, &levels.CriticalLevel, &levels.DurationSeconds); err != nil {
 			return nil, err
 		}
 		if _, seen := out[metricType]; !seen { // en özel satır önce sıralanır
@@ -206,8 +216,9 @@ func (s *Thresholds) DefaultsFor(ctx context.Context, orgID uuid.UUID) (map[stri
 
 // SetHostOverrides bir host'ın özel eşiklerini tek transaction'da uygular: nil değer o
 // metriğin özel eşiğini kaldırır (host varsayılana döner), bir çift onu oluşturur ya da
-// değiştirir; overrides içinde olmayan metriklere dokunulmaz.
-func (s *Thresholds) SetHostOverrides(ctx context.Context, hostID uuid.UUID, overrides model.ThresholdOverrides, mounts model.MountThresholds, containers model.ContainerThresholds) error {
+// değiştirir; overrides içinde olmayan metriklere dokunulmaz. subjects protokol 4 türlerinin konu (disk, sensör,
+// servis) bazlı eşikleridir; aynı kuralla uygulanır.
+func (s *Thresholds) SetHostOverrides(ctx context.Context, hostID uuid.UUID, overrides model.ThresholdOverrides, mounts model.MountThresholds, containers model.ContainerThresholds, subjects model.SubjectThresholds) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -216,7 +227,32 @@ func (s *Thresholds) SetHostOverrides(ctx context.Context, hostID uuid.UUID, ove
 	if err := applyHostOverrides(ctx, tx, hostID, overrides, mounts, containers); err != nil {
 		return err
 	}
+	if err := applySubjectThresholds(ctx, tx, hostID, subjects); err != nil {
+		return err
+	}
 	return tx.Commit(ctx)
+}
+
+// applySubjectThresholds, konu bazlı eşikleri tür ve konu sırasıyla uygular.
+func applySubjectThresholds(ctx context.Context, tx pgx.Tx, hostID uuid.UUID, subjects model.SubjectThresholds) error {
+	metricTypes := make([]string, 0, len(subjects))
+	for metricType := range subjects {
+		metricTypes = append(metricTypes, metricType)
+	}
+	sort.Strings(metricTypes)
+	for _, metricType := range metricTypes {
+		names := make([]string, 0, len(subjects[metricType]))
+		for name := range subjects[metricType] {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		for _, name := range names {
+			if err := applyOne(ctx, tx, hostID, metricType, name, subjects[metricType][name]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // applyHostOverrides host oluşturmayla paylaşılır; böylece yeni bir host ve özel
@@ -270,11 +306,12 @@ func applyOne(ctx context.Context, tx pgx.Tx, hostID uuid.UUID, metricType, subj
 		return err
 	}
 	_, err := tx.Exec(ctx,
-		`INSERT INTO host_custom_thresholds (host_id, metric_type, subject, warning_level, critical_level)
-		 VALUES ($1, $2, $3, $4, $5)
+		`INSERT INTO host_custom_thresholds (host_id, metric_type, subject, warning_level, critical_level, duration_seconds)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT ON CONSTRAINT host_custom_thresholds_key
-		 DO UPDATE SET warning_level = EXCLUDED.warning_level, critical_level = EXCLUDED.critical_level, updated_at = now()`,
-		hostID, metricType, subj, levels.WarningLevel, levels.CriticalLevel)
+		 DO UPDATE SET warning_level = EXCLUDED.warning_level, critical_level = EXCLUDED.critical_level,
+		     duration_seconds = EXCLUDED.duration_seconds, updated_at = now()`,
+		hostID, metricType, subj, levels.WarningLevel, levels.CriticalLevel, levels.DurationSeconds)
 	if err != nil {
 		switch pgErrorCode(err) {
 		case pgForeignKeyViolation:
@@ -291,7 +328,7 @@ func applyOne(ctx context.Context, tx pgx.Tx, hostID uuid.UUID, metricType, subj
 // eşiklerini subject'e göre döndürür.
 func (s *Thresholds) HostSubjectOverrides(ctx context.Context, hostID uuid.UUID, metricType string) (map[string]model.ThresholdLevels, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT subject, warning_level, critical_level FROM host_custom_thresholds
+		`SELECT subject, warning_level, critical_level, duration_seconds FROM host_custom_thresholds
 		 WHERE host_id = $1 AND metric_type = $2 AND subject IS NOT NULL`, hostID, metricType)
 	if err != nil {
 		return nil, err
@@ -301,7 +338,7 @@ func (s *Thresholds) HostSubjectOverrides(ctx context.Context, hostID uuid.UUID,
 	for rows.Next() {
 		var subject string
 		var levels model.ThresholdLevels
-		if err := rows.Scan(&subject, &levels.WarningLevel, &levels.CriticalLevel); err != nil {
+		if err := rows.Scan(&subject, &levels.WarningLevel, &levels.CriticalLevel, &levels.DurationSeconds); err != nil {
 			return nil, err
 		}
 		out[subject] = levels
@@ -359,7 +396,8 @@ func (s *Thresholds) ResolveHost(ctx context.Context, hostID, orgID uuid.UUID) (
 		 SELECT `+hostColumnsThr+` FROM host_custom_thresholds WHERE host_id = $2
 		 UNION ALL
 		 (SELECT DISTINCT ON (d.metric_type)
-		         d.id, d.organization_id, NULL::uuid, d.metric_type, ''::text, d.warning_level, d.critical_level, d.created_at, d.updated_at
+		         d.id, d.organization_id, NULL::uuid, d.metric_type, ''::text, d.warning_level, d.critical_level, d.duration_seconds,
+		         d.created_at, d.updated_at
 		  FROM threshold_defaults d LEFT JOIN chain c ON c.id = d.organization_id
 		  WHERE d.organization_id IS NULL OR c.id IS NOT NULL
 		  ORDER BY d.metric_type, (d.organization_id IS NULL), c.depth)`,

@@ -50,6 +50,7 @@ Protokol geçmişi:
 | **1** | Sürüm/protokol başlığı göndermeyen istemciler (server bunu 1 sayar; ilk sürüm 1.0.0 agent'ı protokol 3 konuşur) |
 | **2** | Donanım özeti (`cpu_cores`, `ram_total_mb`, `physical_disks`) + sürüm/protokol başlıkları |
 | **3** | Makine envanteri (`host_info`) + disk girdilerinde `inodes_used_pct` |
+| **4** | Sistem sağlığı ve performans: `cpu_detail`, `memory_detail`, `pressure` (PSI), `disk_io`, `net_io`, `tcp`, `temperatures`, `raid`, `capacity`, `processes`, `updates`, `services`, `time_sync`; disk girdilerinde `read_only`, container'larda `health`, `health_failing_streak`, `exit_code`, `oom_killed` |
 
 **Ne zaman artırılır?** Ingest'e yeni bir alan kümesi eklenince **protokol** artar (ve sürümün
 minor'ı); yalnızca hata düzeltmesi ise sürümün patch'i. Sürümü elle artır; `agent`/`server` içinde
@@ -88,17 +89,22 @@ eski sürümü göstermeye devam etmez.
 | eski server süreci hâlâ çalışıyor | `000002` uygulandı (tek aktif alert) | Çalışır: onaylanmış bir alert varken eski kod aynı olay için yeni alert açamaz ama onaylanmışları çözemez; yeni server devraldığında ilk raporda çözülür |
 | eski server süreci hâlâ çalışıyor | `000003` uygulandı (bildirim kuyruğu) | Çalışır: eski kod tabloyu bilmez, bildirimleri kendi bellek içi kuyruğuyla göndermeye devam eder |
 | eski server süreci hâlâ çalışıyor | `000004` uygulandı (çözülmüş alert indeksi) | Çalışır: yalnızca indeks eklendi |
+| eski server süreci hâlâ çalışıyor | `000007` uygulandı (protokol 4) | Çalışır: yeni sütunlar boş bırakılabilir, yeni tabloları bilmez; `alerts.alert_type` ve eşiklerin `metric_type` / `subject` CHECK'leri yalnızca **genişler** (eski türler geçerli kalır). Yeni server'ın açtığı yeni türdeki alert'leri eski kod çözmez; yeni server devralınca değerlendirilir |
+| protokol 4 agent | protokol 3 server (yayımlanmış 1.x / 2.0.0) | **Çalışır.** Server bilinmeyen alanları yok sayar ve adlarını kaydeder (panel "Server güncellenmeli" der); CPU, RAM, disk, Docker ve envanter yazılır |
 | server geri alındı (eski binary yeniden başlatıldı) | DB'de bilmediği migration var | **Açılmaz.** Önce o migration'ların `.down.sql`'i (en yeniden başlayarak) uygulanıp geçmiş satırı silinir ya da güncelleme öncesi yedek geri yüklenir (`docs/DISTRIBUTION.md` §8.3) |
 
 Ölçülmüş (bkz. §7): ilk yayımlanan agent, donanım özetinden önceki agent ve makinede kurulu gerçek
 eski binary yeni server'a metrik yazar; yeni agent, eski server'a karşı çevrimiçi kalır ve metrik
-yazar.
+yazar. Protokol 4 için: agent 1.0.0 (protokol 3) yeni server'a yazar ve protokol 4 sütunları boş kalır; protokol 4
+agent yeni server'da bilinmeyen alan bırakmaz ve protokol 4 sütunlarını doldurur; protokol 4 agent `server/v2.0.0` ve
+`server/v1.0.0`'a karşı çevrimiçi kalır ve çekirdek metrikleri yazar.
 
 ## 5. Panelde izleme
 
 - **Sunucu sayfası:** "Agent" kutusu (sürüm + durum rozeti), güncellenmesi gerekiyorsa "Agent
   güncellenmeli" uyarısı, agent server'dan yeniyse "Server güncellenmeli" uyarısı, eski agent'ta
-  donanım özeti için açıklayıcı boş durum.
+  donanım özeti, envanter ve protokol 4 verileri (servisler, Performans'taki yeni grafikler, Envanter'deki anlık
+  durumlar) için "agent güncellenince görünür" boş durumu.
 - **Sunucu listeleri:** "Agent" sütunu (Sunucular sayfası ve organizasyon sayfası).
 - **Özet:** "Agent güncellenmeli" sayacı ve "Yalnızca agent'ı güncellenmesi gereken sunucular"
   süzgeci (adreste `agentguncelle=1`).

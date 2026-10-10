@@ -68,10 +68,47 @@ func TestAlertHeadlineDiffersWhenResolved(t *testing.T) {
 }
 
 func TestAlertSubjectSuffixOmittedWhenNoSubject(t *testing.T) {
-	if got := alertSubjectSuffix(model.MetricTypeDisk, ""); got != "" {
+	if got := alertSubjectSuffix(model.MetricTypeDisk, "", false); got != "" {
 		t.Fatalf("alertSubjectSuffix(no subject) = %q, want empty", got)
 	}
-	if got := alertSubjectSuffix(model.MetricTypeDisk, "/data"); got != " (/data)" {
+	if got := alertSubjectSuffix(model.MetricTypeDisk, "/data", false); got != " (/data)" {
 		t.Fatalf("alertSubjectSuffix(/data) = %q", got)
+	}
+}
+
+// Küçük bir eşik ölçümün ondalığına yuvarlanıp kaybolmamalı; normal eşikler eskisi gibi yazılır.
+func TestFormatThresholdKeepsSmallValues(t *testing.T) {
+	cases := []struct {
+		alertType  string
+		value, thr float64
+		want       string
+	}{
+		{model.MetricTypeRAM, 34.7, 80, "%34,70 (eşik: %80,00)"},
+		{model.MetricTypeDiskLatency, 1.0123, 0.002, "1,01 ms (eşik: 0,002 ms)"},
+		{model.MetricTypeDiskLatency, 42.5, 30, "42,50 ms (eşik: 30,00 ms)"},
+		{model.AlertTypeTimeSync, 1.2035, 0.0005, "1,20 ms (eşik: 0,0005 ms)"},
+		{model.MetricTypeTemperature, 97.2, 95, "97,2 °C (eşik: 95,0 °C)"},
+		{model.MetricTypeTemperature, 40, 38.25, "40,0 °C (eşik: 38,25 °C)"},
+	}
+	for _, c := range cases {
+		if got := formatAlertReading(c.alertType, c.value, c.thr); got != c.want {
+			t.Errorf("formatAlertReading(%s, %v, %v) = %q, want %q", c.alertType, c.value, c.thr, got, c.want)
+		}
+	}
+}
+
+// Çözülen time_sync alert'inin konu satırı sorunun adını söyler, açılıştaki nedeni değil.
+func TestTimeSyncResolvedSubjectSuffix(t *testing.T) {
+	if got := alertSubjectSuffix(model.AlertTypeTimeSync, model.TimeSyncSubjectOffset, false); got != " (saat farkı eşiği aştı)" {
+		t.Fatalf("open suffix = %q", got)
+	}
+	if got := alertSubjectSuffix(model.AlertTypeTimeSync, model.TimeSyncSubjectOffset, true); got != " (saat farkı)" {
+		t.Fatalf("resolved suffix = %q", got)
+	}
+	if got := alertSubjectSuffix(model.AlertTypeTimeSync, "yeni", true); got != " (yeni)" {
+		t.Fatalf("unknown subject = %q", got)
+	}
+	if got := alertSubjectSuffix(model.MetricTypeDisk, "/data", true); got != " (/data)" {
+		t.Fatalf("disk resolved = %q", got)
 	}
 }

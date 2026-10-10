@@ -71,8 +71,13 @@ Tam şema, ilişkiler ve kısıtlar: **`docs/VERITABANI.md`** (tek kaynak). Öne
 - **Organizasyonlar bir ağaçtır** (üst şirket → alt şirketler). Sunucu bir organizasyona bağlıdır.
 - **Sunucu üç tabloya yayılır:** `hosts` (kimlik/bağlantı), `host_status` (anlık durum), `host_inventory` (yavaş değişen
   envanter). Panelde görünen ad `hosts.title`; makinenin kendi hostname'i envanterde.
-- **Eşikler:** `threshold_defaults` (genel ya da organizasyon) + `host_custom_thresholds` (sunucuya özel; mount/container
-  başına olabilir). Çözümleme sırası bölüm 8'de.
+- **Eşikler:** `threshold_defaults` (genel ya da organizasyon) + `host_custom_thresholds` (sunucuya özel; mount, container,
+  disk, sensör ya da servis başına olabilir). Eşiği olmayan durum alert'lerinin ayarı `status_alert_rules`'tadır (aynı
+  kapsamlar). Çözümleme sırası bölüm 8'de.
+- **Protokol 4 verisi iki yere yazılır:** zaman serisi (CPU/bellek ayrıntısı, PSI, TCP, disk ve ağ G/Ç'si) metrik satırının
+  JSONB sütunlarına; geçmişi tutulmayan anlık durumlar (sıcaklık, RAID, kapasite, süreçler, güncellemeler, saat senkronu, OOM
+  sayacı) `host_status.system_state`'e; systemd servisleri `host_services`'e. Değerler ölçüldüğü gibi saklanır, yuvarlama
+  panelde yapılır.
 - **Yetkiler veritabanındadır:** `roles`, `permissions`, `role_permissions`. Kod `if role == "admin"` demez; yetki
   denetimi her zaman `permission_key` üzerindendir (`internal/rbac`). İleride özel roller eklemek yeni satırdır.
 - **Bildirim kuralları** (`notification_routes`) ve **iletişim kişileri** (`organization_contacts`) bölüm 8'de anlatılır.
@@ -179,7 +184,9 @@ GET    /api/v1/me (+ permissions) | /me/hosts | /meta        PATCH /api/v1/me (k
        /api/v1/organizations/:id/contacts       + /api/v1/contacts/:id
        /api/v1/organizations/:id/hosts
        /api/v1/hosts[/:id]                      metrics[/latest] | docker | thresholds | disk-alerts | rotate-credentials
+                                                | services | watched-services | status-rules
        /api/v1/thresholds[/:id]                 varsayılan eşikler (genel ya da organizasyon)
+       /api/v1/status-rules                     durum kuralları (genel ya da organizasyon)
        /api/v1/notification-routes[/:id]        + .../organizations/:id|hosts/:id/notification-routes | -recipients
 GET    /api/v1/alerts?status=open&level=…       POST /api/v1/alerts/:id/acknowledge · GET …/:id/notifications
        /api/v1/users[/:id]                      + organizations | hosts atamaları
@@ -219,9 +226,19 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
 
 - **Seviyeler:** `info` (yalnızca bilgi), `warning`, `critical`. Her metrik için `warning` ve `critical` eşiği tanımlanır
   (örn. disk %85 → warning, %95 → critical).
-- **Eşik çözümleme (en özel olan kazanır):** sunucunun kendi eşiği (metrik ya da mount/container başına) → sunucunun
-  organizasyonunun varsayılanı → üst şirketlerin varsayılanı (en yakın önce) → genel varsayılan. Hiçbiri yoksa o metrik alert
-  üretmez.
+- **Eşik çözümleme (en özel olan kazanır):** sunucunun kendi eşiği (metrik ya da mount/container/disk/sensör/servis başına)
+  → sunucunun organizasyonunun varsayılanı → üst şirketlerin varsayılanı (en yakın önce) → genel varsayılan. Hiçbiri yoksa o
+  metrik alert üretmez; eşik sonradan kaldırılırsa o türün açık alert'leri sonraki raporda çözülür.
+- **Sayısal alert türleri:** CPU, RAM, disk (mount başına), docker restart (container başına) ve protokol 4 ile disk
+  gecikmesi (disk başına), sıcaklık (sensör başına), servis yeniden başlatma döngüsü (izlenen servisin son 10 dakikadaki
+  yeniden başlatma sayısı) ve saat farkı. **Süre koşulu** yalnızca protokol 4 türlerinde: eşik `duration_seconds` kadar
+  kesintisiz aşılırsa alert açılır; o zamana kadar durum `alert_pending`'de bekler (server yeniden başlasa da süre korunur).
+- **Durum kuralları** (`status_alert_rules`): eşiği olmayan, bir durumu bildiren alert'ler — izlenen servis çalışmıyor,
+  container sağlıksız, container bellek yetmezliği, çekirdek OOM ile süreç öldürdü, dosya sistemi salt okunur oldu, RAID
+  bozuk / yeniden kuruluyor, saat senkron değil / saat kaynağı sorunlu, yeniden başlatma gerekli, güvenlik güncellemesi
+  bekliyor. Seviyeleri (`off`/`info`/`warning`/`critical`) ve süreleri eşiklerle aynı zincirle çözülür; bir kapsamdaki `off`
+  üst kapsamdaki kuralı orada kapatır. **Sistem varsayılanı yoktur:** yeni türler, biri açana kadar alert üretmez. Listeden
+  kalkan konunun (servis, container, dizi) alert'i çözülür.
 - **Durumlar:** `open` → `acknowledged` (onaylayan kullanıcı kaydedilir) → `resolved`. Sunucu + alert türü + subject
   (mount/container) başına en fazla bir **aktif** (açık ya da onaylanmış) alert vardır; eşik altına inince otomatik `resolved`.
 - **Onay "gördüm, sustur ama izle" demektir:** onaylanan alert çözülene kadar aktif kalır; metrik eşiğin üstünde kaldıkça aynı
@@ -270,10 +287,23 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
 
 - **Özet ekranı:** tüm sunucuların özeti — genel sağlık, açık alert sayısı, kritik durumdaki sunucular; organizasyon, durum,
   mod, alert ve agent sürümüne göre süzülür.
-- **Sunucu sayfası:** Genel, Sistem (envanter), Docker, Alert'ler, Ayarlar (bağlantı, eşikler, disk alert'leri, bildirim
-  kuralları); geçmiş CPU/RAM/disk grafikleri.
-- **Organizasyon sayfası:** sunucular, sunucu ekleme sihirbazı, iletişim kişileri, bildirim kuralları, eşikler (miras
-  gösterimiyle), ayarlar (ağaçtaki yer, adres).
+- **Sunucu sayfası** sabit altı sekmedir: **Genel** (son durum, açık sorunlar, anlık durum uyarıları), **Performans**,
+  **Servisler** (Docker container'ları ve systemd servisleri, izlenen servis seçimi), **Envanter**, **Alert'ler**, **Ayarlar**
+  (bağlantı ve geçerli alert kuralları, salt okunur).
+- **Performans** konuya göre düzenlidir (Alert kurallarıyla aynı konu menüsü): Özet, CPU, Bellek, Disk, Ağ, Sıcaklık, Sistem
+  sınırları. Bir konunun şu anki değerleri, alert kuralları, geçmiş grafikleri (tek zaman seçici, imleç ortak; ana grafikte
+  eşik çizgileri) ve son raporu (süreçler, diskler, arayüzler, sensörler, kapasite, RAID) bir aradadır. Konu kataloğu ve
+  alert türü → konu eşlemesi `server/panel/src/pages/perfTopics.ts`'tedir.
+- **Envanter** makinenin ne olduğu ve bakımıdır: Makine, İşletim sistemi ve ağ, Saat, Bakım (2×2; Saat ve Bakım'da ilgili
+  alert kuralları).
+- **Alert kuralları** sayfası eşikleri, durum kurallarını ve disk alert seçimini sistem / organizasyon / sunucu kapsamında tek
+  yerde düzenler. Üç kapsamda da kurallar konuya göre gruplanır (solda konu menüsü: CPU ve bellek, Disk, Sıcaklık, Servisler,
+  Container, Saat, Sistem bakımı, Erişilebilirlik); bir konunun eşiği, durum kuralı, seçimi ve konuya özel değerleri yan
+  yanadır. Devralınan değerin kaynağı (sistem ya da hangi organizasyon) yazılır; kapsamdaki değişiklikler tek Kaydet ile
+  birlikte kaydedilir. Konu kataloğu `server/panel/src/pages/ruleTopics.ts`'tedir: yeni bir eşik türü ya da durum kuralı
+  bir konuya eklenmezse panel testi kırılır. **Bildirim** sayfası kanalları, sistem sahiplerini ve bildirim kurallarını toplar.
+- **Organizasyon sayfası:** sunucular, sunucu ekleme sihirbazı, iletişim kişileri; ayarlar (ağaçtaki yer, adres) çarkla açılan
+  pencerede.
 - Harici görselleştirme araçları (Grafana/Prometheus) kullanılmaz; grafikler uygulama içindedir.
 - Görünürlük her yerde bölüm 4'teki kapsamı izler (aynı sorgu altyapısı).
 
@@ -283,8 +313,9 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
 
 ### Şimdi olanlar
 
-Organizasyon ağacı, CPU/RAM/disk/Docker metrikleri, push ve pull, sunucu yönetimi, hiyerarşik eşikler ve mount/container
-başına eşikler, e-posta alert'i ve bildirim kuralları, offline/disk kayıp tespiti, roller ve yetkiler, panel auth (JWT, şifre
+Organizasyon ağacı, CPU/RAM/disk/Docker metrikleri, sistem sağlığı ve performans verileri (protokol 4: PSI, disk ve ağ
+G/Ç'si, systemd servisleri, sıcaklık, RAID, saat senkronu …), push ve pull, sunucu yönetimi, hiyerarşik eşikler ve
+mount/container/disk/sensör/servis başına eşikler, süre koşulu ve durum kuralları, e-posta alert'i ve bildirim kuralları, offline/disk kayıp tespiti, roller ve yetkiler, panel auth (JWT, şifre
 sıfırlama, denetim kaydı), in-house dashboard, sürüm uyumluluğu, paket dağıtımı.
 
 ### Sonra (henüz yok)

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { ChevronDown, KeyRound, LogOut, UserRound } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { roleLabel } from '../labels'
+import { ThemeChoices } from './ThemeToggle'
 
 // Üst çubuğun sağındaki hesap düğmesi; tıklanınca hesap bilgisi, profil, şifre değiştirme ve çıkış açılır. Dışarı tıklamak ya da
 // Escape kapatır.
@@ -54,6 +55,10 @@ export function ProfileMenu() {
             </div>
             {name !== user.email && <div className="profile-popover-meta">{user.email}</div>}
             <div className="profile-popover-meta">{roleLabel(user.role)}</div>
+          </div>
+          <div className="profile-theme">
+            <span className="profile-popover-meta">Tema</span>
+            <ThemeChoices />
           </div>
           <Link to="/profile" role="menuitem" className="profile-item" onClick={() => setOpen(false)}>
             <UserRound size={15} strokeWidth={1.75} />

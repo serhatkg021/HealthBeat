@@ -7,7 +7,7 @@ import { useAuth } from '../auth/AuthContext'
 import { usePagedQuery } from '../api/usePagedQuery'
 import type { Alert, AlertLevel, AlertStatus } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
-import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel } from '../labels'
+import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel, alertSubjectText } from '../labels'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
@@ -103,7 +103,7 @@ export function AlertsPage() {
 
   return (
     <div>
-      <PageHeader title="Alert'ler" subtitle="Eşik aşımları ve çevrimdışı sunucular" />
+      <PageHeader title="Alert'ler" />
       {error && <div className="error-banner">{error}</div>}
 
       <div className="toolbar">
@@ -148,7 +148,7 @@ export function AlertsPage() {
                 </td>
                 <td data-label="Metrik">
                   {alertMetricLabel(a.alert_type)}
-                  {a.subject && <span className="muted"> · {a.subject}</span>}
+                  {a.subject && <span className="muted"> · {alertSubjectText(a.alert_type, a.subject)}</span>}
                   {alertReading(a) && <div className="muted tnum">{alertReading(a)}</div>}
                 </td>
                 <td data-label="Seviye">

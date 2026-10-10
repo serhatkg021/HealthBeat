@@ -4,7 +4,7 @@ import { EmptyState } from '../components/EmptyState'
 import { StatTile } from '../components/StatTile'
 import { StatusBadge } from '../components/StatusBadge'
 import { containerStatusLabel } from '../labels'
-import { dockerSummary, formatMB } from './docker'
+import { dockerSummary, exitNote, formatMB, healthBadge } from './docker'
 import { formatUptime } from './inventory'
 import { containerLevels, usageTone } from './usage'
 
@@ -43,6 +43,7 @@ export function HostDocker({
               <th>Ad</th>
               <th>Image</th>
               <th>Durum</th>
+              <th>Sağlık</th>
               <th>CPU</th>
               <th>RAM</th>
               <th>Çalışma süresi</th>
@@ -53,13 +54,17 @@ export function HostDocker({
             {containers.map((c) => {
               const running = c.status === 'running'
               const tone = usageTone(c.restart_count, containerLevels(thresholds?.thresholds, thresholds?.container_thresholds, c.name))
+              const health = healthBadge(c)
+              const exit = exitNote(c)
               return (
                 <tr key={c.name}>
                   <td className="primary mono">{c.name}</td>
                   <td className="muted mono cell-ellipsis" data-label="Image" title={c.image}>{c.image}</td>
                   <td data-label="Durum">
                     <StatusBadge tone={running ? 'good' : 'neutral'}>{containerStatusLabel(c.status)}</StatusBadge>
+                    {exit && <div className="form-hint">{exit}</div>}
                   </td>
+                  <td data-label="Sağlık">{health ? <StatusBadge tone={health.tone}>{health.label}</StatusBadge> : <span className="muted">—</span>}</td>
                   <td className="tnum" data-label="CPU">{c.cpu_pct.toFixed(1)}%</td>
                   <td className="tnum" data-label="RAM">{formatMB(c.ram_mb)}</td>
                   <td className="tnum" data-label="Çalışma süresi">{running ? formatUptime(c.uptime_seconds) : '—'}</td>
@@ -71,7 +76,7 @@ export function HostDocker({
             })}
             {containers.length === 0 && (
               <tr>
-                <td colSpan={7} className="empty-cell">
+                <td colSpan={8} className="empty-cell">
                   <EmptyState icon={Box}>Docker container'ı bulunamadı.</EmptyState>
                 </td>
               </tr>

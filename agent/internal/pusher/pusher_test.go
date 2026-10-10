@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -200,14 +201,21 @@ func TestPushHonoursContextAndUnreachableServer(t *testing.T) {
 }
 
 func TestConvertersPreserveEveryField(t *testing.T) {
-	disks := FromDiskUsages([]collector.DiskUsage{{Mount: "/data", UsedPct: 91.5, Total: 1000, Free: 85}})
-	if len(disks) != 1 || disks[0] != (DiskUsage{Mount: "/data", UsedPct: 91.5, Total: 1000, Free: 85}) {
-		t.Errorf("disks = %+v", disks)
+	inodes := 3.5
+	disks := FromDiskUsages([]collector.DiskUsage{{Mount: "/data", UsedPct: 91.5, Total: 1000, Free: 85, InodesUsedPct: &inodes, ReadOnly: true}})
+	wantDisk := DiskUsage{Mount: "/data", UsedPct: 91.5, Total: 1000, Free: 85, InodesUsedPct: &inodes, ReadOnly: ptr(true)}
+	if len(disks) != 1 || !reflect.DeepEqual(disks[0], wantDisk) {
+		t.Errorf("disks = %+v, want %+v", disks, wantDisk)
 	}
-	in := collector.DockerContainer{Name: "n", Image: "i", Status: "running", CPUPct: 1.5, RAMMB: 2.5, RestartCount: 3, UptimeSeconds: 4}
+	if rw := FromDiskUsages([]collector.DiskUsage{{Mount: "/"}}); rw[0].ReadOnly == nil || *rw[0].ReadOnly {
+		t.Errorf("a writable mount must be reported as read_only=false (known), got %v", rw[0].ReadOnly)
+	}
+	in := collector.DockerContainer{Name: "n", Image: "i", Status: "exited", CPUPct: 1.5, RAMMB: 2.5, RestartCount: 3, UptimeSeconds: 4,
+		Health: "unhealthy", HealthFailingStreak: ptr(2), ExitCode: ptr(137), OOMKilled: ptr(true)}
 	out := FromDockerContainers([]collector.DockerContainer{in})
-	want := DockerContainer{Name: "n", Image: "i", Status: "running", CPUPct: 1.5, RAMMB: 2.5, RestartCount: 3, UptimeSeconds: 4}
-	if len(out) != 1 || out[0] != want {
+	want := DockerContainer{Name: "n", Image: "i", Status: "exited", CPUPct: 1.5, RAMMB: 2.5, RestartCount: 3, UptimeSeconds: 4,
+		Health: "unhealthy", HealthFailingStreak: ptr(2), ExitCode: ptr(137), OOMKilled: ptr(true)}
+	if len(out) != 1 || !reflect.DeepEqual(out[0], want) {
 		t.Errorf("containers = %+v, want %+v", out, want)
 	}
 

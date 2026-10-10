@@ -12,14 +12,16 @@ export function resolveTab(raw: string | null, ids: readonly string[], fallback:
   return id !== null && ids.includes(id) ? id : fallback
 }
 
-// Ok tuşları komşu sekmeye (uçlarda başa/sona sarar), Home/End ilk/son sekmeye gider; başka tuş null.
-export function nextTab(ids: readonly string[], current: string, key: string): string | null {
+// Ok tuşları komşu sekmeye (uçlarda başa/sona sarar), Home/End ilk/son sekmeye gider; başka tuş null. Dikey menüde
+// yukarı/aşağı okları, yataydakinde sol/sağ okları geçerlidir.
+export function nextTab(ids: readonly string[], current: string, key: string, orientation: 'horizontal' | 'vertical' = 'horizontal'): string | null {
   if (ids.length === 0) return null
   const i = ids.indexOf(current)
+  const [next, prev] = orientation === 'vertical' ? ['ArrowDown', 'ArrowUp'] : ['ArrowRight', 'ArrowLeft']
   switch (key) {
-    case 'ArrowRight':
+    case next:
       return ids[(i + 1) % ids.length]
-    case 'ArrowLeft':
+    case prev:
       return ids[(i - 1 + ids.length) % ids.length]
     case 'Home':
       return ids[0]

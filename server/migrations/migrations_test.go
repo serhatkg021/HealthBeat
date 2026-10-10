@@ -659,3 +659,101 @@ func TestSystemToolsPermissionsMigrationAndRollback(t *testing.T) {
 		t.Fatalf("upgrading again: applied=%d err=%v, want 000006 re-applied", len(applied), err)
 	}
 }
+
+// 000007: protokol 4. Yeni alert ve eşik türleri CHECK'lerce kabul edilir, yeni sütunların kısıtları çalışır; .down.sql
+// yeni türdeki satırları siler, şemayı geri alır ve eski binary yeniden açılır; tekrar yükseltilebilir.
+func TestProtocol4MigrationAndRollback(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.NewEmpty(t)
+	runner := func(fsys fs.FS) *migrate.Runner {
+		t.Helper()
+		r, err := migrate.New(pool, fsys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	latest, old := runner(upTo(t, "000007")), runner(upTo(t, "000006"))
+	if _, err := latest.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	org := testdb.Org(t, pool, "o")
+	host := testdb.PushHost(t, pool, org, "h", "hash")
+	for _, ok := range []string{
+		`INSERT INTO alerts (host_id, alert_type, subject, level) VALUES ($1, 'service_failed', 'nginx.service', 'critical')`,
+		`INSERT INTO alerts (host_id, alert_type, level) VALUES ($1, 'security_updates', 'info')`,
+		`INSERT INTO host_custom_thresholds (host_id, metric_type, subject, warning_level, critical_level, duration_seconds) VALUES ($1, 'disk_latency', 'nvme0n1', 30, 50, 600)`,
+		`INSERT INTO host_custom_thresholds (host_id, metric_type, warning_level, critical_level) VALUES ($1, 'time_offset', 100, 1000)`,
+		`INSERT INTO host_services (host_id, name, active, restarts) VALUES ($1, 'nginx.service', 'failed', 3)`,
+		`INSERT INTO host_watched_services (host_id, name) VALUES ($1, 'nginx.service')`,
+		`INSERT INTO alert_pending (host_id, alert_type, subject, level) VALUES ($1, 'disk_latency', 'nvme0n1', 'warning')`,
+		`INSERT INTO docker_containers (host_id, name, image, status, cpu_pct, ram_mb, health, health_failing_streak, exit_code, oom_killed)
+		 VALUES ($1, 'api', 'i', 'running', 0, 0, 'unhealthy', 2, 137, true)`,
+		`UPDATE host_status SET system_state = '{"oom_kills": 1}' WHERE host_id = $1`,
+		`UPDATE host_services SET restart_history = '[[1, 3]]' WHERE host_id = $1`,
+		`INSERT INTO status_alert_rules (host_id, rule, level, duration_seconds) VALUES ($1, 'service_failed', 'critical', 60)`,
+		`INSERT INTO status_alert_rules (rule, level) SELECT 'reboot_required', 'off' WHERE $1::uuid IS NOT NULL`,
+	} {
+		if _, err := pool.Exec(ctx, ok, host); err != nil {
+			t.Fatalf("rejected: %s: %v", ok, err)
+		}
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO threshold_defaults (metric_type, warning_level, critical_level) VALUES ('temperature', 80, 90)`); err != nil {
+		t.Fatalf("a temperature default was rejected: %v", err)
+	}
+	for _, bad := range []string{
+		`INSERT INTO alerts (host_id, alert_type, level) VALUES ($1, 'gpu', 'info')`,
+		`INSERT INTO host_custom_thresholds (host_id, metric_type, subject, warning_level, critical_level) VALUES ($1, 'cpu', 'x', 1, 2)`,
+		`INSERT INTO host_custom_thresholds (host_id, metric_type, subject, warning_level, critical_level) VALUES ($1, 'time_offset', 'x', 1, 2)`,
+		`INSERT INTO host_custom_thresholds (host_id, metric_type, warning_level, critical_level, duration_seconds) VALUES ($1, 'ram', 1, 2, 0)`,
+		`INSERT INTO docker_containers (host_id, name, image, status, cpu_pct, ram_mb, health) VALUES ($1, 'x', 'i', 'running', 0, 0, 'sick')`,
+		`INSERT INTO alert_pending (host_id, alert_type, subject, level) VALUES ($1, 'disk_latency', 'nvme0n1', 'critical')`, // aynı anahtar
+		`INSERT INTO host_services (host_id, name, active, restarts) VALUES ($1, 'x.service', 'active', -1)`,
+		`INSERT INTO status_alert_rules (host_id, rule, level) VALUES ($1, 'gpu_hot', 'info')`,
+		`INSERT INTO status_alert_rules (host_id, rule, level) VALUES ($1, 'oom_kill', 'loud')`,
+		`INSERT INTO status_alert_rules (host_id, rule, level, duration_seconds) VALUES ($1, 'fs_readonly', 'critical', 60)`,
+		`INSERT INTO status_alert_rules (host_id, rule, level, duration_seconds) VALUES ($1, 'oom_kill', 'warning', 0)`,
+		`INSERT INTO status_alert_rules (host_id, rule, level) VALUES ($1, 'service_failed', 'warning')`,           // aynı kapsam + kural
+		`INSERT INTO status_alert_rules (rule, level) SELECT 'reboot_required', 'info' WHERE $1::uuid IS NOT NULL`, // genel, ikinci kez
+		`INSERT INTO status_alert_rules (organization_id, host_id, rule, level) SELECT o.id, $1, 'oom_kill', 'info' FROM organizations o LIMIT 1`,
+	} {
+		if _, err := pool.Exec(ctx, bad, host); err == nil {
+			t.Errorf("accepted: %s", bad)
+		}
+	}
+	if err := old.RequireUpToDate(ctx); !errors.Is(err, migrate.ErrDatabaseNewer) {
+		t.Fatalf("old binary on the new schema: err=%v, want ErrDatabaseNewer", err)
+	}
+
+	down, err := fs.ReadFile(migrations.FS, "000007_protocol4_health_performance.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM healthbeat_migrations WHERE version = 7`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.RequireUpToDate(ctx); err != nil {
+		t.Fatalf("old binary after the down migration: %v, want it to start", err)
+	}
+	var alerts, thresholds, tables, columns int
+	if err := pool.QueryRow(ctx, `SELECT (SELECT count(*) FROM alerts), (SELECT count(*) FROM host_custom_thresholds) + (SELECT count(*) FROM threshold_defaults),
+		(SELECT count(*) FROM pg_tables WHERE schemaname = current_schema() AND tablename IN ('host_services', 'host_watched_services', 'alert_pending', 'status_alert_rules')),
+		(SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema()
+		    AND column_name IN ('system_json', 'disk_io_json', 'net_io_json', 'system_state', 'health', 'health_failing_streak', 'exit_code', 'oom_killed', 'duration_seconds'))`).
+		Scan(&alerts, &thresholds, &tables, &columns); err != nil {
+		t.Fatal(err)
+	}
+	if alerts != 0 || thresholds != 0 || tables != 0 || columns != 0 {
+		t.Fatalf("after the down migration: alerts=%d thresholds=%d tables=%d columns=%d, want all 0", alerts, thresholds, tables, columns)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO alerts (host_id, alert_type, level) VALUES ($1, 'oom_kill', 'warning')`, host); err == nil {
+		t.Fatal("the alert_type CHECK is not back after the down migration")
+	}
+	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 {
+		t.Fatalf("upgrading again: applied=%d err=%v, want 000007 re-applied", len(applied), err)
+	}
+}

@@ -226,6 +226,8 @@ func TestDockerCollectorSample(t *testing.T) {
 				{"Id": "ccc", "Names": []string{"/vanished"}, "Image": "alpine"},
 				{"Id": "ddd", "Names": []string{}, "Image": "scratch"},
 			})
+		case r.URL.Path == "/version":
+			w.Write([]byte(`{"Version":"27.3.1","ApiVersion":"1.47"}`))
 		case r.URL.Path == "/containers/aaa/json":
 			w.Write([]byte(`{"RestartCount":3,"State":{"Status":"running","StartedAt":"` + started + `"}}`))
 		case r.URL.Path == "/containers/bbb/json":
@@ -304,6 +306,10 @@ func TestDockerCollectorSamplesContainersConcurrentlyAndBounded(t *testing.T) {
 	var mu sync.Mutex
 	inFlight, maxInFlight := 0, 0
 	c := fakeDocker(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/version" {
+			w.Write([]byte(`{"Version":"27.3.1","ApiVersion":"1.47"}`))
+			return
+		}
 		if r.URL.Path == "/containers/json" {
 			list := make([]map[string]any, n)
 			for i := range list {
@@ -401,5 +407,26 @@ func TestSampleDiskReportsInodeUsage(t *testing.T) {
 	}
 	if got["/btrfs"] != nil {
 		t.Errorf("/btrfs (no inode count) = %v, want nil", *got["/btrfs"])
+	}
+}
+
+func TestSampleDiskReportsReadOnlyMounts(t *testing.T) {
+	orig := statfsFn
+	t.Cleanup(func() { statfsFn = orig })
+	statfsFn = func(path string, st *syscall.Statfs_t) error {
+		st.Blocks, st.Bavail, st.Bsize = 1000, 500, 4096
+		if path == "/broken" {
+			st.Flags = stRdonly | 0x400 // ST_RDONLY + ST_NOATIME: diğer bayraklar yanıltmamalı
+		} else {
+			st.Flags = 0x400
+		}
+		return nil
+	}
+	got := map[string]bool{}
+	for _, d := range SampleDisk([]string{"/broken", "/data"}) {
+		got[d.Mount] = d.ReadOnly
+	}
+	if !got["/broken"] || got["/data"] {
+		t.Fatalf("read-only = %v; want /broken true, /data false", got)
 	}
 }

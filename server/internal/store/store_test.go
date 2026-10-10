@@ -1233,9 +1233,9 @@ func TestLatestDisksIsTheNewestReport(t *testing.T) {
 	if disks, err := m.LatestDisks(ctx, id); err != nil || disks == nil || len(disks) != 0 {
 		t.Fatalf("no reports yet: %#v %v, want an empty (non-nil) list", disks, err)
 	}
-	m.Insert(ctx, id, 1, 1, []model.DiskUsage{{Mount: "/", UsedPct: 10, Total: 100, Free: 90}})
+	m.Insert(ctx, id, 1, 1, []model.DiskUsage{{Mount: "/", UsedPct: 10, Total: 100, Free: 90}}, model.MetricSeries{})
 	time.Sleep(15 * time.Millisecond)
-	m.Insert(ctx, id, 1, 1, []model.DiskUsage{{Mount: "/", UsedPct: 20, Total: 100, Free: 80}, {Mount: "/data", UsedPct: 60, Total: 500, Free: 200}})
+	m.Insert(ctx, id, 1, 1, []model.DiskUsage{{Mount: "/", UsedPct: 20, Total: 100, Free: 80}, {Mount: "/data", UsedPct: 60, Total: 500, Free: 200}}, model.MetricSeries{})
 
 	disks, err := m.LatestDisks(ctx, id)
 	if err != nil || len(disks) != 2 || disks[0].UsedPct != 20 || disks[1].Mount != "/data" || disks[1].Total != 500 {
@@ -1317,7 +1317,7 @@ func TestSetHostOverridesAppliesAllOrNothing(t *testing.T) {
 	// alınmalı; ram'in silinmesi (aralarında sıralanır) de geri alınmalı.
 	err := th.SetHostOverrides(ctx, host, model.ThresholdOverrides{
 		"cpu": {WarningLevel: 10, CriticalLevel: 20}, "ram": nil, "zzz": {WarningLevel: 1, CriticalLevel: 2},
-	}, nil, nil)
+	}, nil, nil, nil)
 	if err == nil {
 		t.Fatal("a rejected threshold was accepted")
 	}
@@ -1326,7 +1326,7 @@ func TestSetHostOverridesAppliesAllOrNothing(t *testing.T) {
 		t.Fatalf("after the failed call: %v (err %v), want the untouched original ram 1/2", got, err)
 	}
 
-	if err := th.SetHostOverrides(ctx, uuid.New(), model.ThresholdOverrides{"cpu": {WarningLevel: 1, CriticalLevel: 2}}, nil, nil); !errors.Is(err, store.ErrNotFound) {
+	if err := th.SetHostOverrides(ctx, uuid.New(), model.ThresholdOverrides{"cpu": {WarningLevel: 1, CriticalLevel: 2}}, nil, nil, nil); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("unknown host: err=%v, want ErrNotFound", err)
 	}
 }
@@ -1380,7 +1380,7 @@ func TestSetHostOverridesWritesMountThresholdsAllOrNothing(t *testing.T) {
 	testdb.MountThreshold(t, pool, c, "/drop", 3, 4)
 
 	err := th.SetHostOverrides(ctx, c, model.ThresholdOverrides{"disk": {WarningLevel: 70, CriticalLevel: 80}},
-		model.MountThresholds{"/new": {WarningLevel: 5, CriticalLevel: 6}, "/drop": nil, "/keep": {WarningLevel: 9, CriticalLevel: 10}}, nil)
+		model.MountThresholds{"/new": {WarningLevel: 5, CriticalLevel: 6}, "/drop": nil, "/keep": {WarningLevel: 9, CriticalLevel: 10}}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1394,7 +1394,7 @@ func TestSetHostOverridesWritesMountThresholdsAllOrNothing(t *testing.T) {
 
 	// Reddedilen bir yazma (bilinmeyen metrik mount'lardan önce sıralanır) her mount'u olduğu gibi bırakır.
 	err = th.SetHostOverrides(ctx, c, model.ThresholdOverrides{"zzz": {WarningLevel: 1, CriticalLevel: 2}},
-		model.MountThresholds{"/keep": nil, "/new": {WarningLevel: 50, CriticalLevel: 60}}, nil)
+		model.MountThresholds{"/keep": nil, "/new": {WarningLevel: 50, CriticalLevel: 60}}, nil, nil)
 	if err == nil {
 		t.Fatal("rejected threshold accepted")
 	}
@@ -1419,11 +1419,11 @@ func TestRecentReportedMountsSkipsEmptyReportsAndOrdersNewestFirst(t *testing.T)
 		return out
 	}
 	for _, d := range [][]model.DiskUsage{disks("/", "/a"), nil, disks("/"), {}, disks("/", "/b"), disks("/c")} {
-		if err := m.Insert(ctx, c, 1, 1, d); err != nil {
+		if err := m.Insert(ctx, c, 1, 1, d, model.MetricSeries{}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := m.Insert(ctx, other, 1, 1, disks("/other")); err != nil {
+	if err := m.Insert(ctx, other, 1, 1, disks("/other"), model.MetricSeries{}); err != nil {
 		t.Fatal(err)
 	}
 

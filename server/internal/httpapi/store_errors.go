@@ -31,6 +31,7 @@ var storeReasons = []struct {
 	{store.ErrThresholdExists, http.StatusConflict, "bu kapsam ve metrik için zaten bir eşik var"},
 	{store.ErrThresholdLevelsInvalid, http.StatusConflict, "warning_level, critical_level'dan büyük olamaz"},
 	{store.ErrHostThresholdInvalid, http.StatusBadRequest, "geçersiz sunucu eşiği"},
+	{store.ErrStatusRuleInvalid, http.StatusBadRequest, "geçersiz durum kuralı"},
 
 	{store.ErrRouteExists, http.StatusConflict, "bu alıcı ve kanal için bu kapsamda zaten bir kural var"},
 	{store.ErrRouteTargetMissing, http.StatusNotFound, "organizasyon, sunucu, kullanıcı ya da iletişim kişisi bulunamadı"},

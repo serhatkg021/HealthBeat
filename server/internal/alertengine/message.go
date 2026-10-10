@@ -32,7 +32,7 @@ func buildMessage(alert model.Alert, mc messageContext, panelBaseURL string) not
 	if resolved {
 		levelWord = "ÇÖZÜLDÜ"
 	}
-	headline := alertHeadline(alert.AlertType, resolved) + alertSubjectSuffix(alert.AlertType, alert.Subject)
+	headline := alertHeadline(alert.AlertType, resolved) + alertSubjectSuffix(alert.AlertType, alert.Subject, resolved)
 	subject := fmt.Sprintf("[HealthBeat] -- %s / %s / %s - %s.", levelWord, mc.OrgName, hostLabel, headline)
 
 	var body strings.Builder
@@ -46,11 +46,8 @@ func buildMessage(alert model.Alert, mc messageContext, panelBaseURL string) not
 	fmt.Fprintf(&body, "Seviye: %s\n", levelWord)
 	fmt.Fprintf(&body, "Tür: %s\n", alertMetricLabel(alert.AlertType))
 	if alert.Subject != "" {
-		label := "Container"
-		if alert.AlertType == model.MetricTypeDisk || alert.AlertType == model.AlertTypeDiskMissing {
-			label = "Mount"
-		}
-		fmt.Fprintf(&body, "%s: %s\n", label, alert.Subject)
+		label, subject := alertSubjectLabel(alert.AlertType, alert.Subject)
+		fmt.Fprintf(&body, "%s: %s\n", label, subject)
 	}
 	if alert.AlertType == model.AlertTypeDiskMissing {
 		fmt.Fprintf(&body, "Ayrıntı: %s mount'u son %d raporda görünmedi (unmount edilmiş, hata vermiş ya da yanıt vermiyor).\n", alert.Subject, missingMountReports)
@@ -70,13 +67,35 @@ func buildMessage(alert model.Alert, mc messageContext, panelBaseURL string) not
 	return notify.Message{Subject: subject, Body: body.String()}
 }
 
-// formatAlertReading bir alert'in ölçümünü ve eşiğini birimiyle (yüzde ya da restart sayısı) tek
+// formatAlertReading bir alert'in ölçümünü ve eşiğini birimiyle (yüzde, sayı, ms ya da °C) tek
 // satırda, panelle aynı biçimde (virgül ondalık ayracı) yazar.
 func formatAlertReading(alertType string, value, threshold float64) string {
-	if alertType == model.MetricTypeDockerRestart {
+	switch alertType {
+	case model.MetricTypeDockerRestart:
 		return fmt.Sprintf("%s restart (eşik: %s restart)", formatCount(value), formatCount(threshold))
+	case model.AlertTypeServiceRestartLoop:
+		return fmt.Sprintf("10 dakikada %s yeniden başlatma (eşik: %s)", formatCount(value), formatCount(threshold))
+	case model.MetricTypeDiskLatency, model.AlertTypeTimeSync: // time_sync'te değer yalnızca saat farkındadır
+		return fmt.Sprintf("%s ms (eşik: %s ms)", formatPercent(value), formatThreshold(threshold, 2))
+	case model.MetricTypeTemperature:
+		return fmt.Sprintf("%s °C (eşik: %s °C)", formatOneDecimal(value), formatThreshold(threshold, 1))
 	}
-	return fmt.Sprintf("%%%s (eşik: %%%s)", formatPercent(value), formatPercent(threshold))
+	return fmt.Sprintf("%%%s (eşik: %%%s)", formatPercent(value), formatThreshold(threshold, 2))
+}
+
+// formatThreshold, eşiği ölçümle aynı ondalıkla yazar; bu ondalık eşiği değiştiriyorsa (0,002 ms gibi küçük bir eşik
+// "0,00" olurdu) eşik kendi tam hâliyle yazılır. Eşik kullanıcının girdiği değerdir, yuvarlanıp kaybolmamalı.
+func formatThreshold(v float64, digits int) string {
+	s := strconv.FormatFloat(v, 'f', digits, 64)
+	if r, err := strconv.ParseFloat(s, 64); err == nil && r != v {
+		s = strconv.FormatFloat(v, 'f', -1, 64)
+	}
+	return strings.Replace(s, ".", ",", 1)
+}
+
+// formatOneDecimal, sıcaklık gibi değerleri tek ondalıkla ve virgül ayracıyla yazar (64.25 -> "64,3").
+func formatOneDecimal(v float64) string {
+	return strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", ",", 1)
 }
 
 // formatPercent, yüzde değerlerini iki ondalıkla ve virgül ayracıyla yazar (34.703... -> "34,70").
@@ -126,12 +145,56 @@ func formatResolutionDuration(d time.Duration) string {
 }
 
 // alertSubjectSuffix, konu satırına alert'in subject'ini (mount yolu/container adı) ekler — 150
-// sunucu arasında yalnızca "disk uyarısı" değil, hangi mount olduğunu da göstermek için.
-func alertSubjectSuffix(alertType, subject string) string {
+// sunucu arasında yalnızca "disk uyarısı" değil, hangi mount olduğunu da göstermek için. time_sync'te konu sorunun
+// türüdür: açılışta nedeni ("saat farkı eşiği aştı"), çözülmede yalnızca sorunun adı ("saat farkı") yazılır; yoksa
+// "normale döndü (saat farkı eşiği aştı)" gibi çelişkili bir konu satırı çıkar.
+func alertSubjectSuffix(alertType, subject string, resolved bool) string {
 	if subject == "" {
 		return ""
 	}
-	return " (" + subject + ")"
+	if resolved && alertType == model.AlertTypeTimeSync {
+		if topic, ok := timeSyncTopics[subject]; ok {
+			return " (" + topic + ")"
+		}
+	}
+	_, shown := alertSubjectLabel(alertType, subject)
+	return " (" + shown + ")"
+}
+
+// timeSyncTopics, time_sync konularının (sorun türü) kısa adıdır; çözülme bildiriminde kullanılır.
+var timeSyncTopics = map[string]string{
+	model.TimeSyncSubjectUnsynced: "saat senkronu",
+	model.TimeSyncSubjectSource:   "saat kaynağı",
+	model.TimeSyncSubjectOffset:   "saat farkı",
+}
+
+// timeSyncReasons, time_sync alert'inin konularının (sorun türü) okunur adıdır.
+var timeSyncReasons = map[string]string{
+	model.TimeSyncSubjectUnsynced: "saat senkron değil",
+	model.TimeSyncSubjectSource:   "saat kaynağı sorunlu",
+	model.TimeSyncSubjectOffset:   "saat farkı eşiği aştı",
+}
+
+// alertSubjectLabel, gövdedeki konu satırının etiketi ve gösterilecek değeridir (time_sync'te konu bir sorun türüdür).
+func alertSubjectLabel(alertType, subject string) (label, shown string) {
+	switch alertType {
+	case model.MetricTypeDisk, model.AlertTypeDiskMissing, model.AlertTypeFSReadOnly:
+		return "Mount", subject
+	case model.MetricTypeDiskLatency:
+		return "Disk", subject
+	case model.MetricTypeTemperature:
+		return "Sensör", subject
+	case model.AlertTypeServiceFailed, model.AlertTypeServiceRestartLoop:
+		return "Servis", subject
+	case model.AlertTypeRAIDDegraded:
+		return "RAID", subject
+	case model.AlertTypeTimeSync:
+		if reason, ok := timeSyncReasons[subject]; ok {
+			return "Sorun", reason
+		}
+		return "Sorun", subject
+	}
+	return "Container", subject
 }
 
 // alertHeadline, konu satırındaki insan-okur açıklamadır; açık/yükselmiş ve çözülmüş hâller için ayrıdır.
@@ -161,6 +224,30 @@ func alertHeadlinePair(alertType string) (open, done string, ok bool) {
 		return "sunucu çevrimdışı", "sunucu tekrar çevrimiçi", true
 	case model.AlertTypeDiskMissing:
 		return "disk kayboldu", "disk tekrar görünür oldu", true
+	case model.MetricTypeDiskLatency:
+		return "disk gecikmesi uyarısı", "disk gecikmesi normale döndü", true
+	case model.MetricTypeTemperature:
+		return "sıcaklık uyarısı", "sıcaklık normale döndü", true
+	case model.AlertTypeServiceFailed:
+		return "servis çalışmıyor", "servis yeniden çalışıyor", true
+	case model.AlertTypeServiceRestartLoop:
+		return "servis sürekli yeniden başlıyor", "servisin yeniden başlatmaları durdu", true
+	case model.AlertTypeContainerUnhealthy:
+		return "container sağlıksız", "container yeniden sağlıklı", true
+	case model.AlertTypeContainerOOM:
+		return "container bellek yetmediği için öldürüldü", "container yeniden çalışıyor", true
+	case model.AlertTypeOOMKill:
+		return "bellek yetmediği için süreç öldürüldü", "yeni bellek yetmezliği olayı yok", true
+	case model.AlertTypeFSReadOnly:
+		return "dosya sistemi salt okunur oldu", "dosya sistemi yeniden yazılabilir", true
+	case model.AlertTypeRAIDDegraded:
+		return "RAID dizisi sorunlu", "RAID dizisi normale döndü", true
+	case model.AlertTypeTimeSync:
+		return "saat senkronu sorunu", "saat senkronu normale döndü", true
+	case model.AlertTypeRebootRequired:
+		return "yeniden başlatma gerekli", "yeniden başlatma artık gerekmiyor", true
+	case model.AlertTypeSecurityUpdates:
+		return "bekleyen güvenlik güncellemesi", "güvenlik güncellemeleri uygulandı", true
 	default:
 		return "", "", false
 	}
@@ -195,6 +282,30 @@ func alertMetricLabel(metricType string) string {
 		return "sunucu çevrimdışı"
 	case model.AlertTypeDiskMissing:
 		return "disk kayboldu"
+	case model.MetricTypeDiskLatency:
+		return "disk gecikmesi"
+	case model.MetricTypeTemperature:
+		return "sıcaklık"
+	case model.AlertTypeServiceFailed:
+		return "servis durumu"
+	case model.AlertTypeServiceRestartLoop:
+		return "servis yeniden başlatma"
+	case model.AlertTypeContainerUnhealthy:
+		return "container sağlığı"
+	case model.AlertTypeContainerOOM:
+		return "container bellek yetmezliği"
+	case model.AlertTypeOOMKill:
+		return "bellek yetmezliği (OOM)"
+	case model.AlertTypeFSReadOnly:
+		return "salt okunur dosya sistemi"
+	case model.AlertTypeRAIDDegraded:
+		return "RAID"
+	case model.AlertTypeTimeSync:
+		return "saat senkronu"
+	case model.AlertTypeRebootRequired:
+		return "yeniden başlatma"
+	case model.AlertTypeSecurityUpdates:
+		return "güvenlik güncellemeleri"
 	default:
 		return metricType
 	}

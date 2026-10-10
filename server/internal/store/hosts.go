@@ -433,8 +433,9 @@ func (s *Hosts) ListPullHosts(ctx context.Context) ([]PullHostInfo, error) {
 //
 // agent, istek başlıklarından gelen sürüm bilgisidir ve donanımın aksine her seferinde yazılır
 // ("son bilinen" değil, "son isteğin bildirdiği"): sürüm bildirmeyen bir agent'a geri dönülürse
-// panel eski sürümü göstermeye devam etmemeli.
-func (s *Hosts) MarkOnline(ctx context.Context, id uuid.UUID, hw model.Hardware, agent model.AgentInfo) error {
+// panel eski sürümü göstermeye devam etmemeli. state (protokol 4'ün anlık durumları, bkz. model.NextSystemState) de
+// her seferinde yazılır; nil = raporda hiçbiri yok.
+func (s *Hosts) MarkOnline(ctx context.Context, id uuid.UUID, hw model.Hardware, agent model.AgentInfo, state *model.SystemState) error {
 	var disksJSON *string // nil -> NULL -> COALESCE eski değeri korur
 	if len(hw.PhysicalDisks) > 0 {
 		b, err := json.Marshal(hw.PhysicalDisks)
@@ -457,6 +458,10 @@ func (s *Hosts) MarkOnline(ctx context.Context, id uuid.UUID, hw model.Hardware,
 		str := string(b)
 		unsupportedJSON = &str
 	}
+	stateJSON, err := jsonOrNull(state, state == nil)
+	if err != nil {
+		return err
+	}
 
 	if _, err := s.pool.Exec(ctx,
 		`UPDATE host_status SET status = 'online', last_seen = now(),
@@ -464,9 +469,10 @@ func (s *Hosts) MarkOnline(ctx context.Context, id uuid.UUID, hw model.Hardware,
 		        agent_protocol = $3,
 		        unsupported_fields = $4::jsonb,
 		        runtime = CASE WHEN $6::boolean THEN $5::jsonb ELSE runtime END,
+		        system_state = $7::jsonb,
 		        updated_at = now()
 		 WHERE host_id = $1`,
-		id, agent.Version, agent.Protocol, unsupportedJSON, runtimeJSON, infoJSON != nil,
+		id, agent.Version, agent.Protocol, unsupportedJSON, runtimeJSON, infoJSON != nil, stateJSON,
 	); err != nil {
 		return err
 	}
@@ -501,6 +507,26 @@ func (s *Hosts) MarkOnline(ctx context.Context, id uuid.UUID, hw model.Hardware,
 		id, hostname, machineID, hw.CPUCores, hw.RAMTotalMB, disksJSON, infoJSON, infoJSON != nil,
 	)
 	return err
+}
+
+// SystemState, host'ın saklanan anlık durumunu (protokol 4) döndürür; yoksa nil. Ingest, yeni durumu bundan kurar
+// (OOM sayacının farkı gibi).
+func (s *Hosts) SystemState(ctx context.Context, id uuid.UUID) (*model.SystemState, error) {
+	var raw []byte
+	if err := s.pool.QueryRow(ctx, `SELECT system_state FROM host_status WHERE host_id = $1`, id).Scan(&raw); err != nil {
+		if isNoRows(err) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var st model.SystemState
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return nil, err
+	}
+	return &st, nil
 }
 
 // ListStale, graceMultiplier * kendi interval_seconds süresinden uzun süre sessiz kalmış

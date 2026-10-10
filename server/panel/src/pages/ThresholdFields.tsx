@@ -1,6 +1,31 @@
 import type { ReactNode } from 'react'
-import { SubjectThresholdFields } from './SubjectThresholdFields'
-import { formatLevels, METRICS, serverLevels, validateDraft, withMode, type Defaults, type Drafts, type Draft, type Mode, type MountDrafts } from './thresholds'
+import type { SubjectMetricType } from '../types/api'
+import { DurationField } from './DurationField'
+import { SubjectThresholdFields, type SubjectNote } from './SubjectThresholdFields'
+import {
+  DURATION_HINT,
+  formatLevels,
+  METRICS,
+  serverLevels,
+  validateDraft,
+  withMode,
+  type Defaults,
+  type Drafts,
+  type Draft,
+  type Mode,
+  type MountDrafts,
+  type SubjectDrafts,
+} from './thresholds'
+
+// Protokol 4 konu eşikleri (disk, sensör, servis başına); yalnızca sunucu kapsamında.
+export interface SubjectsProp {
+  drafts: SubjectDrafts
+  onChange: (next: SubjectDrafts) => void
+  suggestions: Record<SubjectMetricType, string[]>
+  notes?: Partial<Record<SubjectMetricType, Record<string, SubjectNote>>>
+}
+
+const isSubjectMetric = (t: string): t is SubjectMetricType => t === 'disk_latency' || t === 'temperature' || t === 'service_restart'
 
 // Metrik başına bir blok: "Varsayılan" (Alert kurallarında tanımlı değeri izle) ya da "Özel
 // değer" (bu sunucunun kendi uyarı/kritik değeri). Sunucu ekleme sihirbazı ve Alert kuralları (sunucu kapsamı) paylaşır.
@@ -11,6 +36,7 @@ export function ThresholdFields({
   onChange,
   mounts,
   containers,
+  subjects,
   disabled = false,
 }: {
   idPrefix: string
@@ -21,6 +47,7 @@ export function ThresholdFields({
   mounts?: { drafts: MountDrafts; onChange: (next: MountDrafts) => void; suggestions: string[] }
   // Container başına docker_restart eşikleri, Docker restart bloğunun içinde gösterilir.
   containers?: { drafts: MountDrafts; onChange: (next: MountDrafts) => void; suggestions: string[] }
+  subjects?: SubjectsProp
   disabled?: boolean
 }) {
   return (
@@ -71,7 +98,14 @@ export function ThresholdFields({
                       onChange={(e) => setField({ critical: e.target.value })}
                     />
                   </label>
+                  {m.duration && (
+                    <label>
+                      Süre
+                      <DurationField label={`${m.label} süresi`} value={draft.duration} disabled={disabled} onChange={(duration) => setField({ duration })} />
+                    </label>
+                  )}
                 </div>
+                {m.duration && <p className="form-hint threshold-hint">{DURATION_HINT}</p>}
                 {error && <div className="field-error">{error}</div>}
               </>
             )}
@@ -82,6 +116,17 @@ export function ThresholdFields({
                 onChange={mounts.onChange}
                 suggestions={mounts.suggestions}
                 baseLevels={serverLevels('disk', draft, defaults)}
+                disabled={disabled}
+              />
+            )}
+            {isSubjectMetric(m.type) && subjects && (
+              <SubjectThresholdFields
+                kind={m.type}
+                drafts={subjects.drafts[m.type]}
+                onChange={(next) => subjects.onChange({ ...subjects.drafts, [m.type]: next })}
+                suggestions={subjects.suggestions[m.type]}
+                notes={subjects.notes?.[m.type]}
+                baseLevels={serverLevels(m.type, draft, defaults)}
                 disabled={disabled}
               />
             )}

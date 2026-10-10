@@ -20,7 +20,10 @@ var Version = "1.0.0"
 //	1  sürüm bildirmeyen eski agent'lar (başlık hiç gönderilmez; server bunu 1 sayar)
 //	2  donanım özeti (cpu_cores, ram_total_mb, physical_disks) + sürüm/protokol başlıkları
 //	3  makine envanteri (host_info) + disk girdilerinde inodes_used_pct
-const Protocol = 3
+//	4  sistem sağlığı ve performans: cpu_detail, memory_detail, pressure, disk_io, net_io, tcp, temperatures, raid,
+//	   capacity, processes, updates, services, time_sync; disk girdilerinde read_only; container girdilerinde health,
+//	   health_failing_streak, exit_code, oom_killed
+const Protocol = 4
 
 // Başlık adları server ile paylaşılan sözleşmenin parçasıdır.
 const (

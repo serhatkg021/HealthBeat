@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { Modal } from '../components/Modal'
 import { SearchSelect } from '../components/SearchSelect'
 import type { SelectOption } from '../components/searchSelect'
+import { FieldLabel } from '../components/FieldLabel'
 import type { Organization } from '../types/api'
 import { buildTree, parentChoices } from './orgTree'
 
@@ -121,9 +122,8 @@ function SettingsForm({
             <textarea id="os-address" rows={2} value={address} onChange={(e) => setAddress(e.target.value)} maxLength={1000} />
           </div>
           <div className="form-row">
-            <label htmlFor="os-parent">Üst şirket</label>
+            <FieldLabel htmlFor="os-parent" label="Üst şirket" hint="Kendisi ve altındaki organizasyonlar seçilemez (ağaçta döngü olmaz)." />
             <SearchSelect id="os-parent" label="Üst şirket" options={parentOptions} value={parent} onChange={setParent} placeholder="Üst şirket ara ya da seç…" />
-            <p className="form-hint">Kendisi ve altındaki organizasyonlar seçilemez (ağaçta döngü olmaz).</p>
           </div>
           <div className="form-actions">
             <button className="btn btn-primary" type="submit" disabled={busy}>

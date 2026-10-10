@@ -47,38 +47,38 @@
   --statusbar-height: 34px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #0d0f12;
-    --surface-1: #15181c;
-    --surface-2: #1c2025;
-    --surface-3: #262b31;
-    --border: #262b31;
-    --border-strong: #3a4149;
-    --text-primary: #f2f4f7;
-    --text-secondary: #b6bcc5;
-    --text-muted: #8a919b;
+/* Koyu tema: kök elemanın data-theme özniteliğiyle (public/theme.js ve src/theme.ts yazar: kullanıcının seçimi ya da
+   işletim sisteminin ayarı). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0d0f12;
+  --surface-1: #15181c;
+  --surface-2: #1c2025;
+  --surface-3: #262b31;
+  --border: #262b31;
+  --border-strong: #3a4149;
+  --text-primary: #f2f4f7;
+  --text-secondary: #b6bcc5;
+  --text-muted: #8a919b;
 
-    --accent: #4c8dff;
-    --accent-hover: #6ba0ff;
-    --on-accent: #0b1220;
+  --accent: #4c8dff;
+  --accent-hover: #6ba0ff;
+  --on-accent: #0b1220;
 
-    --series-cpu: #3987e5;
-    --series-ram: #d95926;
+  --series-cpu: #3987e5;
+  --series-ram: #d95926;
 
-    --status-good: #22b422;
-    --status-warning: #fab219;
-    --status-serious: #ec835a;
-    --status-critical: #e66767;
-    --status-neutral: #8a919b;
-    --status-good-text: #4cc94c;
-    --status-warning-text: #f2b53d;
-    --status-critical-text: #f08585;
+  --status-good: #22b422;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #e66767;
+  --status-neutral: #8a919b;
+  --status-good-text: #4cc94c;
+  --status-warning-text: #f2b53d;
+  --status-critical-text: #f08585;
 
-    --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-md: 0 8px 24px rgb(0 0 0 / 0.5);
-  }
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 8px 24px rgb(0 0 0 / 0.5);
 }
 
 /* ---------- Temel ---------- */
@@ -1537,26 +1537,9 @@ input[type='checkbox'], input[type='radio'] {
   min-width: 0;
 }
 
-/* Eşik düzenleyici metrik bloklarını iki sütunda gösterir, bu yüzden diğer ayar kartlarından geniştir. */
-.settings-card.settings-card-wide {
-  max-width: 1100px;
-}
-
 /* Bağlantı ve kimlik kartları ızgara sütununu doldurur (aksi halde iki kart arasında büyük boşluk kalır). */
 .settings-content .form-card {
   max-width: none;
-}
-
-.settings-content .threshold-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr));
-  gap: 12px;
-  align-items: start;
-  margin-bottom: 14px;
-}
-
-.settings-content .threshold-row {
-  margin: 0;
 }
 
 @media (max-width: 860px) {
@@ -1808,6 +1791,10 @@ input[type='checkbox'], input[type='radio'] {
 .field-error {
   color: var(--status-critical-text);
   font-size: 12.5px;
+  margin: 6px 0 0 24px;
+}
+
+.threshold-hint {
   margin: 6px 0 0 24px;
 }
 
@@ -2150,7 +2137,8 @@ input[type='checkbox'], input[type='radio'] {
     width: 100%;
   }
 
-  .field-error {
+  .field-error,
+  .threshold-hint {
     margin-left: 0;
   }
 
@@ -2321,15 +2309,6 @@ pre.secret-box {
   width: 96px;
 }
 
-.metric-hint {
-  max-width: 280px;
-  font-weight: 400;
-}
-
-.thresholds-table td.primary {
-  font-weight: 500;
-}
-
 @media (max-width: 860px) {
   .level-input {
     width: 120px;
@@ -2337,10 +2316,6 @@ pre.secret-box {
 
   .form-actions .btn {
     flex: 1 1 auto;
-  }
-
-  table.stack td.primary .metric-hint {
-    max-width: none;
   }
 }
 
@@ -2396,6 +2371,10 @@ pre.secret-box {
 }
 
 .subject-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
   font-size: 13px;
   font-weight: 600;
 }
@@ -2412,6 +2391,14 @@ pre.secret-box {
 .subject-name {
   align-self: center;
   min-width: 90px;
+}
+
+.subject-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .field-error.flush {
@@ -2526,6 +2513,107 @@ pre.secret-box {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+/* Süre koşulu: sayı + birim (boş = hemen). */
+.duration-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.duration-field .duration-input {
+  width: 72px;
+}
+
+/* Grafiğin altındaki seri açıklaması (grafiğin dışında: üzerine gelmek araç ipucunu açmaz). */
+.chart-above {
+  margin: 0 0 2px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.chart-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chart-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-legend i {
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+/* Performans: grafik içi küçük başlıklar ve yan yana üç PSI grafiği (dar ekranda alt alta). */
+.chart-subtitle {
+  margin: 10px 0 2px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.psi-charts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+/* Envanter: anlık durum kartlarının küçük tabloları ve kapasite satırları. */
+.compact-table {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.capacity-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.capacity-head {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  margin-bottom: 4px;
+  font-size: 13px;
+}
+
+/* Genel: anlık durum uyarı şeridi ve disk kartındaki G/Ç satırları. */
+.state-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.io-lines {
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--border);
+  list-style: none;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+@media (max-width: 1100px) {
+  .psi-charts {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 @media (max-width: 480px) {
@@ -2736,6 +2824,16 @@ body.scroll-lock {
   width: min(460px, 94vw);
 }
 
+.modal-lg {
+  width: min(1200px, 96vw);
+  max-height: 92vh;
+}
+
+.chart-zoom {
+  padding: 3px 6px;
+  color: var(--text-secondary);
+}
+
 .confirm-text {
   margin: 0 0 12px;
   line-height: 1.55;
@@ -2784,6 +2882,9 @@ body.scroll-lock {
 }
 
 .filter-section legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   float: left;
   width: 100%;
   margin: 0 0 10px;
@@ -2796,9 +2897,6 @@ body.scroll-lock {
   clear: both;
 }
 
-.filter-hint {
-  margin: -4px 0 10px;
-}
 
 .filter-field {
   margin-top: 14px;
@@ -2815,6 +2913,18 @@ body.scroll-lock {
   display: grid;
   grid-template-columns: 1fr 1fr;
   column-gap: 12px;
+}
+
+/* Alert türü süzgecinde başlık başına bir grup. */
+.filter-group + .filter-group {
+  margin-top: 8px;
+}
+
+.filter-group-label {
+  display: block;
+  margin: 4px 0 2px;
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .filter-search {
@@ -2990,10 +3100,17 @@ body.scroll-lock {
 }
 
 /* ---------- Sistem ayarları ---------- */
-.setting-head {
+/* Form alanının etiketi, açıklama düğmesi ve yanındaki küçük öğeler tek satırda. */
+.field-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
+}
+
+.field-head .link-btn {
+  margin-left: 0;
+  font-size: 12.5px;
 }
 
 .input-with-unit {
@@ -3092,11 +3209,6 @@ textarea {
     min-width: 0;
     overflow-wrap: anywhere;
   }
-}
-
-/* Kart başlığının içindeki açıklama başlığın hemen altında durur (üstüne binmez). */
-.card-head .card-desc {
-  margin: 3px 0 0;
 }
 
 /* Yana kayan menüler (sekmeler, bölüm menüleri, süzgeçler; bkz. useScrollStrips): hep tek satır, öğeler daralmaz. Görünmeyen
@@ -3234,11 +3346,6 @@ textarea {
 }
 
 /* Cache Durumu */
-.table-card > .cache-desc {
-  margin: 0;
-  padding: 0 18px 12px;
-}
-
 .cache-keys {
   margin-top: 6px;
   font-size: 12px;
@@ -3268,6 +3375,9 @@ textarea {
 }
 
 .limiter-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   font-size: 13.5px;
   font-weight: 600;
@@ -3519,30 +3629,6 @@ textarea {
   pointer-events: none;
   user-select: none;
   filter: grayscale(0.35);
-}
-
-.coming-soon-note {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 0 0 12px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.coming-soon-spark {
-  display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  font-size: 12.5px;
-}
-
-.coming-soon-spark svg {
-  width: 100%;
-  height: 40px;
-  border-bottom: 1px solid var(--border);
 }
 
 .issue-list {
@@ -3866,5 +3952,615 @@ textarea {
 
   .sidebar-search {
     display: flex;
+  }
+}
+
+/* Tema: giriş sayfalarının sağ üst köşesindeki simge ve profil menüsündeki üç seçenek. */
+.login-theme {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+}
+
+.profile-theme {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* Profil menüsünde üç seçenek menünün genişliğini eşit paylaşır (segmentin varsayılanı küçülmeyen düğmeler ve yatay
+   kaydırmadır; dar menüde "Koyu" kesilirdi). */
+.segmented.theme-choices {
+  display: flex;
+  width: 100%;
+  overflow: visible;
+}
+
+.segmented.theme-choices > button {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 4px 6px;
+}
+
+/* ---------- Konu düzeni (Alert kuralları, Performans): solda dikey konu menüsü, sağda konu paneli ---------- */
+.badge-info { background: var(--accent-soft); color: var(--accent); }
+.badge-plain::before { display: none; }
+
+.rule-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Özet cümlesi ve yanındaki açıklama düğmesi tek satırda. */
+.rule-summary-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.rule-summary strong {
+  font-weight: 600;
+}
+
+.rule-summary .muted {
+  font-size: 13px;
+}
+
+.topic-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.topic-menu {
+  flex: 0 0 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.topic-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.topic-tab:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
+.topic-tab.active {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent), 0 0 0 1px var(--border), var(--shadow-xs);
+}
+
+.topic-tab-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.topic-tab-count {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.topic-tab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.topic-tab-dot.warning { background: var(--status-warning); }
+.topic-tab-dot.critical { background: var(--status-critical); }
+
+.topic-panel {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+}
+
+/* Panel taşanı kesmez (açıklama kutuları son satırda da görünsün); köşeleri ilk ve son satır kendisi yuvarlar. */
+.topic-panel > :first-child {
+  border-top-left-radius: calc(var(--radius) - 1px);
+  border-top-right-radius: calc(var(--radius) - 1px);
+}
+
+.topic-panel .rule-rows > :last-child {
+  border-bottom-left-radius: calc(var(--radius) - 1px);
+  border-bottom-right-radius: calc(var(--radius) - 1px);
+}
+
+.rule-rows-head,
+.rule-row {
+  display: grid;
+  /* İşlem sütunu sabit genişliktedir: satırdaki düğme sayısı değişince diğer sütunlar kaymasın (Geri al · Düzenle · Devral). */
+  grid-template-columns: minmax(0, 2.2fr) minmax(0, 1.7fr) minmax(0, 0.9fr) minmax(0, 1fr) 224px;
+  gap: 12px;
+  padding: 10px 18px;
+  align-items: center;
+}
+
+.rule-rows-head {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.rule-row + .rule-row {
+  border-top: 1px solid var(--border);
+}
+
+.rule-row.changed {
+  background: var(--accent-soft);
+}
+
+.rule-row.muted-row .rule-label {
+  color: var(--text-secondary);
+}
+
+.rule-label {
+  font-weight: 600;
+}
+
+.rule-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.rule-kind {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rule-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rule-duration {
+  font-size: 13px;
+}
+
+.rule-src {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.rule-src-own { background: color-mix(in srgb, var(--status-warning) 20%, transparent); color: var(--status-warning-text); font-weight: 600; }
+.rule-src-inherited { background: var(--surface-2); color: var(--text-secondary); }
+.rule-src-always { background: color-mix(in srgb, var(--status-good) 13%, transparent); color: var(--status-good-text); font-weight: 600; }
+.rule-src-none { padding-left: 0; color: var(--text-muted); }
+
+.rule-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rule-extra {
+  grid-column: 1 / -1;
+}
+
+.rule-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.rule-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+}
+
+.rule-savebar {
+  position: sticky;
+  bottom: calc(var(--statusbar-height) + 12px);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-md);
+}
+
+.rule-savebar-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.rule-savebar-text strong {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.rule-savebar-error {
+  color: var(--status-critical-text);
+}
+
+@media (max-width: 860px) {
+  .topic-layout {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Dar ekranda konu menüsü üstte yatay kaydırılan bir şerittir. */
+  .topic-menu {
+    flex: none;
+    flex-direction: row;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .topic-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .topic-tab {
+    flex: none;
+    white-space: nowrap;
+  }
+
+  .topic-tab.active {
+    box-shadow: inset 0 -2px 0 var(--accent), 0 0 0 1px var(--border);
+  }
+
+  .rule-rows-head {
+    display: none;
+  }
+
+  .topic-panel .rule-rows > :first-child {
+    border-top-left-radius: calc(var(--radius) - 1px);
+    border-top-right-radius: calc(var(--radius) - 1px);
+  }
+
+  .rule-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 8px;
+  }
+
+  .rule-name {
+    grid-column: 1 / -1;
+  }
+}
+
+.rule-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.rule-level-input {
+  width: 72px;
+}
+
+.rule-buttons {
+  justify-content: flex-end;
+}
+
+.rule-strip-action {
+  margin-left: auto;
+}
+
+.rule-panel {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.rule-panel .subject-block {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
+/* ---------- Performans: konu paneli ---------- */
+.perf-range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+}
+
+.perf-range-dates {
+  flex-wrap: nowrap;
+}
+
+.perf-panel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.perf-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.perf-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+/* En çok iki blok yan yana; geniş ya da satırında yalnız kalan blok tam genişlik (perfTopics.chartLayout). */
+.perf-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.perf-block {
+  min-width: 0;
+}
+
+.perf-block.full {
+  grid-column: 1 / -1;
+}
+
+.perf-block > .card {
+  margin-top: 0;
+}
+
+@media (max-width: 1100px) {
+  .perf-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Konunun alert kuralları (Performans): etkin kurallar sütunlu satırlarda, tanımlı olmayanlar altta tek satırda. */
+.perf-rules {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  font-size: 13px;
+}
+
+.perf-rules-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.perf-rules-title {
+  font-weight: 600;
+}
+
+.perf-rules-head a {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.perf-rule {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.6fr) minmax(0, 0.8fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 5px 0;
+  border-top: 1px solid var(--border);
+}
+
+.perf-rule-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+
+.perf-rule-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.perf-rule-dot.warning { background: var(--status-warning); }
+.perf-rule-dot.critical { background: var(--status-critical); }
+
+.perf-rule-off {
+  padding: 5px 0 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12.5px;
+}
+
+@media (max-width: 860px) {
+  .perf-rule {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    row-gap: 2px;
+  }
+}
+
+/* Başlığın yanındaki açıklama düğmesi ve açılır kutusu. */
+.info-tip {
+  position: relative;
+  display: inline-flex;
+}
+
+.info-tip-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+
+/* Normalde arka plan şeffaftır; üzerine gelince ve açıkken hafif dolgu alır, açıkken çevresinde halka olur. */
+.info-tip-button:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
+
+.info-tip-button[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.info-tip-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -8px;
+  z-index: 30;
+  width: max-content;
+  max-width: min(340px, 80vw);
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-md);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.5;
+  white-space: normal;
+}
+
+
+/* Sunucu sayfasının başlığında adın yanındaki kayıtlı IP. */
+.page-title-ip {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Dar ekranda üst çubukta yer yok: IP gizlenir, ad görünür kalır (IP Envanter'de ve Ayarlar'da). */
+@media (max-width: 860px) {
+  .page-title-ip {
+    display: none;
+  }
+}
+
+/* ---------- Envanter: 2×2 kart ---------- */
+/* Aynı satırdaki iki kart aynı yükseklikte (stretch); alert kuralları listesi kartın dibine yaslanır. */
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+.inventory-grid > .card {
+  margin-top: 0;
+}
+
+.inventory-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-card-footer {
+  margin-top: auto;
+  padding-top: 12px;
+}
+
+.perf-rules.embedded {
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.inventory-details summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+
+.inventory-details[open] summary {
+  margin-bottom: 6px;
+}
+
+.inventory-link {
+  margin-left: 10px;
+  font-size: 12.5px;
+}
+
+@media (max-width: 1100px) {
+  .inventory-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

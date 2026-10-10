@@ -78,7 +78,8 @@ export function HostSettings({
 
   // Eski "Eşikler" ve "Disk alert'leri" bölümleri artık Alert kuralları sayfasında bu sunucunun kapsamıdır.
   const legacy = params.get(SECTION_PARAM)
-  if (legacy === 'esikler' || legacy === 'disk') return <Navigate to={alertRulesPath({ kind: 'sunucu', id: host.id })} replace />
+  if (legacy === 'esikler') return <Navigate to={alertRulesPath({ kind: 'sunucu', id: host.id })} replace />
+  if (legacy === 'disk') return <Navigate to={alertRulesPath({ kind: 'sunucu', id: host.id }, 'disk')} replace />
   // Eski "Bildirim kuralları" bölümü artık Bildirim sayfasında bu sunucunun kapsamıdır.
   if (legacy === 'bildirim') return <Navigate to={notificationsPath('kurallar', { kind: 'sunucu', id: host.id })} replace />
 

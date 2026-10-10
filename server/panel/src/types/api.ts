@@ -125,6 +125,9 @@ export interface Host {
   unsupported_fields?: string[]
   // Makine envanteri ve anlık durumu (protokol 3); eski agent'larda yoktur.
   host_info?: HostInfo
+  // Protokol 4'ün geçmişi tutulmayan anlık durumları (sıcaklık, RAID, kapasite, süreçler …). Yalnızca tek sunucu
+  // yanıtında (GET /hosts/:id) gelir; eski agent'ta yoktur.
+  system_state?: SystemState
   created_at: string
   updated_at: string
   // Aynı makine kimliğini bildiren diğer sunucular (çift kayıt uyarısı); yalnızca tek sunucu yanıtında,
@@ -152,6 +155,8 @@ export interface DiskUsage {
   free: number
   // Inode doluluğu (protokol 3); yoksa bilinmiyor (eski agent ya da inode bildirmeyen dosya sistemi).
   inodes_used_pct?: number
+  // Dosya sistemi salt okunur bağlı (protokol 4; disk hatasında çekirdek böyle yapar); yoksa bilinmiyor.
+  read_only?: boolean
 }
 
 // Agent'ın bildirdiği makine envanteri ve anlık durumu (protokol 3). Yalnızca bilgi içindir; her alan
@@ -187,6 +192,12 @@ export interface DockerContainerReport {
   ram_mb: number
   restart_count: number
   uptime_seconds: number
+  // Protokol 4: healthcheck sonucu (healthcheck yoksa yok), üst üste başarısız kontrol sayısı, son çıkış kodu ve bellek
+  // yetmediği için öldürülüp öldürülmediği. undefined = bilinmiyor.
+  health?: 'healthy' | 'unhealthy' | 'starting'
+  health_failing_streak?: number
+  exit_code?: number
+  oom_killed?: boolean
 }
 
 export interface MetricPoint {
@@ -194,9 +205,179 @@ export interface MetricPoint {
   cpu_usage_pct: number
   ram_usage_pct: number
   disk: DiskUsage[]
+  // Protokol 4 zaman serisi; eski agent'ın satırlarında yoktur. Değerler ham gelir, yuvarlama gösterimde (units.ts).
+  system?: SystemSample
+  disk_io?: DiskIOSample[]
+  net_io?: NetIOSample[]
 }
 
-export type MetricType = 'cpu' | 'ram' | 'disk' | 'docker_restart'
+// ---------------------------------------------------------------- Protokol 4: sistem sağlığı ve performans
+// healthbeat-server/internal/model/ingest_v4.go'yu yansıtır. Her alan isteğe bağlıdır: yoksa "bilinmiyor".
+
+// Bir metrik satırının makine geneli örneği.
+export interface SystemSample {
+  cpu_detail?: { iowait_pct?: number; steal_pct?: number; procs_blocked?: number }
+  memory_detail?: { available_mb?: number; cached_mb?: number; swap_in_per_s?: number; swap_out_per_s?: number }
+  pressure?: Pressure
+  tcp?: { retrans_pct?: number; established?: number; time_wait?: number }
+}
+
+// PSI: süreçlerin kaynak beklerken geçirdiği zamanın yüzdesi (10 ve 60 sn ortalaması). CPU'da full gelmez.
+export interface Pressure {
+  cpu?: PressureStall
+  memory?: PressureStall
+  io?: PressureStall
+}
+
+export interface PressureStall {
+  some10: number
+  some60: number
+  full10?: number
+  full60?: number
+}
+
+// Bir fiziksel diskin G/Ç'si: hızlar bayt/sn, await_ms bir işlemin ortalama süresi.
+export interface DiskIOSample {
+  name: string
+  read_iops: number
+  write_iops: number
+  read_bps: number
+  write_bps: number
+  util_pct: number
+  await_ms: number
+  queue_depth: number
+}
+
+// Bir ağ arayüzünün trafiği: hızlar bit/sn; hata ve düşen paketler aralıktaki farktır.
+export interface NetIOSample {
+  interface: string
+  rx_bps: number
+  tx_bps: number
+  rx_errors: number
+  tx_errors: number
+  rx_drops: number
+  tx_drops: number
+}
+
+// Agent'ın son raporundaki anlık durumlar (host_status.system_state).
+export interface SystemState {
+  // Açılıştan beri bellek yetmediği için öldürülen süreç sayısı ve sayacın en son arttığının görüldüğü an.
+  oom_kills?: number
+  oom_last_increase_at?: string
+  temperatures?: Temperature[]
+  raid?: RAIDArray[]
+  capacity?: Capacity
+  processes?: Processes
+  updates?: PendingUpdates
+  time_sync?: TimeSync
+}
+
+// max/crit donanımın bildirdiği sınırlardır.
+export interface Temperature {
+  sensor: string
+  kind?: 'cpu' | 'disk' | 'other'
+  celsius: number
+  max?: number
+  crit?: number
+}
+
+export interface RAIDArray {
+  name: string
+  level?: string
+  state: string // clean | degraded | recovering | resyncing | failed …
+  devices: number
+  active: number
+  sync_pct?: number
+}
+
+export interface Capacity {
+  file_handles?: number
+  file_handles_max?: number
+  conntrack?: number
+  conntrack_max?: number
+  // Süreç + iş parçacığı sayısı: pid_max sınırı bunlara uygulanır.
+  tasks?: number
+  pid_max?: number
+}
+
+// Aynı adlı süreçlerin toplamı; CPU yüzdesi makinenin toplam kapasitesine göredir.
+export interface ProcessGroup {
+  name: string
+  count: number
+  cpu_pct: number
+  rss_mb: number
+}
+
+export interface Processes {
+  total: number
+  zombie: number
+  top_cpu?: ProcessGroup[]
+  top_ram?: ProcessGroup[]
+}
+
+export interface PendingUpdates {
+  pending: number
+  security: number
+  // Paket listelerinin en son güncellendiği an.
+  lists_updated_at?: string
+}
+
+export interface TimeSync {
+  enabled?: boolean
+  synchronized?: boolean
+  daemon?: string // timesyncd | chrony | ntpd | none
+  local_rtc?: boolean
+  server?: string
+  server_address?: string
+  configured_servers?: string[]
+  stratum?: number
+  leap?: string // normal | insert | delete | alarm
+  offset_ms?: number
+  delay_ms?: number
+  jitter_ms?: number
+  root_distance_ms?: number
+  poll_s?: number
+  last_sync?: string
+  // Saat sunucusunun son yanıtı geçersiz sayıldı.
+  ignored?: boolean
+  sources?: TimeSource[]
+}
+
+export interface TimeSource {
+  name: string
+  state: string // selected | candidate | falseticker | unreachable | unusable
+  // Son 8 denemenin bit maskesi (255 = hepsi başarılı).
+  reach?: number
+  offset_ms?: number
+}
+
+// Bir sunucunun saklanan systemd servisi (GET /hosts/:id/services). watched = izlenen servisler arasında.
+export interface HostService {
+  name: string
+  description?: string
+  active: string // active | inactive | failed | activating | deactivating …
+  sub?: string
+  // Bu duruma geçtiği an.
+  since?: string
+  restarts?: number
+  enabled?: string
+  // Satırın içeriğinin en son değiştiği an.
+  updated_at: string
+  watched: boolean
+}
+
+// watched seçimin tamamıdır: şu an raporlanmayan izlenen servisler services'te yoktur.
+export interface HostServices {
+  services: HostService[]
+  watched: string[]
+}
+
+// Eşik taşıyan metrikler (server'ın model.ThresholdMetricTypes'ı). İlk dördü anlık değerlendirilir; protokol 4
+// türlerine süre koşulu verilebilir ve sunucu kapsamında konu (disk, sensör, servis) başına eşik tanımlanabilir.
+export type MetricType = 'cpu' | 'ram' | 'disk' | 'docker_restart' | 'disk_latency' | 'temperature' | 'service_restart' | 'time_offset'
+
+// Konu bazlı eşik verilebilen protokol 4 türleri.
+export type SubjectMetricType = 'disk_latency' | 'temperature' | 'service_restart'
 
 export interface ThresholdConfig {
   id: string
@@ -205,6 +386,8 @@ export interface ThresholdConfig {
   metric_type: MetricType
   warning_level: number
   critical_level: number
+  // Eşik kesintisiz bu kadar saniye aşılınca alert açılır; yoksa hemen (yalnızca protokol 4 türlerinde).
+  duration_seconds?: number
   created_at: string
   updated_at: string
 }
@@ -212,6 +395,7 @@ export interface ThresholdConfig {
 export interface ThresholdLevels {
   warning_level: number
   critical_level: number
+  duration_seconds?: number
 }
 
 // Bir sunucu için bir metriğin eşik durumu: varsayılan olarak ne aldığı ve kendi özel değerleri
@@ -233,7 +417,18 @@ export interface HostThresholdsResponse {
   thresholds: HostThresholdView[]
   mount_thresholds: MountThreshold[]
   container_thresholds: ContainerThreshold[]
+  // Protokol 4 türlerinde kendi eşiği olan konular (disk, sensör, servis); diğerleri sunucu genelindekini izler.
+  subject_thresholds: SubjectThreshold[]
 }
+
+export interface SubjectThreshold {
+  metric_type: SubjectMetricType
+  subject: string
+  custom: ThresholdLevels
+}
+
+// tür -> konu -> null (sunucunun eşiğini izle) ya da kendi seviyeleri; dışarıda bırakılana dokunulmaz.
+export type SubjectThresholdOverrides = Partial<Record<SubjectMetricType, SubjectOverrides>>
 
 // subject (mount yolu / container adı) -> null (sunucunun eşiğini izle) ya da kendi çifti;
 // dışarıda bırakılan bir subject'e dokunulmaz.
@@ -252,7 +447,67 @@ export type ThresholdOverrides = Partial<Record<MetricType, ThresholdLevels | nu
 
 export type AlertLevel = 'info' | 'warning' | 'critical'
 export type AlertStatus = 'open' | 'acknowledged' | 'resolved'
-export type AlertType = MetricType | 'host_offline' | 'disk_missing'
+// Sayısal alert'ler eşik türünün adını taşır (service_restart ve time_offset hariç: onların alert'i service_restart_loop
+// ve time_sync/offset'tir); diğerleri olay ya da durum alert'idir.
+export type AlertType =
+  | Exclude<MetricType, 'service_restart' | 'time_offset'>
+  | 'host_offline'
+  | 'disk_missing'
+  | 'service_failed'
+  | 'service_restart_loop'
+  | 'container_unhealthy'
+  | 'container_oom'
+  | 'oom_kill'
+  | 'fs_readonly'
+  | 'raid_degraded'
+  | 'time_sync'
+  | 'reboot_required'
+  | 'security_updates'
+
+// time_sync alert'inin konuları: sorun türü.
+export type TimeSyncSubject = 'unsynced' | 'source' | 'offset'
+
+// Durum kuralları: eşiği olmayan alert'lerin seviyesi ve süresi (server'ın model.StatusRules'u). raid_degraded ve
+// raid_rebuilding ikisi de raid_degraded alert'idir; time_unsynced ve time_source time_sync alert'idir.
+export type StatusRule =
+  | 'service_failed'
+  | 'container_unhealthy'
+  | 'container_oom'
+  | 'oom_kill'
+  | 'fs_readonly'
+  | 'raid_degraded'
+  | 'raid_rebuilding'
+  | 'time_unsynced'
+  | 'time_source'
+  | 'reboot_required'
+  | 'security_updates'
+
+// off, üst kapsamda açık bir kuralı bu kapsamda kapatır.
+export type StatusRuleLevel = 'off' | AlertLevel
+
+export interface StatusRuleSetting {
+  level: StatusRuleLevel
+  duration_seconds?: number
+}
+
+// Saklanan bir kural satırı (GET/PUT /status-rules); organization_id yoksa geneldir.
+export interface StatusRuleConfig extends StatusRuleSetting {
+  organization_id?: string
+  rule: StatusRule
+  updated_at: string
+}
+
+// Bir sunucu için bir kural (GET/PUT /hosts/:id/status-rules): default üst kapsamlardan geleni (null = kapalı), custom
+// sunucunun kendi ayarıdır. takes_duration, kurala süre verilip verilemeyeceğidir.
+export interface HostStatusRuleView {
+  rule: StatusRule
+  takes_duration: boolean
+  default: StatusRuleSetting | null
+  custom: StatusRuleSetting | null
+}
+
+// kural -> ayar ya da null (bu kapsamdaki ayarı kaldır, üst kapsamı izle); dışarıda bırakılana dokunulmaz.
+export type StatusRuleChanges = Partial<Record<StatusRule, StatusRuleSetting | null>>
 
 export interface Alert {
   id: string

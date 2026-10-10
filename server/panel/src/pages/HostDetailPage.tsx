@@ -67,9 +67,17 @@ export function HostDetailPage() {
     <div>
       <PageHeader
         back={host ? { to: `/organizations/${host.organization_id}`, label: 'Organizasyon' } : undefined}
-        title={host?.title ?? 'Sunucu'}
+        // Kayıtlı IP başlıkta, adın yanında; sayfa içinde ayrıca gösterilmez.
+        title={
+          host ? (
+            <>
+              {host.title} <span className="page-title-ip" title="Kayıtlı IP">({host.ip})</span>
+            </>
+          ) : (
+            'Sunucu'
+          )
+        }
         badge={host && <StatusBadge tone={host.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(host.status)}</StatusBadge>}
-        subtitle={host && <span className="mono">{host.ip}</span>}
       />
       {error && <div className="error-banner">{error}</div>}
       {host?.same_machine_as && host.same_machine_as.length > 0 && (
@@ -105,7 +113,7 @@ export function HostDetailPage() {
       </TabPanel>
 
       <TabPanel id="performans" active={tab}>
-        {host && <HostPerformance host={host} disk={latest?.disk ?? []} thresholds={thresholds} />}
+        {host && <HostPerformance host={host} latest={latest} thresholds={thresholds} />}
       </TabPanel>
 
       <TabPanel id="servisler" active={tab}>
@@ -113,7 +121,7 @@ export function HostDetailPage() {
       </TabPanel>
 
       <TabPanel id="envanter" active={tab}>
-        {host && <HostInventory host={host} />}
+        {host && <HostInventory host={host} thresholds={thresholds} />}
       </TabPanel>
 
       {id && (
