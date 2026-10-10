@@ -10,6 +10,7 @@ import { useTab } from '../components/useTab'
 import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
+import { FieldLabel } from '../components/FieldLabel'
 import { Building2, LayoutGrid, List as ListIcon, Plus, Settings } from 'lucide-react'
 import { OrganizationSettingsModal } from './OrganizationSettings'
 
@@ -208,7 +209,11 @@ export function OrganizationsPage() {
               <input id="org-name" value={newName} onChange={(e) => setNewName(e.target.value)} required />
             </div>
             <div className="form-row">
-              <label htmlFor="org-parent">Üst şirket</label>
+              <FieldLabel
+                htmlFor="org-parent"
+                label="Üst şirket"
+                hint="Alt organizasyonun yöneticileri yalnızca kendi dallarını görür; üst şirketin eşikleri ve bildirim kuralları alt dala miras kalır."
+              />
               <select id="org-parent" value={newParent} onChange={(e) => setNewParent(e.target.value)}>
                 <option value="">Yok (kök organizasyon)</option>
                 {parentChoices(orgs).map((o) => (
@@ -217,7 +222,6 @@ export function OrganizationsPage() {
                   </option>
                 ))}
               </select>
-              <p className="form-hint">Alt organizasyonun yöneticileri yalnızca kendi dallarını görür; üst şirketin eşikleri ve bildirim kuralları alt dala miras kalır.</p>
             </div>
             <div className="form-row">
               <label htmlFor="org-address">Adres (isteğe bağlı)</label>

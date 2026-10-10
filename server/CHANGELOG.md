@@ -105,7 +105,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
     çizgi; her grafik büyütülebilir; yan yana en çok iki grafik. Eski "Detay" penceresinin yerine.
   - **Envanter** dört kart: Makine, İşletim sistemi ve ağ, Saat (senkron ayrıntısıyla), Bakım (güncellemeler, yeniden
     başlatma, çalışma süresi); Saat ve Bakım'da alert kuralları. Kaynak kullanımı Performans'tadır.
-  - Sayfa başlarındaki açıklama satırları kaldırıldı; kart açıklamaları başlığın yanındaki ⓘ düğmesinde.
+  - Sayfa başlarındaki açıklama satırları kaldırıldı. Kart ve form alanı açıklamaları başlığın ya da etiketin yanındaki ⓘ
+    düğmesinde (Ayarlar'da alanın varsayılanı da orada; "Varsayılana dön" etiketin yanında). Boş durum yazıları, sayılar,
+    silme uyarıları ve sunucu ekleme sihirbazının yönlendirmeleri görünür kalır.
   - **Alert kuralları:** sistem, organizasyon ve sunucu eşikleri, durum kuralları ve disk alert seçimi tek sayfada, kapsam
     seçiciyle. Kurallar üç kapsamda da konuya göre gruplu: solda konu menüsü (CPU ve bellek, Disk, Sıcaklık, Servisler,
     Container, Saat, Sistem bakımı, Erişilebilirlik; konu başına etkin/toplam kural sayısı), sağda o konunun eşikleri,

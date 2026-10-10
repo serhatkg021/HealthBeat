@@ -5,6 +5,7 @@ import type { CacheStatus, RateLimiterStatus } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { UsageBar } from '../components/UsageBar'
 import { useNow } from '../components/useNow'
+import { InfoTip } from '../components/InfoTip'
 import { roleLabel } from '../labels'
 import { agoText, certExpiry, certNames, expiresInText, hiddenKeys, keyKindLabel, limiterInfo, limiterRate, usedOf } from './cache'
 
@@ -52,11 +53,11 @@ export function SystemCache() {
             <h2 className="card-title">
               <Gauge size={16} strokeWidth={1.75} />
               Hız sınırlayıcılar
+              <InfoTip label="Hız sınırlayıcılar">
+                Her anahtarın harcadığı hak ve kapasitesi. Hak zamanla yeniden dolar; hakkı tam olan anahtar listelenmez. Hız Ayarlar → Sistem
+                Ayarları’ndan değişir.
+              </InfoTip>
             </h2>
-            <p className="card-desc">
-              Her anahtarın harcadığı hak ve kapasitesi. Hak zamanla yeniden dolar; hakkı tam olan anahtar listelenmez. Hız Ayarlar → Sistem
-              Ayarları’ndan değişir.
-            </p>
             <div className="limiter-grid">
               {status.rate_limiters.map((l) => (
                 <Limiter key={l.id} limiter={l} now={now} />
@@ -78,12 +79,13 @@ function PermissionCache({ cache, now }: { cache: CacheStatus['permissions']; no
       <h2 className="card-title">
         <Shield size={16} strokeWidth={1.75} />
         İzin önbelleği
+        <InfoTip label="İzin önbelleği">
+          {cache.ttl_seconds > 0
+            ? `Bir rolün izinleri ilk sorulduğunda veritabanından okunur ve ${cache.ttl_seconds} saniye bellekte tutulur.`
+            : 'Önbellek kapalı: her izin denetimi veritabanına gider.'}
+        </InfoTip>
+        {cache.ttl_seconds <= 0 && <StatusBadge tone="neutral">kapalı</StatusBadge>}
       </h2>
-      <p className="card-desc cache-desc">
-        {cache.ttl_seconds > 0
-          ? `Bir rolün izinleri ilk sorulduğunda veritabanından okunur ve ${cache.ttl_seconds} saniye bellekte tutulur.`
-          : 'Önbellek kapalı: her izin denetimi veritabanına gider.'}
-      </p>
       <table className="stack">
         <thead>
           <tr>
@@ -129,14 +131,15 @@ function Limiter({ limiter, now }: { limiter: RateLimiterStatus; now: number }) 
   return (
     <section className="limiter">
       <div className="limiter-head">
-        <h3 className="limiter-title">{info.title}</h3>
+        <h3 className="limiter-title">
+          {info.title}
+          <InfoTip label={info.title}>{info.description}</InfoTip>
+        </h3>
         <StatusBadge tone={!limiter.enabled ? 'neutral' : limiter.keys > 0 ? 'warning' : 'good'}>
           {!limiter.enabled ? 'kapalı' : limiter.keys > 0 ? `${limiter.keys} anahtar` : 'boş'}
         </StatusBadge>
       </div>
-      <p className="form-hint limiter-hint">
-        {info.description} {limiter.enabled && <span className="nowrap">Kural: {limiterRate(limiter)}.</span>}
-      </p>
+      {limiter.enabled && <p className="form-hint limiter-hint">Kural: {limiterRate(limiter)}.</p>}
       {limiter.entries.length > 0 && (
         <table className="limiter-table">
           <thead>
@@ -180,9 +183,11 @@ function PullScheduler({ pull, now }: { pull: CacheStatus['pull_scheduler']; now
       <h2 className="card-title">
         <Timer size={16} strokeWidth={1.75} />
         Pull zamanlayıcı
+        <InfoTip label="Pull zamanlayıcı">
+          Pull modundaki her sunucunun en son ne zaman sorgulandığı; sıradaki sorgu bu zamana ve sunucunun aralığına göre yapılır.
+        </InfoTip>
         <StatusBadge tone={pull.verifies_tls ? 'good' : 'neutral'}>{pull.verifies_tls ? 'sertifika doğrulanıyor' : 'sertifika doğrulanmıyor'}</StatusBadge>
       </h2>
-      <p className="card-desc cache-desc">Pull modundaki her sunucunun en son ne zaman sorgulandığı; sıradaki sorgu bu zamana ve sunucunun aralığına göre yapılır.</p>
       <table className="stack">
         <thead>
           <tr>
@@ -227,11 +232,11 @@ function TrustedProxies({ proxies }: { proxies: CacheStatus['trusted_proxies'] }
       <h2 className="card-title">
         <Network size={16} strokeWidth={1.75} />
         Güvenilen proxy’ler
+        <InfoTip label="Güvenilen proxy’ler">
+          İstemci IP’si (hız sınırları, denetim kaydı) yalnızca bu adreslerden gelen X-Forwarded-For başlığından okunur (TRUSTED_PROXIES). Ad
+          olarak verilenler periyodik çözülür.
+        </InfoTip>
       </h2>
-      <p className="card-desc">
-        İstemci IP’si (hız sınırları, denetim kaydı) yalnızca bu adreslerden gelen X-Forwarded-For başlığından okunur (TRUSTED_PROXIES). Ad olarak
-        verilenler periyodik çözülür.
-      </p>
       {empty && <p className="muted">Tanımlı proxy yok: istemci IP’si her zaman bağlantının kendisinden alınır.</p>}
       <dl className="cache-facts">
         {proxies.prefixes.length > 0 && (
@@ -260,9 +265,9 @@ function Certificate({ cert, now }: { cert: CacheStatus['tls_certificate']; now:
       <h2 className="card-title">
         <ShieldCheck size={16} strokeWidth={1.75} />
         TLS sertifikası
+        <InfoTip label="TLS sertifikası">Server’ın agent’lara ve panele sunduğu sertifika. Dosya değişince yeniden başlatmadan yüklenir.</InfoTip>
         <StatusBadge tone={expiry.tone}>{expiry.text}</StatusBadge>
       </h2>
-      <p className="card-desc">Server’ın agent’lara ve panele sunduğu sertifika. Dosya değişince yeniden başlatmadan yüklenir.</p>
       <dl className="cache-facts">
         <FactRow label="Kime verilmiş">
           <span className="mono">{cert.subject || '—'}</span>

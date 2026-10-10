@@ -9,6 +9,8 @@ import { PageHeader } from '../components/PageHeader'
 import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
+import { FieldLabel } from '../components/FieldLabel'
+import { InfoTip } from '../components/InfoTip'
 import { Building2, Pencil, Server, Trash2, UserPlus, Users, UserCog } from 'lucide-react'
 import { HostAssignment } from './HostAssignment'
 import { buildTree } from './orgTree'
@@ -241,14 +243,12 @@ export function UsersPage() {
             <input id="new-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
           <div className="form-row">
-            <label htmlFor="new-name">Ad soyad</label>
+            <FieldLabel htmlFor="new-name" label="Ad soyad" hint="İsteğe bağlı; panelde ve bildirim kurallarında görünen ad. Giriş e-postayla yapılır." />
             <input id="new-name" value={fullName} onChange={(e) => setFullName(e.target.value)} maxLength={200} />
-            <p className="form-hint">İsteğe bağlı; panelde ve bildirim kurallarında görünen ad. Giriş e-postayla yapılır.</p>
           </div>
           <div className="form-row">
-            <label htmlFor="new-phone">Telefon</label>
+            <FieldLabel htmlFor="new-phone" label="Telefon" hint="İsteğe bağlı; ileride SMS bildirimi için." />
             <input id="new-phone" value={phone} onChange={(e) => setPhone(e.target.value)} inputMode="tel" maxLength={32} />
-            <p className="form-hint">İsteğe bağlı; ileride SMS bildirimi için.</p>
           </div>
           <div className="form-row">
             <label htmlFor="new-password">Şifre</label>
@@ -319,11 +319,11 @@ export function UsersPage() {
             <h2 className="card-title">
               <Building2 size={16} strokeWidth={1.75} />
               Organizasyon ataması
+              <InfoTip label="Organizasyon ataması">
+                Bir organizasyona atanan yönetici o organizasyonu ve altındaki tüm dalı yönetir; üst şirketini yalnızca adıyla (bilgi olarak)
+                görür, kardeş dalları göremez.
+              </InfoTip>
             </h2>
-            <p className="card-desc">
-              Bir organizasyona atanan yönetici o organizasyonu ve altındaki tüm dalı yönetir; üst şirketini yalnızca adıyla (bilgi olarak)
-              görür, kardeş dalları göremez.
-            </p>
             {buildTree(orgs).map(({ org: o, depth }) => (
               <label key={o.id} className="check-row" style={{ paddingLeft: depth * 20 }}>
                 <input

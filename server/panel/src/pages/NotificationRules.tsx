@@ -4,6 +4,8 @@ import { channelsApi, notificationsApi, type RouteScope } from '../api/endpoints
 import type { AlertLevel, ChannelOption, NotificationChannel, NotificationRoute, RecipientCandidate } from '../types/api'
 import { StatusBadge } from '../components/StatusBadge'
 import { EmptyState } from '../components/EmptyState'
+import { FieldLabel } from '../components/FieldLabel'
+import { InfoTip } from '../components/InfoTip'
 import { useAuth } from '../auth/AuthContext'
 import { alertLevelLabel } from '../labels'
 import { LEVEL_CHOICES, candidateKey, candidateLabel, candidatesForNewRoute, channelChoices, channelLabel, describeCoverage } from './notificationRules'
@@ -76,8 +78,8 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
       <h2 className="card-title">
         <BellRing size={16} strokeWidth={1.75} />
         Bildirim kuralları
+        <InfoTip label="Bildirim kuralları">{describeCoverage(isHost ? 'host' : 'organization', can('settings.view'))}</InfoTip>
       </h2>
-      <p className="card-desc">{describeCoverage(isHost ? 'host' : 'organization', can('settings.view'))}</p>
       {error && <div className="error-banner">{error}</div>}
 
       {routes !== null && list.length === 0 ? (
@@ -144,7 +146,11 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
       {canEdit && (
         <form onSubmit={handleAdd} className="rule-form">
           <div className="form-row">
-            <label htmlFor="rule-recipient">Alıcı</label>
+            <FieldLabel
+              htmlFor="rule-recipient"
+              label="Alıcı"
+              hint={`Yalnızca bu kapsamdaki yöneticiler${isHost ? ', bu sunucuya atanmış operatörler' : ''} ve organizasyonun iletişim kişileri seçilebilir.`}
+            />
             <select id="rule-recipient" value={recipient} onChange={(e) => setRecipient(e.target.value)} required>
               <option value="">Seçin…</option>
               {available.map((c) => (
@@ -153,9 +159,6 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
                 </option>
               ))}
             </select>
-            <p className="form-hint">
-              Yalnızca bu kapsamdaki yöneticiler{isHost ? ', bu sunucuya atanmış operatörler' : ''} ve organizasyonun iletişim kişileri seçilebilir.
-            </p>
           </div>
           <div className="form-row">
             <label htmlFor="rule-channel">Kanal</label>

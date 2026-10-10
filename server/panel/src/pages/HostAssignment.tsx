@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { InfoTip } from '../components/InfoTip'
 import { hostsApi, usersApi } from '../api/endpoints'
 import type { Host, Organization, User } from '../types/api'
 import {
@@ -93,11 +94,11 @@ export function HostAssignment({
       <h2 className="card-title">
         <Server size={16} strokeWidth={1.75} />
         Sunucu ataması
+        <InfoTip label="Sunucu ataması">
+          Operatör yalnızca seçili sunucuları görür. "Tümünü seç" o organizasyonun <em>şu anki</em> sunucularını işaretler; sonradan
+          eklenen sunucular otomatik atanmaz.
+        </InfoTip>
       </h2>
-      <p className="card-desc">
-        Operatör yalnızca seçili sunucuları görür. "Tümünü seç" o organizasyonun <em>şu anki</em> sunucularını
-        işaretler; sonradan eklenen sunucular otomatik atanmaz.
-      </p>
       {error && <div className="error-banner">{error}</div>}
       {groups === null && !error && <div className="muted">Yükleniyor…</div>}
       {anyGroupFailed && (

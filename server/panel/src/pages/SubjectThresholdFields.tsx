@@ -11,6 +11,7 @@ import {
   type MountDraft,
   type MountDrafts,
 } from './thresholds'
+import { InfoTip } from '../components/InfoTip'
 import type { SubjectMetricType, ThresholdLevels } from '../types/api'
 import { DurationField } from './DurationField'
 import { emptyDuration } from './duration'
@@ -146,10 +147,10 @@ export function SubjectThresholdFields({
 
   return (
     <div className="subject-block">
-      <div className="subject-title">{cfg.title}</div>
-      <p className="form-hint" style={{ margin: '2px 0 10px' }}>
-        {cfg.help}
-      </p>
+      <div className="subject-title">
+        {cfg.title}
+        <InfoTip label={cfg.title}>{cfg.help}</InfoTip>
+      </div>
 
       {mounts.map((mount) => {
         const err = cfg.validate(drafts[mount])

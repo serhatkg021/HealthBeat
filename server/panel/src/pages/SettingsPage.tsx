@@ -3,6 +3,8 @@ import { Clock, Database, FileText, Globe, RotateCcw, Save, type LucideIcon } fr
 import { ApiError } from '../api/client'
 import { settingsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
+import { FieldLabel } from '../components/FieldLabel'
+import { InfoTip } from '../components/InfoTip'
 import { StatusBadge } from '../components/StatusBadge'
 import { useTab } from '../components/useTab'
 import type { SettingsField, SettingsResponse } from '../types/api'
@@ -138,18 +140,33 @@ function GeneralSection({
 
   return (
     <form className="card form-card settings-card" onSubmit={handleSave}>
-      <h2 className="card-title">{section.title}</h2>
-      <p className="card-desc">{section.description}</p>
+      <h2 className="card-title">
+        {section.title}
+        <InfoTip label={section.title}>{section.description}</InfoTip>
+      </h2>
       {error && <div className="error-banner">{error}</div>}
       {section.fields.map((f) => {
         const changed = data.changed.includes(f.field)
         const id = `setting-${f.field}`
         return (
           <div className="form-row" key={f.field}>
-            <div className="setting-head">
-              <label htmlFor={id}>{f.label}</label>
+            <FieldLabel
+              htmlFor={id}
+              label={f.label}
+              hint={
+                <>
+                  {f.hint} <span className="muted">({defaultText(f, data.defaults[f.field])})</span>
+                </>
+              }
+            >
               {changed && <StatusBadge tone="neutral">değiştirildi</StatusBadge>}
-            </div>
+              {canEdit && changed && (
+                <button type="button" className="link-btn" disabled={busy} onClick={() => run(() => settingsApi.reset([f.field]))}>
+                  <RotateCcw size={12} strokeWidth={2} />
+                  Varsayılana dön
+                </button>
+              )}
+            </FieldLabel>
             <div className="input-with-unit">
               {f.kind === 'select' ? (
                 <select id={id} value={draft[f.field] ?? ''} disabled={!canEdit} onChange={(e) => setDraft({ ...draft, [f.field]: e.target.value })}>
@@ -172,15 +189,6 @@ function GeneralSection({
               {f.unit && <span className="muted">{f.unit}</span>}
             </div>
             {errors[f.field] && <p className="field-error flush">{errors[f.field]}</p>}
-            <p className="form-hint">
-              {f.hint} <span className="muted">({defaultText(f, data.defaults[f.field])})</span>
-              {canEdit && changed && (
-                <button type="button" className="link-btn" disabled={busy} onClick={() => run(() => settingsApi.reset([f.field]))}>
-                  <RotateCcw size={12} strokeWidth={2} />
-                  Varsayılana dön
-                </button>
-              )}
-            </p>
           </div>
         )
       })}

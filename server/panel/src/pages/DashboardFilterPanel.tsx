@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Search } from 'lucide-react'
+import { InfoTip } from '../components/InfoTip'
 import type { AlertLevel, AlertType } from '../types/api'
 import { alertLevelLabel, alertMetricLabel, hostStatusLabel } from '../labels'
 import { LEVELS, METRIC_GROUPS, SINCE_LABELS, SINCE_WINDOWS, type DashboardFilters, type SinceKey } from './dashboardFilters'
@@ -33,8 +34,10 @@ function Choice<T extends string>({
 function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
     <fieldset className="filter-section">
-      <legend>{title}</legend>
-      {hint && <p className="form-hint filter-hint">{hint}</p>}
+      <legend>
+        {title}
+        {hint && <InfoTip label={title}>{hint}</InfoTip>}
+      </legend>
       {children}
     </fieldset>
   )

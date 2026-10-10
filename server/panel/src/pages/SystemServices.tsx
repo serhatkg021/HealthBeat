@@ -8,6 +8,7 @@ import { SearchInput } from '../components/SearchInput'
 import { useNow } from '../components/useNow'
 import { StatTile } from '../components/StatTile'
 import { StatusBadge } from '../components/StatusBadge'
+import { InfoTip } from '../components/InfoTip'
 import { alertRulesPath } from '../navigation'
 import type { Host, HostService, HostStatusRuleView } from '../types/api'
 import { formatUptime, healthEmptyText } from './inventory'
@@ -191,11 +192,11 @@ export function SystemServices({ host }: { host: Host }) {
           <h2 className="card-title">
             <Eye size={16} strokeWidth={1.75} />
             Listede olmayan izlenen servisler
+            <InfoTip label="Listede olmayan izlenen servisler">
+              Agent’ın son bildirdiği listede olmayan servisler de izlenebilir (ör. henüz kurulmamış ya da geçici olarak görünmeyen).
+              Raporlanmayan izlenen bir servis alert üretmez; listede yeniden görününce değerlendirilir.
+            </InfoTip>
           </h2>
-          <p className="card-desc">
-            Agent’ın son bildirdiği listede olmayan servisler de izlenebilir (ör. henüz kurulmamış ya da geçici olarak görünmeyen).
-            Raporlanmayan izlenen bir servis alert üretmez; listede yeniden görününce değerlendirilir.
-          </p>
           {missing.length === 0 ? (
             <p className="form-hint">Yok.</p>
           ) : (

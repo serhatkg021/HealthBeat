@@ -2371,6 +2371,10 @@ pre.secret-box {
 }
 
 .subject-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
   font-size: 13px;
   font-weight: 600;
 }
@@ -2878,6 +2882,9 @@ body.scroll-lock {
 }
 
 .filter-section legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   float: left;
   width: 100%;
   margin: 0 0 10px;
@@ -2890,9 +2897,6 @@ body.scroll-lock {
   clear: both;
 }
 
-.filter-hint {
-  margin: -4px 0 10px;
-}
 
 .filter-field {
   margin-top: 14px;
@@ -3096,10 +3100,17 @@ body.scroll-lock {
 }
 
 /* ---------- Sistem ayarları ---------- */
-.setting-head {
+/* Form alanının etiketi, açıklama düğmesi ve yanındaki küçük öğeler tek satırda. */
+.field-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 4px 8px;
+}
+
+.field-head .link-btn {
+  margin-left: 0;
+  font-size: 12.5px;
 }
 
 .input-with-unit {
@@ -3198,11 +3209,6 @@ textarea {
     min-width: 0;
     overflow-wrap: anywhere;
   }
-}
-
-/* Kart başlığının içindeki açıklama başlığın hemen altında durur (üstüne binmez). */
-.card-head .card-desc {
-  margin: 3px 0 0;
 }
 
 /* Yana kayan menüler (sekmeler, bölüm menüleri, süzgeçler; bkz. useScrollStrips): hep tek satır, öğeler daralmaz. Görünmeyen
@@ -3340,11 +3346,6 @@ textarea {
 }
 
 /* Cache Durumu */
-.table-card > .cache-desc {
-  margin: 0;
-  padding: 0 18px 12px;
-}
-
 .cache-keys {
   margin-top: 6px;
   font-size: 12px;
@@ -3374,6 +3375,9 @@ textarea {
 }
 
 .limiter-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin: 0;
   font-size: 13.5px;
   font-weight: 600;
@@ -4459,13 +4463,13 @@ textarea {
   padding: 0;
   border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
   border-radius: 50%;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  background: transparent;
   color: var(--accent);
   cursor: pointer;
   transition: background-color 0.12s, border-color 0.12s, box-shadow 0.12s;
 }
 
-/* Üzerine gelince ve açıkken biraz koyulaşır, dolmaz; açıkken çevresinde halka olur. */
+/* Normalde arka plan şeffaftır; üzerine gelince ve açıkken hafif dolgu alır, açıkken çevresinde halka olur. */
 .info-tip-button:hover {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 26%, transparent);
