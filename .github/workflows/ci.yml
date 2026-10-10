@@ -91,8 +91,12 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       # Araç sürümleri sabit: @latest bir gün kendiliğinden güncellenip CI'ı kod değişmeden kırabilir.
+      # Geçici: staticcheck v0.8.1, Go 1.27.2 derleyicisinin dışa aktarma biçimini okuyamıyor; lint Go 1.27.1 ile çalışır
+      # (derleme, testler ve govulncheck go.mod'daki sürümle). staticcheck'in Go 1.27.2'yi tanıyan sürümü çıkınca env kaldırılır.
       - name: staticcheck
         working-directory: server
+        env:
+          GOTOOLCHAIN: go1.27.1
         run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
       # Yalnızca kodun gerçekten çağırdığı açıklar başarısız sayılır; kullanılmayan paketlerdeki bildirimler yalnızca listelenir.
       - name: govulncheck

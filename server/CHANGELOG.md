@@ -79,6 +79,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - Panel: kendi bildirim kuralı olmayan sunucu ya da organizasyonda "bildirimler yalnızca sistem sahiplerine gider"
   yazıyordu; organizasyon ya da üst organizasyon kuralları da geçerli olduğu için yanıltıcıydı. Artık "bu sunucuya /
   organizasyona özel ek alıcı yok" yazıyor.
+- Server Go 1.27.2 ile derleniyor: Go 1.27.1 standart kütüphanesindeki `net/http`, HTTP/2, `crypto/tls` ve `net/textproto`
+  güvenlik açıkları (GO-2026-6603, 6605, 6607, 6608, 6610, 6611, 6612, 6613, 6617) kapandı.
 
 ### İç değişiklikler (davranış değişmedi)
 - Panel: geliştirme bağımlılığı güncellendi — `source-map-js` 1.2.2 (CVE-2026-93749; panel çıktısı değişmez).
