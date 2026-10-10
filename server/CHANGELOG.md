@@ -156,6 +156,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   organizasyona özel ek alıcı yok" yazıyor.
 - Server Go 1.27.2 ile derleniyor: Go 1.27.1 standart kütüphanesindeki `net/http`, HTTP/2, `crypto/tls` ve `net/textproto`
   güvenlik açıkları (GO-2026-6603, 6605, 6607, 6608, 6610, 6611, 6612, 6613, 6617) kapandı.
+- Server container'ında her sağlık kontrolünde (15 sn) bir zombi süreç birikiyordu (`docker stats`'ta PIDS sürekli
+  artıyordu): kontrolü yapan busybox `wget`'in TLS yardımcısı `ssl_client` toplanmıyordu. Kontrolü artık server binary'si
+  yapıyor (`healthbeat-server healthcheck`); alt süreç açılmıyor. Sağlık kontrolü `HTTP_ADDR`'deki portu kullanıyor
+  (önceden 8443 sabitti). Güncellemeden önce biriken zombiler container yeniden başlayınca temizlenir.
 
 ### İç değişiklikler (davranış değişmedi)
 - Panel: geliştirme bağımlılığı güncellendi — `source-map-js` 1.2.2 (CVE-2026-93749; panel çıktısı değişmez).
