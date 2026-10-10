@@ -43,6 +43,15 @@ jobs:
         run: |
           go vet ./...
           go test ./... -race
+      # Araç sürümleri ve geçici GOTOOLCHAIN ayarı server-lint işindekiyle aynı (gerekçesi orada).
+      - name: staticcheck
+        working-directory: agent
+        env:
+          GOTOOLCHAIN: go1.27.1
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+      - name: govulncheck
+        working-directory: agent
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
       - name: install.sh testleri
         run: agent/deploy/install_test.sh
       - name: nfpm kur

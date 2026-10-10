@@ -61,8 +61,12 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   eşzamanlı çağrılara karşı korumalı.
 - Proje MIT lisansıyla yayınlanıyor: `.deb`/`.rpm` paketlerinin lisans alanı `MIT` oldu, `LICENSE` dosyası paketlere
   (`/usr/share/doc/healthbeat/LICENSE`) ve tarball'a eklendi.
+- Agent Go 1.27.2 ile derleniyor (önceden Go 1.22): Go 1.22'nin standart kütüphanesinde kalan güvenlik açıkları
+  (`net/http`, HTTP/2, `crypto/tls`, `crypto/x509`, `net/textproto` ve diğerleri) kapandı. Davranış ve rapor alanları
+  değişmedi; binary ~2 MB büyüdü. Kaynaktan derlemek için Go 1.27 gerekir.
 
 ### İç değişiklikler (davranış değişmedi)
+- CI agent kodunu da staticcheck ve govulncheck ile denetliyor (önceden yalnızca server).
 - `install_test.sh`: senaryoların kök dizinleri `mktemp` ile açılıyor; `$RANDOM` adları arada çakışıp testi dengesizleştiriyordu.
 
 ## [1.0.0] - 2026-09-22
