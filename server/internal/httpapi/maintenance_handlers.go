@@ -139,34 +139,40 @@ type scopeItem struct {
 }
 
 type maintenanceView struct {
-	ID              uuid.UUID        `json:"id"`
-	Title           string           `json:"title"`
-	Recurrence      string           `json:"recurrence"`
-	StartsAt        *time.Time       `json:"starts_at,omitempty"`
-	EndsAt          *time.Time       `json:"ends_at,omitempty"`
-	StartsLocal     *string          `json:"starts_local,omitempty"`
-	EndsLocal       *string          `json:"ends_local,omitempty"`
-	StartTime       *string          `json:"start_time,omitempty"`
-	DurationMinutes *int             `json:"duration_minutes,omitempty"`
-	RepeatEvery     int              `json:"repeat_every"`
-	Weekdays        []int            `json:"weekdays,omitempty"`
-	MonthDay        *int             `json:"month_day,omitempty"`
-	MonthWeek       *int             `json:"month_week,omitempty"`
-	MonthWeekday    *int             `json:"month_weekday,omitempty"`
-	ValidFrom       *string          `json:"valid_from,omitempty"`
-	ValidUntil      *string          `json:"valid_until,omitempty"`
-	EndedAt         *time.Time       `json:"ended_at,omitempty"`
-	EndedLocal      *string          `json:"ended_local,omitempty"`
-	Hosts           []scopeItem      `json:"hosts"`
-	Organizations   []scopeItem      `json:"organizations"`
-	HiddenScope     int              `json:"hidden_scope"`
-	Status          string           `json:"status"` // active | scheduled | past
-	Current         *occurrenceView  `json:"current,omitempty"`
-	Next            *occurrenceView  `json:"next,omitempty"`
-	Upcoming        []occurrenceView `json:"upcoming,omitempty"`
-	CanManage       bool             `json:"can_manage"`
-	CreatedAt       time.Time        `json:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at"`
+	ID              uuid.UUID       `json:"id"`
+	Title           string          `json:"title"`
+	Recurrence      string          `json:"recurrence"`
+	StartsAt        *time.Time      `json:"starts_at,omitempty"`
+	EndsAt          *time.Time      `json:"ends_at,omitempty"`
+	StartsLocal     *string         `json:"starts_local,omitempty"`
+	EndsLocal       *string         `json:"ends_local,omitempty"`
+	StartTime       *string         `json:"start_time,omitempty"`
+	DurationMinutes *int            `json:"duration_minutes,omitempty"`
+	RepeatEvery     int             `json:"repeat_every"`
+	Weekdays        []int           `json:"weekdays,omitempty"`
+	MonthDay        *int            `json:"month_day,omitempty"`
+	MonthWeek       *int            `json:"month_week,omitempty"`
+	MonthWeekday    *int            `json:"month_weekday,omitempty"`
+	ValidFrom       *string         `json:"valid_from,omitempty"`
+	ValidUntil      *string         `json:"valid_until,omitempty"`
+	EndedAt         *time.Time      `json:"ended_at,omitempty"`
+	EndedLocal      *string         `json:"ended_local,omitempty"`
+	Hosts           []scopeItem     `json:"hosts"`
+	Organizations   []scopeItem     `json:"organizations"`
+	HiddenScope     int             `json:"hidden_scope"`
+	Status          string          `json:"status"` // active | scheduled | past
+	Current         *occurrenceView `json:"current,omitempty"`
+	Next            *occurrenceView `json:"next,omitempty"`
+	// Last, geçmiş bir pencerenin son yaşanan tekrarıdır (son bir yıl içinde; yoksa verilmez).
+	Last     *occurrenceView  `json:"last,omitempty"`
+	Upcoming []occurrenceView `json:"upcoming,omitempty"`
+	// SkippedLocal, atlanmış ve henüz gelmemiş tekrarların başlangıçlarıdır (yerel saat; listede neden eksik oldukları
+	// anlaşılsın diye).
+	SkippedLocal []string `json:"skipped_local,omitempty"`
+	// CanManage, çağıranın pencereyi yönetebildiğidir (kapsamın tamamı dalında); bitirilmiş pencere yalnızca silinebilir.
+	CanManage bool      `json:"can_manage"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func occurrence(o maintenance.Occurrence, loc *time.Location) occurrenceView {
@@ -346,7 +352,7 @@ func (d *Deps) maintenanceView(ctx context.Context, a *maintenanceAccess, canMan
 		if err != nil {
 			return v, err
 		}
-		v.CanManage = ok && w.EndedAt == nil
+		v.CanManage = ok // bitirilmiş pencere yine silinebilir; düzenleme kuralını ended_at belirler
 	}
 
 	cur, running := maintenance.Current(w, loc, now)
@@ -360,6 +366,15 @@ func (d *Deps) maintenanceView(ctx context.Context, a *maintenanceAccess, canMan
 		v.Status = "scheduled"
 	default:
 		v.Status = "past"
+		if past := maintenance.Occurrences(w, loc, now.AddDate(-1, 0, 0), now); len(past) > 0 {
+			o := occurrence(past[len(past)-1], loc)
+			v.Last = &o
+		}
+	}
+	for _, ov := range w.Overrides {
+		if ov.EndedAt == nil && ov.OccurrenceStart.After(now) {
+			v.SkippedLocal = append(v.SkippedLocal, ov.OccurrenceStart.In(loc).Format(localDateTime))
+		}
 	}
 	if len(next) > 0 {
 		o := occurrence(next[0], loc)

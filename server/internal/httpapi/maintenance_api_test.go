@@ -40,6 +40,8 @@ type maintenanceJSON struct {
 	Status        string           `json:"status"`
 	Current       *occurrenceJSON  `json:"current"`
 	Next          *occurrenceJSON  `json:"next"`
+	Last          *occurrenceJSON  `json:"last"`
+	SkippedLocal  []string         `json:"skipped_local"`
 	Upcoming      []occurrenceJSON `json:"upcoming"`
 	CanManage     bool             `json:"can_manage"`
 }
@@ -278,8 +280,8 @@ func TestMaintenanceEndSkipAndEndOccurrence(t *testing.T) {
 	}
 	var cut maintenanceJSON
 	a.expect(200, "POST", maintenancePath+"/"+running.ID.String()+"/end-occurrence", root, nil, &cut)
-	if cut.Status != "past" || cut.Current != nil {
-		t.Fatalf("after end-occurrence = %+v", cut)
+	if cut.Status != "past" || cut.Current != nil || cut.Last == nil || cut.Last.StartLocal != local(now.Add(-time.Hour)) {
+		t.Fatalf("after end-occurrence = %+v, want past with the occurrence as the last one", cut)
 	}
 	a.expect(409, "POST", maintenancePath+"/"+running.ID.String()+"/end-occurrence", root, nil, nil)
 
@@ -297,10 +299,13 @@ func TestMaintenanceEndSkipAndEndOccurrence(t *testing.T) {
 	if skipped.Next == nil || skipped.Next.StartLocal != now.AddDate(0, 0, 2).Format("2006-01-02")+"T02:00" || slices.Contains(localStarts(skipped.Upcoming), first) {
 		t.Fatalf("after skip-next: next %+v upcoming %v", skipped.Next, localStarts(skipped.Upcoming))
 	}
+	if !slices.Equal(skipped.SkippedLocal, []string{first}) {
+		t.Fatalf("skipped_local = %v, want [%s]", skipped.SkippedLocal, first)
+	}
 
 	var ended maintenanceJSON
 	a.expect(200, "POST", maintenancePath+"/"+daily.ID.String()+"/end", root, nil, &ended)
-	if ended.EndedAt == nil || ended.Status != "past" || ended.Next != nil || ended.CanManage {
+	if ended.EndedAt == nil || ended.Status != "past" || ended.Next != nil || !ended.CanManage {
 		t.Fatalf("after end = %+v", ended)
 	}
 	a.expect(409, "POST", maintenancePath+"/"+daily.ID.String()+"/end", root, nil, nil)
