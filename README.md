@@ -27,7 +27,7 @@ Geliştirme durumu ve açık işler: [`PROGRESS.md`](PROGRESS.md).
 
 ## Hızlı başlangıç (geliştirme)
 
-Gereksinimler: Go ≥ 1.27 (agent için ≥ 1.22), **PostgreSQL ≥ 15**, Node ≥ 22, `openssl`.
+Gereksinimler: Go ≥ 1.27, **PostgreSQL ≥ 15**, Node ≥ 22, `openssl`.
 
 ```sh
 # 1) Veritabanı (boş bir veritabanı yeterli: şema server açılırken kendiliğinden kurulur)

@@ -4,7 +4,8 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-10 — Server container'ında sağlık kontrolünün bıraktığı zombi süreçler giderildi: kontrolü
+**Son güncelleme:** 2026-10-10 — Agent Go 1.27.2'ye geçti (Go 1.22'deki standart kütüphane açıkları); CI agent'ı da
+staticcheck ve govulncheck ile denetliyor. Aynı gün: Server container'ında sağlık kontrolünün bıraktığı zombi süreçler giderildi: kontrolü
 artık server binary'si yapıyor (`healthbeat-server healthcheck`). Aynı gün: **Sunucu sayfası konuya göre** (panel):
 Performans 7 konuya ayrıldı (şu an kutuları, alert kuralları, eşik çizgili ve büyütülebilir grafikler, son rapor yan yana; menüde açık alert noktası), Envanter dört kart (Makine,
 İşletim sistemi ve ağ, Saat, Bakım); sayfa açıklamaları kaldırıldı. Aynı gün: **Alert kuralları konuya göre**: üç kapsamda da kurallar 8 konuya gruplu (solda konu
@@ -26,7 +27,7 @@ Geliştirme sürecinden gelen tarih temizlendi: tek baseline migration, `client`
 
 ## Ortam ve nasıl çalıştırılır
 
-**Gereken araçlar:** Go ≥ 1.27 (agent için ≥ 1.22), PostgreSQL ≥ 15, Node ≥ 22, `openssl`; dağıtım testleri için Docker.
+**Gereken araçlar:** Go ≥ 1.27, PostgreSQL ≥ 15, Node ≥ 22, `openssl`; dağıtım testleri için Docker.
 
 ```sh
 # Server (veritabanı testleri TEST_DATABASE_URL'de geçici şema açar, sonra siler; ASLA üretim veritabanına yöneltme)

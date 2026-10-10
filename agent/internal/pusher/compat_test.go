@@ -30,10 +30,10 @@ func (f *fakeSender) Push(_ context.Context, p MetricsPayload) error {
 }
 
 var (
-	bad400  = &StatusError{Status: 400, Body: `{"error":"geçersiz istek gövdesi"}`}
-	fail500 = &StatusError{Status: 500, Body: "boom"}
-	fail401 = &StatusError{Status: 401, Body: "nope"}
-	netErr  = errors.New("send request: connection refused")
+	bad400     = &StatusError{Status: 400, Body: `{"error":"geçersiz istek gövdesi"}`}
+	fail500    = &StatusError{Status: 500, Body: "boom"}
+	fail401    = &StatusError{Status: 401, Body: "nope"}
+	errNetwork = errors.New("send request: connection refused")
 )
 
 func full() MetricsPayload {
@@ -168,7 +168,7 @@ func TestCompatDegradedSendsCoreThenProbesFullPayload(t *testing.T) {
 // Yalnızca 400 uyumsuzluk sayılır; kimlik, hız sınırı, 5xx ve ağ hataları olduğu gibi bildirilir
 // ve TEK istekle biter (çekirdek payload ile yeniden denenmez).
 func TestCompatOnlyFallsBackOn400(t *testing.T) {
-	for name, e := range map[string]error{"500": fail500, "401": fail401, "network": netErr} {
+	for name, e := range map[string]error{"500": fail500, "401": fail401, "network": errNetwork} {
 		f := &fakeSender{results: []error{e}}
 		c, _ := newTestCompat(f)
 		err := c.Push(context.Background(), full())
@@ -194,10 +194,10 @@ func TestCompatDoesNotDegradeWhenCorePayloadIsRejectedToo(t *testing.T) {
 }
 
 func TestCompatDegradedCoreFailureIsReportedAndKeepsMode(t *testing.T) {
-	f := &fakeSender{results: []error{bad400, nil, netErr}}
+	f := &fakeSender{results: []error{bad400, nil, errNetwork}}
 	c, _ := newTestCompat(f)
 	_ = c.Push(context.Background(), full())
-	if err := c.Push(context.Background(), full()); err != netErr {
+	if err := c.Push(context.Background(), full()); err != errNetwork {
 		t.Errorf("err = %v, want the network error", err)
 	}
 	if !c.Degraded() {
