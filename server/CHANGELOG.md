@@ -22,11 +22,36 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   `000007_protocol4_health_performance.down.sql` (önce `000007`, sonra `000006`'nınki) ya da yedekle: `.down.sql` yeni
   türlerdeki alert'leri ve eşikleri, servis listelerini, izlenen servis seçimini, durum kurallarını ve protokol 4 zaman
   serisini siler.
+- Migration `000008` (bakım pencereleri) de açılışta uygulanır. Yalnızca ekleme yapar: `maintenance_windows`,
+  `maintenance_window_hosts`, `maintenance_window_orgs` ve `maintenance_occurrence_overrides` tabloları,
+  `alerts.notify_pending` ve `app_settings.timezone` sütunları, `maintenance.view` / `maintenance.manage` izinleri.
+  Güncelleme sırasında hâlâ çalışan eski server süreci bu şemayla çalışır. Geri dönüş
+  `000008_maintenance_windows.down.sql` (sonra `000007`'ninki, `000006`'nınki) ya da yedekle: `.down.sql` bakım
+  pencerelerini ve saat dilimi ayarını siler; bakım yüzünden ertelenmiş bildirimler gönderilmeden kalır.
 - **Yeni alert türleri kapalı gelir.** Disk gecikmesi, sıcaklık, servis yeniden başlatma ve saat farkı için eşik; servis
   çalışmıyor, container sağlıksız, RAID bozuk gibi durumlar için durum kuralı tanımlanmadıkça alert açılmaz (sistem
   varsayılanı yoktur). Panelde Alert kuralları'ndan açılır.
 
 ### Eklendi
+- **Bakım pencereleri** (Alert Yönetimi → Bakım pencereleri; önceden "Yakında"). Pencere sürerken kapsamındaki
+  sunucuların alert'leri kaydedilir ama **bildirim gönderilmez**; bakım bitince hâlâ açık olan alert'ler güncel
+  durumlarıyla bildirilir (e-postada "bakım sırasında açıldı" notu), bakımda açılıp çözülenler bildirilmez.
+  - Tek seferlik ya da tekrarlı: günlük, haftalık (seçilen günler), aylık (ayın günü, son günü ya da ilk/…/son haftanın
+    günü); "her N gün / hafta / ayda bir" ve geçerlilik tarihleri. Süre günlükte en çok 24 saat, haftalık ve aylıkta 7 gün.
+  - Kapsam sunucular ve/veya organizasyonlar; organizasyon yalnızca doğrudan bağlı sunucularını kapsar.
+  - **Pencereyi bitir** (seri kapanır), **Bu tekrarı bitir** (süren tekrar) ve **Sıradaki tekrarı atla**.
+  - Liste (tür, kapsam, süren / sıradaki / son tekrar, durum; satır açılınca kural, geçerlilik, kapsam ve sonraki 3
+    tekrar) ve önizlemeli form. Sunucu sayfasında bakım şeridi ve "Bakım planla"; Sunucular ve Özet'te "Bakımda" rozeti;
+    Alert'lerde bildirimi ertelenen alert için "Bakım bitince". Bakım tarihleri `YYYY.AA.GG SS:DD (+3)` biçimindedir.
+  - Görmek `maintenance.view` (üç rol), yönetmek `maintenance.manage` (süper admin, organizasyon admin; pencerenin bütün
+    kapsamını yönetebilmeli). İşlemler denetim kaydına yazılır (Denetim Kaydı'nda "Bakım" kategorisi).
+- API: `GET/POST /api/v1/maintenance-windows`, `GET/PUT/DELETE /api/v1/maintenance-windows/:id`, `POST …/preview`,
+  `POST …/:id/end`, `POST …/:id/end-occurrence`, `POST …/:id/skip-next`. Saatler kurulumun saat diliminde yerel saat
+  olarak alınır ve verilir (`"2026-10-12T01:00"`, `"02:30"`); yanıtlar kesin anı (UTC) da taşır. Sunucu yanıtlarına
+  `maintenance_until` / `maintenance_until_local`, alert yanıtlarına `notify_pending` eklendi.
+- **Saat dilimi ayarı** (Ayarlar → Saat dilimi; `PATCH /api/v1/settings` → `timezone`, IANA adı). Boşsa server'ın
+  `TZ`'si, o da yoksa UTC. `/api/v1/meta` `timezone`, `utc_offset`, `utc_offset_seconds` ve `server_time` döndürür;
+  panelin alt çubuğunda server saati görünür.
 - **Panel: Sistem Araçları** (sol menüde Ayarlar'ın üstünde; araçlar sayfanın içinde sekmelerle ayrılır). İlk araç **Kuyruk
   Durumu**: bildirim kuyruğunda teslim bekleyen, yeniden denenecek, gönderilmiş ve vazgeçilmiş satırların sayısı, en eski
   bekleyenin yaşı, veritabanı bağlantı havuzunun kullanımı (kullanılan / en çok) ve satırların duruma ve türe göre
@@ -91,6 +116,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
+- Alert e-postalarındaki saatler kurulumun saat diliminde, dilimin adı ve o andaki ofsetiyle yazılıyor
+  ("11.10.2026 00:57:21 (Europe/Istanbul, UTC+3)"). Saat dilimi ayarlanmamışsa ve server'ın `TZ`'si yoksa eskisi gibi UTC.
+- Panel: Ayarlar'da değiştirilmiş bir alanın "değiştirildi" rozeti ve "Varsayılana dön" düğmesi alanın sağında.
 - **Panel: yeni düzen.** Sol menü üç gruba ayrıldı: **İzleme** (Özet, Sunucular, Alert'ler), **Alert Yönetimi** (Alert
   kuralları, Bakım pencereleri, Bildirim) ve **Yönetim** (Organizasyonlar, Kullanıcılar); altta Sistem Araçları ve Ayarlar.
   - **Sunucular:** görülebilen tüm sunucuların süzülebilir listesi ve sunucu ekleme tek sayfada; operatörün "Sunucularım"
@@ -106,7 +134,7 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - **Envanter** dört kart: Makine, İşletim sistemi ve ağ, Saat (senkron ayrıntısıyla), Bakım (güncellemeler, yeniden
     başlatma, çalışma süresi); Saat ve Bakım'da alert kuralları. Kaynak kullanımı Performans'tadır.
   - Sayfa başlarındaki açıklama satırları kaldırıldı. Kart ve form alanı açıklamaları başlığın ya da etiketin yanındaki ⓘ
-    düğmesinde (Ayarlar'da alanın varsayılanı da orada; "Varsayılana dön" etiketin yanında). Boş durum yazıları, sayılar,
+    düğmesinde (Ayarlar'da alanın varsayılanı da orada). Boş durum yazıları, sayılar,
     silme uyarıları ve sunucu ekleme sihirbazının yönlendirmeleri görünür kalır.
   - **Alert kuralları:** sistem, organizasyon ve sunucu eşikleri, durum kuralları ve disk alert seçimi tek sayfada, kapsam
     seçiciyle. Kurallar üç kapsamda da konuya göre gruplu: solda konu menüsü (CPU ve bellek, Disk, Sıcaklık, Servisler,
@@ -122,8 +150,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - **Organizasyon ayarları** (ad, adres, üst şirket, silme) organizasyon listesindeki ve organizasyon sayfasındaki çarkla
     açılan pencerede; silme pencerenin içinde ikinci bir onay ister.
   - **Denetim Kaydı** Sistem Araçları'na taşındı; **Ayarlar** yalnızca kurulum yapılandırmasıdır (agent sürümleri, saklama,
-    oturum, panel adresi, loglama).
-  - Henüz gelmemiş özelliklerin yerleri (bakım pencereleri, Telegram/Webhook, "bu alert kime gider?") "Yakında · örnek veri"
+    oturum, panel adresi, saat dilimi, loglama).
+  - Henüz gelmemiş özelliklerin yerleri (Telegram/Webhook, "bu alert kime gider?") "Yakında · örnek veri"
     olarak gösterilir; örnek veri gerçek sayaçlara ve özetlere karışmaz.
   - Eski adresler (`/thresholds`, `/audit`, `/settings/system`, `/my-hosts` ve eski sekme/bölüm adresleri) yeni yerlerine
     yönlenir.

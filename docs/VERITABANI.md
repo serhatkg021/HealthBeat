@@ -27,6 +27,9 @@ uygulanarak** üretilmiştir; şema değişince tablo ayrıntılarını yeniden 
   çalışmaz. Her alıcı ayrı ileti alır (`notification_outbox`'ta alıcı başına bir satır). Bkz. `docs/MIMARI.md` bölüm 8.
 - **Çalışma zamanı ayarları.** Panelden değişen işletim ayarları (`app_settings`, tek satır) veritabanındadır; varsayılanları
   sütunların `DEFAULT`'ları, sınırları `CHECK`'lerdir ("varsayılana dön" = `SET sütun = DEFAULT`).
+- **Bakım pencereleri** (`000008`): `maintenance_windows` ve kapsamı (`maintenance_window_hosts`,
+  `maintenance_window_orgs`), tek tekrarın istisnaları `maintenance_occurrence_overrides`. Bakımdaki sunucunun bildirimi
+  ertelenir (`alerts.notify_pending`); tekrarlar `app_settings.timezone`'a göre hesaplanır.
 - **Çift kayıt.** `host_inventory.machine_id_hash` aynı makinenin iki kez kaydedilmesini yakalamak için indekslidir; benzersiz
   değildir (klonlanmış sanal makineler aynı kimliği taşır). Panel yalnızca uyarır.
 
@@ -70,6 +73,13 @@ erDiagram
     notification_channels ||--o{ notification_routes : ""
     users ||--o{ app_settings : ""
     users ||--o{ notification_channels : ""
+    users ||--o{ maintenance_windows : ""
+    maintenance_windows ||--o{ maintenance_window_hosts : ""
+    hosts ||--o{ maintenance_window_hosts : ""
+    maintenance_windows ||--o{ maintenance_window_orgs : ""
+    organizations ||--o{ maintenance_window_orgs : ""
+    maintenance_windows ||--o{ maintenance_occurrence_overrides : ""
+    users ||--o{ maintenance_occurrence_overrides : ""
 ```
 
 ## Tablolar
@@ -90,6 +100,7 @@ Sabit roller (`super_admin`, `org_admin`, `operator`); yeni rol eklemek için ye
 Yetki anahtarları (`host.view`, `alert.acknowledge`, …). Kod izni sabit rolden değil bu tablodan denetler.
 Sistem Araçları'nın her aracı ayrı bir izindir (`000006`): `system.queue.view`, `system.cache.view`, `system.logs.view`;
 üçü de yalnızca `super_admin`'e verilir.
+Bakım pencereleri (`000008`): `maintenance.view` üç role, `maintenance.manage` `super_admin` ve `org_admin`'e verilir.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -466,6 +477,9 @@ açılır (`oom_kill`'de: bu kadar süre yeni olay olmazsa kapanır); anlık ola
 ### `alerts`
 
 Alert kayıtları. Sunucu+tür+subject başına en fazla **bir açık** alert (kısmi benzersiz indeks). `value`/`threshold` tetiklendiği andaki ölçüm ve eşik.
+`notify_pending` (`000008`): bir olayın (açılma, seviye değişimi) bildirimi sunucu bakımdayken gönderilmedi; sunucu
+bakımdan çıkınca hâlâ aktif olan alert'in güncel durumu bildirilir ve bayrak kalkar. Bakımda çözülen alert'in bayrağı da
+kalkar (çözülmesi bildirilmez).
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -481,6 +495,7 @@ Alert kayıtları. Sunucu+tür+subject başına en fazla **bir açık** alert (k
 | `acknowledged_at` | timestamptz | evet |  |
 | `acknowledged_by` | uuid | evet |  |
 | `resolved_at` | timestamptz | evet |  |
+| `notify_pending` | boolean | hayır | `false` |
 
 - **CHECK** `alerts_alert_type_check`: ((alert_type = ANY (ARRAY['cpu'::text, 'ram'::text, 'disk'::text, 'docker_restart'::text, 'host_offline'::text, 'disk_missing'::text, 'service_failed'::text, 'service_restart_loop'::text, 'container_unhealthy'::text, 'container_oom'::text, 'disk_latency'::text, 'oom_kill'::text, 'fs_readonly'::text, 'raid_degraded'::text, 'temperature'::text, 'time_sync'::text, 'reboot_required'::text, 'security_updates'::text])))
 - **CHECK** `alerts_level_check`: ((level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
@@ -489,6 +504,7 @@ Alert kayıtları. Sunucu+tür+subject başına en fazla **bir açık** alert (k
 - **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
 - **PK** (id)
 - **İndeks** `alerts_host_id_idx`: `btree (host_id)`
+- **İndeks** `alerts_notify_pending_idx`: `btree (host_id) WHERE notify_pending` — bildirimi bakım yüzünden ertelenmiş alert'ler (`000008`)
 - **Benzersiz indeks** `alerts_one_active_uidx`: `btree (host_id, alert_type, subject) NULLS NOT DISTINCT WHERE (status <> 'resolved'::text)` — bir sunucu + tür + konu için en fazla bir aktif (açık ya da onaylanmış) alert (`000002`)
 - **İndeks** `alerts_resolved_at_idx`: `btree (resolved_at) WHERE (status = 'resolved'::text)` — çözülmüş alert saklama temizliği için (`000004`)
 - **İndeks** `alerts_status_idx`: `btree (status)`
@@ -510,6 +526,102 @@ kuralıyla aynıdır (sunucu + tür + konu). Server yeniden başlasa da süre ko
 - **CHECK** `alert_pending_level_check`: ((level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
 - **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
 - **UNIQUE** `alert_pending_key`: NULLS NOT DISTINCT (host_id, alert_type, subject)
+
+### `maintenance_windows`
+
+Bakım pencereleri (`000008`): pencere sürerken kapsamındaki sunucuların alert'leri kaydedilir, bildirimi gönderilmez
+(bkz. `alerts.notify_pending`). `recurrence = 'once'` mutlak aralıktır (`starts_at`–`ends_at`). Diğerleri kurulumun saat
+diliminde (`app_settings.timezone`) tekrar eder: `valid_from` gününden (sayımın çapası, geçmiş bir gün olabilir) başlayarak
+her `repeat_every` gün / hafta / ayda bir, gün içinde `start_minute`'te başlar ve `duration_minutes` sürer (gece yarısını
+geçebilir; günlükte en çok 24 saat, haftalık ve aylıkta 7 gün). Haftalıkta günler `weekdays` bit maskesidir (bit 0 =
+Pazartesi … bit 6 = Pazar). Aylıkta ya ayın günü (`month_day`: 1–28, -1 = son gün) ya da ayın n'inci haftanın günü
+(`month_week`: 1–4, -1 = son; `month_weekday`: 1 = Pazartesi … 7 = Pazar). `ended_at` "pencereyi bitir" anıdır: seriyi
+kapatır, süren tekrarı da o anda bitirir; bitirilmiş pencere düzenlenemez, silinebilir.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `id` | uuid | hayır | `gen_random_uuid()` |
+| `title` | text | hayır |  |
+| `recurrence` | text | hayır |  |
+| `starts_at` | timestamptz | evet |  |
+| `ends_at` | timestamptz | evet |  |
+| `start_minute` | smallint | evet |  |
+| `duration_minutes` | integer | evet |  |
+| `repeat_every` | smallint | hayır | `1` |
+| `weekdays` | smallint | evet |  |
+| `month_day` | smallint | evet |  |
+| `month_week` | smallint | evet |  |
+| `month_weekday` | smallint | evet |  |
+| `valid_from` | date | evet |  |
+| `valid_until` | date | evet |  |
+| `ended_at` | timestamptz | evet |  |
+| `created_by` | uuid | evet |  |
+| `created_at` | timestamptz | hayır | `now()` |
+| `updated_at` | timestamptz | hayır | `now()` |
+
+- **CHECK** `maintenance_windows_duration_chk`: (((duration_minutes >= 1) AND (duration_minutes <= CASE recurrence WHEN 'daily'::text THEN 1440 ELSE 10080 END)))
+- **CHECK** `maintenance_windows_month_day_check`: ((((month_day >= 1) AND (month_day <= 28)) OR (month_day = '-1'::integer)))
+- **CHECK** `maintenance_windows_month_week_check`: ((((month_week >= 1) AND (month_week <= 4)) OR (month_week = '-1'::integer)))
+- **CHECK** `maintenance_windows_month_weekday_check`: (((month_weekday >= 1) AND (month_weekday <= 7)))
+- **CHECK** `maintenance_windows_monthly_chk`: ((((recurrence = 'monthly'::text) = ((month_day IS NOT NULL) OR (month_week IS NOT NULL))) AND (NOT ((month_day IS NOT NULL) AND (month_week IS NOT NULL))) AND ((month_week IS NULL) = (month_weekday IS NULL))))
+- **CHECK** `maintenance_windows_range_chk`: ((ends_at > starts_at))
+- **CHECK** `maintenance_windows_recurrence_check`: ((recurrence = ANY (ARRAY['once'::text, 'daily'::text, 'weekly'::text, 'monthly'::text])))
+- **CHECK** `maintenance_windows_repeat_every_chk`: (((repeat_every >= 1) AND (repeat_every <= CASE recurrence WHEN 'once'::text THEN 1 WHEN 'daily'::text THEN 30 ELSE 12 END)))
+- **CHECK** `maintenance_windows_shape_chk`: (CASE WHEN (recurrence = 'once'::text) THEN ((starts_at IS NOT NULL) AND (ends_at IS NOT NULL) AND (start_minute IS NULL) AND (duration_minutes IS NULL) AND (valid_from IS NULL) AND (valid_until IS NULL)) ELSE ((starts_at IS NULL) AND (ends_at IS NULL) AND (start_minute IS NOT NULL) AND (duration_minutes IS NOT NULL) AND (valid_from IS NOT NULL)) END)
+- **CHECK** `maintenance_windows_start_minute_check`: (((start_minute >= 0) AND (start_minute <= 1439)))
+- **CHECK** `maintenance_windows_title_check`: (((length(btrim(title)) >= 1) AND (length(btrim(title)) <= 200)))
+- **CHECK** `maintenance_windows_valid_range_chk`: ((valid_until >= valid_from))
+- **CHECK** `maintenance_windows_weekdays_check`: (((weekdays >= 1) AND (weekdays <= 127)))
+- **CHECK** `maintenance_windows_weekdays_chk`: (((recurrence = 'weekly'::text) = (weekdays IS NOT NULL)))
+- **FK** (created_by) REFERENCES users(id) ON DELETE SET NULL
+- **PK** (id)
+
+### `maintenance_window_hosts`
+
+Bakım penceresinin kapsamındaki sunucular (`000008`).
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `window_id` | uuid | hayır |  |
+| `host_id` | uuid | hayır |  |
+
+- **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
+- **FK** (window_id) REFERENCES maintenance_windows(id) ON DELETE CASCADE
+- **PK** (window_id, host_id)
+- **İndeks** `maintenance_window_hosts_host_idx`: `btree (host_id)`
+
+### `maintenance_window_orgs`
+
+Bakım penceresinin kapsamındaki organizasyonlar (`000008`). Organizasyon yalnızca **doğrudan bağlı** sunucularını
+kapsar; alt organizasyonlar ayrıca seçilir. Kapsam alert anında değerlendirilir: sonradan eklenen sunucu da girer.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `window_id` | uuid | hayır |  |
+| `organization_id` | uuid | hayır |  |
+
+- **FK** (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
+- **FK** (window_id) REFERENCES maintenance_windows(id) ON DELETE CASCADE
+- **PK** (window_id, organization_id)
+- **İndeks** `maintenance_window_orgs_org_idx`: `btree (organization_id)`
+
+### `maintenance_occurrence_overrides`
+
+Tekrarlı bir pencerenin tek bir tekrarının istisnası (`000008`): "Sıradaki tekrarı atla" ya da "Bu tekrarı bitir".
+`occurrence_start` o tekrarın başladığı (başlayacağı) andır; `ended_at` boşsa tekrar atlanmıştır, doluysa o anda erken
+bitirilmiştir.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `window_id` | uuid | hayır |  |
+| `occurrence_start` | timestamptz | hayır |  |
+| `ended_at` | timestamptz | evet |  |
+| `created_by` | uuid | evet |  |
+| `created_at` | timestamptz | hayır | `now()` |
+
+- **FK** (created_by) REFERENCES users(id) ON DELETE SET NULL
+- **FK** (window_id) REFERENCES maintenance_windows(id) ON DELETE CASCADE
+- **PK** (window_id, occurrence_start)
 
 ### `notification_routes`
 
@@ -648,7 +760,9 @@ gövdesiyle saklanır (alert'in bildirim geçmişi); hesap e-postaları ve alert
 
 Panelden (Ayarlar) değişen çalışma zamanı ayarları (`000005`): **tek satır** (`id = 1`). Varsayılanlar sütunların
 `DEFAULT`'larıdır, sınırlar `CHECK`'lerdir; server açılışta okur, değişince yeniden başlatmadan uygular. Süreler saniyedir;
-`NULL` sürüm "tanımsız" demektir. Bkz. `docs/DEPLOYMENT.md` §2.1.
+`NULL` sürüm "tanımsız" demektir. Bkz. `docs/DEPLOYMENT.md` §2.1. `timezone` (`000008`) kurulumun saat dilimidir (IANA
+adı, ör. `Europe/Istanbul`): tekrarlı bakım pencereleri ve e-postalardaki saatler buna göredir; boşsa server sürecinin `TZ`'si,
+o da yoksa UTC. Adın geçerliliğini server denetler.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -669,6 +783,7 @@ Panelden (Ayarlar) değişen çalışma zamanı ayarları (`000005`): **tek sat�
 | `log_file_max_total_mb` | integer | hayır | `1024` |
 | `updated_at` | timestamptz | hayır | `now()` |
 | `updated_by` | uuid | evet |  |
+| `timezone` | text | hayır | `''::text` |
 
 - **CHECK** `app_settings_access_token_ttl_chk`: (((access_token_ttl_seconds >= 60) AND (access_token_ttl_seconds <= 86400)))
 - **CHECK** `app_settings_latest_agent_version_chk`: ((latest_agent_version ~ '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'::text))
@@ -680,6 +795,7 @@ Panelden (Ayarlar) değişen çalışma zamanı ayarları (`000005`): **tek sat�
 - **CHECK** `app_settings_refresh_token_ttl_chk`: ((((refresh_token_ttl_seconds >= 3600) AND (refresh_token_ttl_seconds <= 7776000)) AND (refresh_token_ttl_seconds > access_token_ttl_seconds)))
 - **CHECK** `app_settings_retention_chk`: (((metrics_retention_days >= 0) AND (audit_retention_days >= 0) AND (resolved_alert_retention_days >= 0)))
 - **CHECK** `app_settings_single_row_chk`: ((id = 1))
+- **CHECK** `app_settings_timezone_check`: ((length(timezone) <= 64))
 - **FK** (updated_by) REFERENCES users(id) ON DELETE SET NULL
 - **PK** (id)
 
