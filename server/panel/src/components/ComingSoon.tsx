@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Sparkles, type LucideIcon } from 'lucide-react'
 
 // Henüz gelmemiş bir özelliğin yeri: kesik çerçeveli, soluk bir kart ve "Yakında · örnek veri" rozeti. İçerik yalnızca
-// özelliğin nasıl görüneceğini anlatan ÖRNEK veridir (bkz. comingSoonSamples.ts); tıklanamaz, odak almaz ve hiçbir gerçek
+// özelliğin nasıl görüneceğini anlatan ÖRNEK veridir (gerçek bir sunucudan gelmez); tıklanamaz, odak almaz ve hiçbir gerçek
 // sayaca karışmaz. Özellik gelince bu kart gerçek bileşenle değiştirilir.
 export function ComingSoon({
   title,

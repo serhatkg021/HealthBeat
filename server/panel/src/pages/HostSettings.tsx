@@ -1,6 +1,6 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { KeyRound, Plug, RotateCw, Save, SlidersHorizontal, Trash2, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { BellRing, CalendarPlus, KeyRound, Plug, RotateCw, Save, SlidersHorizontal, Trash2, TriangleAlert, Wrench, type LucideIcon } from 'lucide-react'
 import { hostsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import type { Permission } from '../auth/permissions'
@@ -8,8 +8,9 @@ import { Modal } from '../components/Modal'
 import { SecretNotice } from '../components/SecretNotice'
 import { useTab } from '../components/useTab'
 import type { Host } from '../types/api'
-import { alertRulesPath, notificationsPath } from '../navigation'
+import { MAINTENANCE_PATH, alertRulesPath, notificationsPath } from '../navigation'
 import { HostEffectiveRules } from './HostEffectiveRules'
+import { HostNotificationPreview } from './NotificationPreview'
 
 const SECTION_PARAM = 'bolum'
 
@@ -24,12 +25,16 @@ interface Section {
 const SECTIONS: Section[] = [
   { id: 'baglanti', label: 'Bağlantı ve kimlik', icon: Plug, requires: 'host.update' },
   { id: 'kurallar', label: 'Geçerli alert kuralları', icon: SlidersHorizontal, requires: 'threshold.view' },
+  // "bildirim" eski bölümün adı (Bildirim sayfasına yönlenir); bu yüzden "bildirimler".
+  { id: 'bildirimler', label: 'Bildirimler', icon: BellRing, requires: 'notification.view' },
+  { id: 'bakim', label: 'Bakım', icon: Wrench, requires: 'maintenance.view' },
   { id: 'tehlike', label: 'Tehlikeli bölge', icon: TriangleAlert, requires: 'host.delete' },
 ]
 
 // Sunucu sayfasının "Ayarlar" sekmesi: bu sunucunun ayarları, bölümlere ayrılmış bir iç menüyle. Alert kuralları
 // (eşikler, disk seçimi) burada salt okunur özetlenir ve Alert kuralları sayfasında, bildirim kuralları Bildirim
-// sayfasında düzenlenir. Bağlantı/kimlik ve silme bölümleri izni olmayana hiç görünmez.
+// sayfasında düzenlenir; "Bildirimler" bu sunucunun alert'lerinin şu an kime gittiğini gösterir, "Bakım" bakım planlamaya
+// götürür. Bağlantı/kimlik ve silme bölümleri izni olmayana hiç görünmez.
 export function HostSettings({
   host,
   onChanged,
@@ -152,6 +157,42 @@ export function HostSettings({
           )}
 
         {can('threshold.view') && panel('kurallar', <HostEffectiveRules hostId={host.id} />)}
+
+        {can('notification.view') &&
+          panel(
+            'bildirimler',
+            <HostNotificationPreview
+              hostId={host.id}
+              hostTitle={host.title}
+              footer={<Link to={notificationsPath('kurallar', { kind: 'sunucu', id: host.id })}>Bu sunucunun bildirim kurallarını düzenle →</Link>}
+            />,
+          )}
+
+        {can('maintenance.view') &&
+          panel(
+            'bakim',
+            <div className="card form-card">
+              <h2 className="card-title">
+                <Wrench size={16} strokeWidth={1.75} />
+                Bakım
+              </h2>
+              <p className="card-desc">
+                Bakım penceresinde bu sunucunun alert'leri kaydedilir ve panelde görünür; bildirimleri bakım bitince, hâlâ
+                açıksa gönderilir.
+              </p>
+              <div className="form-actions">
+                {can('maintenance.manage') && (
+                  <Link className="btn btn-primary" to={`${MAINTENANCE_PATH}?sekme=yeni&sunucu=${host.id}`}>
+                    <CalendarPlus size={15} strokeWidth={1.9} />
+                    Bakım planla
+                  </Link>
+                )}
+                <Link className="btn" to={MAINTENANCE_PATH}>
+                  Bakım pencereleri
+                </Link>
+              </div>
+            </div>,
+          )}
 
         {can('host.delete') &&
           panel(
