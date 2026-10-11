@@ -285,7 +285,7 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   - Aynı kanal ve adres bir kez bildirilir (sahip olan biri bir kuralda da geçse tek ileti alır).
   - **Varsayılan alıcı yoktur:** süper admin ya da organizasyon yöneticisi olmak kendiliğinden bildirim almak demek değildir.
     Hiç sahip ve kural yoksa bildirim kimseye gitmez; panel bunu süper admine bir uyarı bandıyla söyler.
-  - **"Bu alert kime gider?"** (Bildirim → Bildirim kuralları; sunucu sayfasında "Kime gider?"): bir sunucu ve seviye
+  - **"Bu alert kime gider?"** (Bildirim → Bildirim kuralları; sunucu sayfasında Ayarlar → Bildirimler): bir sunucu ve seviye
     için alıcılar gerçek gönderimin kurallarıyla (`alertengine.Engine.Preview`) hesaplanır: gidecekler kaynaklarıyla
     (sahip / organizasyon / sunucu, aynı adresi ayrıca veren kaynaklar dahil), gitmeyecekler nedeniyle (kanal kapalı ya da
     desteklenmiyor) ve sunucu bakımdaysa bunun notu. Sistem sahipleri yalnızca `settings.view` olana adıyla görünür;

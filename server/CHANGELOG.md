@@ -33,6 +33,14 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   varsayılanı yoktur). Panelde Alert kuralları'ndan açılır.
 
 ### Eklendi
+- **Panel: "Bu alert kime gider?"** (önceden "Yakında"): bir sunucu ve seviye seçilince bildirimin şu an kime gideceği.
+  Alıcılar gerçek gönderimin kurallarıyla hesaplanır: sistem sahipleri, sunucunun organizasyonu ile üst organizasyonların
+  kuralları ve sunucunun kendi kuralları. Her alıcının nereden geldiği yazılır (aynı adresi ayrıca veren kurallar
+  "ayrıca: …" olarak; adres yine tek ileti alır); kanalı kapalı ya da desteklenmeyen alıcılar "Gitmeyecekler"de nedeniyle
+  listelenir; sunucu bakımdaysa bildirimin bakım bitince gideceği yazılır. Bildirim → Bildirim kuralları sekmesinde ve
+  sunucu sayfasında Ayarlar → Bildirimler'de. Sistem sahiplerinin adları yalnızca `settings.view` olana gösterilir;
+  ötekine kanal başına sayı olarak gelir.
+- API: `GET /api/v1/hosts/:id/notification-preview?level=…` (`notification.view`; seviye verilmezse `critical`).
 - **Bakım pencereleri** (Alert Yönetimi → Bakım pencereleri; önceden "Yakında"). Pencere sürerken kapsamındaki
   sunucuların alert'leri kaydedilir ama **bildirim gönderilmez**; bakım bitince hâlâ açık olan alert'ler güncel
   durumlarıyla bildirilir (e-postada "bakım sırasında açıldı" notu), bakımda açılıp çözülenler bildirilmez.
@@ -41,8 +49,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - Kapsam sunucular ve/veya organizasyonlar; organizasyon yalnızca doğrudan bağlı sunucularını kapsar.
   - **Pencereyi bitir** (seri kapanır), **Bu tekrarı bitir** (süren tekrar) ve **Sıradaki tekrarı atla**.
   - Liste (tür, kapsam, süren / sıradaki / son tekrar, durum; satır açılınca kural, geçerlilik, kapsam ve sonraki 3
-    tekrar) ve önizlemeli form. Sunucu sayfasında bakım şeridi ve "Bakım planla"; Sunucular ve Özet'te "Bakımda" rozeti;
-    Alert'lerde bildirimi ertelenen alert için "Bakım bitince". Bakım tarihleri `YYYY.AA.GG SS:DD (+3)` biçimindedir.
+    tekrar) ve önizlemeli form. Sunucu sayfasında bakım şeridi ve Ayarlar → Bakım'da "Bakım planla"; Sunucular ve
+    Özet'te "Bakımda" rozeti; Alert'lerde bildirimi ertelenen alert için "Bakım bitince". Bakım tarihleri
+    `YYYY.AA.GG SS:DD (+3)` biçimindedir.
   - Görmek `maintenance.view` (üç rol), yönetmek `maintenance.manage` (süper admin, organizasyon admin; pencerenin bütün
     kapsamını yönetebilmeli). İşlemler denetim kaydına yazılır (Denetim Kaydı'nda "Bakım" kategorisi).
 - API: `GET/POST /api/v1/maintenance-windows`, `GET/PUT/DELETE /api/v1/maintenance-windows/:id`, `POST …/preview`,
