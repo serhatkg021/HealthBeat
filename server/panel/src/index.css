@@ -742,6 +742,12 @@ code, .mono {
   padding: 14px 18px 4px;
 }
 
+/* Tablolu kartta başlık + düğmeler satırı: kart iç boşluksuz olduğu için kenarlardan kendisi uzak durur. */
+.table-card > .card-title-row {
+  flex-wrap: wrap;
+  padding: 14px 18px 0;
+}
+
 .table-scroll {
   overflow-x: auto;
 }
@@ -3190,6 +3196,30 @@ body.scroll-lock {
 
 .rule-warning {
   margin-top: 4px;
+}
+
+/* Sunucu ayarlarındaki "Geçerli alert kuralları": konu başlığı satırı (CPU ve bellek, Disk …), tablo başlığından ayrı dursun. */
+.rule-topic-row th {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+tbody + tbody .rule-topic-row th {
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 860px) {
+  table.stack .rule-topic-row {
+    padding: 0;
+  }
+
+  table.stack .rule-topic-row th {
+    display: block;
+    padding: 9px 14px;
+    border-top: none;
+  }
 }
 
 /* "Bu alert kime gider?": gitmeyecekler tablodan ayrı dursun; aynı adresi ayrıca veren kaynaklar kaynağın altında küçük

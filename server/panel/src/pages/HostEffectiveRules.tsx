@@ -5,7 +5,7 @@ import { hostsApi } from '../api/endpoints'
 import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../auth/AuthContext'
 import { alertRulesPath, notificationsPath } from '../navigation'
-import { diskAlertSummary, effectiveRules, statusEffectiveRules, type EffectiveRule, type RuleSource } from './effectiveRules'
+import { DISK_SELECTION_KEY, diskAlertSummary, effectiveRules, groupByTopic, statusEffectiveRules, type EffectiveRule, type RuleSource } from './effectiveRules'
 
 const SOURCE: Record<RuleSource, { label: string; tone: 'warning' | 'neutral' }> = {
   custom: { label: 'bu sunucuya özel', tone: 'warning' },
@@ -13,7 +13,8 @@ const SOURCE: Record<RuleSource, { label: string; tone: 'warning' | 'neutral' }>
   none: { label: '—', tone: 'neutral' },
 }
 
-// Sunucu ayarlarındaki salt okunur "Geçerli alert kuralları": her kuralın şu an geçerli değeri ve nereden geldiği. Düzenleme
+// Sunucu ayarlarındaki salt okunur "Geçerli alert kuralları": her kuralın şu an geçerli değeri ve nereden geldiği, Alert
+// kuralları sayfasındaki konulara göre gruplu (CPU ve bellek, Disk …). Düzenleme
 // Alert kuralları sayfasında, bu sunucunun kapsamında yapılır (organizasyon zincirini görebilenler orada değerin hangi
 // organizasyondan geldiğini de görür).
 export function HostEffectiveRules({ hostId }: { hostId: string }) {
@@ -71,23 +72,22 @@ export function HostEffectiveRules({ hostId }: { hostId: string }) {
               <th>Kaynak</th>
             </tr>
           </thead>
-          <tbody>
-            {rules.map((r) => (
-              <RuleRow key={r.key} rule={r} />
-            ))}
-            {disks && (
-              <tr>
-                <td className="primary">Disk alert’i üreten mount’lar</td>
-                <td data-label="Geçerli değer">{disks}</td>
-                <td data-label="Kaynak">
-                  <span className="muted">—</span>
-                </td>
+          {groupByTopic([
+            ...rules,
+            ...(disks ? [{ key: DISK_SELECTION_KEY, label: 'Disk alert’i üreten mount’lar', value: disks, source: 'none' as const }] : []),
+            ...statusRules,
+          ]).map((g) => (
+            <tbody key={g.id}>
+              <tr className="rule-topic-row">
+                <th colSpan={3} scope="colgroup">
+                  {g.title}
+                </th>
               </tr>
-            )}
-            {statusRules.map((r) => (
-              <RuleRow key={r.key} rule={r} />
-            ))}
-          </tbody>
+              {g.rows.map((r) => (
+                <RuleRow key={r.key} rule={r} />
+              ))}
+            </tbody>
+          ))}
         </table>
       )}
     </div>

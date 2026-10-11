@@ -1,6 +1,7 @@
 // Sunucu sayfasındaki salt okunur "Geçerli alert kuralları"nın saf mantığı: sunucunun eşik yanıtını, her kuralın
 // geçerli değeri ve nereden geldiğiyle satırlara çevirir. React içermez; Node'un çalıştırıcısıyla birim test edilir.
 import type { HostStatusRuleView, HostThresholdsResponse } from '../types/api.ts'
+import { TOPICS, itemKey } from './ruleTopics.ts'
 import { ruleInfo, settingText } from './statusRules.ts'
 import { METRICS, formatLevels, metricInfo } from './thresholds.ts'
 
@@ -50,6 +51,41 @@ export function statusEffectiveRules(views: HostStatusRuleView[]): EffectiveRule
     if (v.default) return { key, label, value: settingText(v.rule, v.default), source: 'inherited' }
     return { key, label, value: null, source: 'none' }
   })
+}
+
+// DISK_SELECTION_KEY, disk alert seçiminin satırıdır (Disk konusunda gösterilir).
+export const DISK_SELECTION_KEY = 'selection:disk_mounts'
+
+export interface RuleGroup {
+  id: string
+  title: string
+  rows: EffectiveRule[]
+}
+
+// topicItemKey, bir satırın anahtarını Alert kuralları sayfasındaki öğenin anahtarına çevirir (bkz. ruleTopics itemKey):
+// durum kuralı ve seçim aynıdır; mount eşiği disk, container eşiği docker_restart, "metrik:konu" eşiği metriğin kendisidir.
+function topicItemKey(key: string): string {
+  const head = key.split(':')[0]
+  if (head === 'status' || head === 'selection') return key
+  if (head === 'mount') return 'threshold:disk'
+  if (head === 'container') return 'threshold:docker_restart'
+  return `threshold:${head}`
+}
+
+// groupByTopic, satırları Alert kuralları sayfasının konularına ayırır: konular menü sırasıyla, konu içinde satırlar
+// konunun öğe sırasıyla (aynı öğenin satırları, ör. mount eşikleri, geldikleri sırayla). Satırı olmayan konu listelenmez;
+// hiçbir konuya düşmeyen (yeni bir tür) satırlar sonda "Diğer"dedir.
+export function groupByTopic(rows: EffectiveRule[]): RuleGroup[] {
+  const placed = TOPICS.map((t) => ({ id: t.id, title: t.title, rows: [] as { row: EffectiveRule; order: number }[] }))
+  const other: RuleGroup = { id: 'diger', title: 'Diğer', rows: [] }
+  for (const row of rows) {
+    const k = topicItemKey(row.key)
+    const i = TOPICS.findIndex((t) => t.items.some((x) => itemKey(x) === k))
+    if (i < 0) other.rows.push(row)
+    else placed[i].rows.push({ row, order: TOPICS[i].items.findIndex((x) => itemKey(x) === k) })
+  }
+  const groups = placed.map((g) => ({ id: g.id, title: g.title, rows: g.rows.sort((a, b) => a.order - b.order).map((p) => p.row) }))
+  return [...groups, other].filter((g) => g.rows.length > 0)
 }
 
 // Hangi mount'ların disk alert'i üretebileceğinin tek satırlık özeti.

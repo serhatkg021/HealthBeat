@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, BellRing, ChartLine, CircleArrowUp, Clock, Cpu, Download, HardDrive, MemoryStick, Timer, TriangleAlert, Upload, type LucideIcon } from 'lucide-react'
+import { Activity, BellRing, ChartLine, CircleArrowUp, Clock, Cpu, Download, HardDrive, MemoryStick, TriangleAlert, Upload, type LucideIcon } from 'lucide-react'
 import { alertsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import type { Alert, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
@@ -90,9 +90,9 @@ export function HostOverview({
           tone="accent"
           small
           value={<AgentBadge host={host} policy={policy} />}
-          hint={host.mode === 'push' ? 'Push modu: agent gönderir' : 'Pull modu: server çeker'}
+          // Çalışma biçimi ve rapor aralığı tek satırda.
+          hint={host.mode === 'push' ? `Push · ${host.interval_seconds} sn'de bir rapor` : `Pull · ${host.interval_seconds} sn'de bir sorgu`}
         />
-        <StatTile label="Aralık" icon={Timer} tone="accent" small value={`${host.interval_seconds} sn`} />
         <StatTile label="Son görülme" icon={Clock} small value={host.last_seen ? new Date(host.last_seen).toLocaleString() : '—'} />
       </div>
 
