@@ -4567,6 +4567,24 @@ textarea {
   }
 }
 
+/* Telefonda başlıktaki durum rozeti yalnızca renkli nokta: yazısı (~80 px) adı sıfıra itiyordu. Yazı görsel olarak gizlenir
+   (ekran okuyucu okur, ipucunda görünür); durum Genel sekmesinde yazıyla da durur. */
+@media (max-width: 640px) {
+  .page-title .badge {
+    gap: 0;
+    padding: 5px;
+  }
+
+  .page-title .title-badge-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
+
 /* ---------- Envanter: 2×2 kart ---------- */
 /* Aynı satırdaki iki kart aynı yükseklikte (stretch); alert kuralları listesi kartın dibine yaslanır. */
 .inventory-grid {
