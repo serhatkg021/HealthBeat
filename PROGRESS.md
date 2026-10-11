@@ -4,8 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-11 — Telefonda sunucu sayfası başlığında durum rozeti yalnızca nokta; sunucu adı artık
-görünüyor. Aynı gün: **"Bu alert kime gider?"** (server + panel): bir sunucu ve seviye için bildirimin şu an
+**Son güncelleme:** 2026-10-11 — Sunucu sayfası: Ayarlar'daki geçerli alert kuralları konuya göre gruplu; Genel'de
+"Aralık" kutusu Agent kutusuna katıldı. Aynı gün: telefonda sunucu sayfası başlığında durum rozeti yalnızca nokta; sunucu
+adı artık görünüyor. Aynı gün: **"Bu alert kime gider?"** (server + panel): bir sunucu ve seviye için bildirimin şu an
 kime gideceği, alıcının nereden geldiği ve kime neden gitmeyeceği; gerçek gönderimle aynı kurallarla hesaplanır
 (`GET /api/v1/hosts/:id/notification-preview`). Bildirim kuralları sekmesinde ve sunucu sayfasında Ayarlar → Bildirimler'de;
 "Bakım planla" sunucu başlığından Ayarlar → Bakım'a taşındı. hbe2e'de gerçek bir alert'in bildirimleriyle karşılaştırıldı.
@@ -101,5 +102,3 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 1. Sistem Araçları şimdilik salt okunur; kuyrukta "yeniden dene / iptal", cache'te "önbelleği boşalt" ileride ele alınabilir.
    Log Analiz bir günü baştan sona tarar: çok büyük günlerde (yüzlerce MB) yavaşlar, 15 sn'de zaman aşımına uğrar.
 2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
-3. Panel: sunucu ayarlarındaki salt okunur "Geçerli alert kuralları" da konuya göre gruplanabilir; Genel sekmesinin üstündeki
-   Mod/Aralık kutuları sadeleşebilir.

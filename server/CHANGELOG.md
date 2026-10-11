@@ -125,6 +125,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
+- Panel: sunucu sayfasında Ayarlar → Geçerli alert kuralları, Alert kuralları sayfasındaki konulara göre gruplu (CPU ve
+  bellek, Disk, Sıcaklık, Servisler, Container, Saat, Sistem bakımı); disk alert seçimi Disk konusunda.
+- Panel: sunucu sayfasının Genel sekmesinde ayrı "Aralık" kutusu kaldırıldı; aralık Agent kutusunda çalışma biçimiyle
+  birlikte yazıyor ("Push · 30 sn'de bir rapor").
 - Alert e-postalarındaki saatler kurulumun saat diliminde, dilimin adı ve o andaki ofsetiyle yazılıyor
   ("11.10.2026 00:57:21 (Europe/Istanbul, UTC+3)"). Saat dilimi ayarlanmamışsa ve server'ın `TZ`'si yoksa eskisi gibi UTC.
 - Panel: Ayarlar'da değiştirilmiş bir alanın "değiştirildi" rozeti ve "Varsayılana dön" düğmesi alanın sağında.

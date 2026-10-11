@@ -3192,6 +3192,27 @@ body.scroll-lock {
   margin-top: 4px;
 }
 
+/* Sunucu ayarlarındaki "Geçerli alert kuralları": konu başlığı satırı (CPU ve bellek, Disk …), tablo başlığından ayrı dursun. */
+.rule-topic-row th {
+  padding-top: 16px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+tbody + tbody .rule-topic-row th {
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 860px) {
+  table.stack .rule-topic-row th {
+    display: block;
+    padding: 12px 0 6px;
+    border-top: none;
+  }
+}
+
 /* "Bu alert kime gider?": gitmeyecekler tablodan ayrı dursun; aynı adresi ayrıca veren kaynaklar kaynağın altında küçük
    bir satır; sunucu ayarlarındaki kartın altında kurallara bağlantı. */
 .preview-footer {
