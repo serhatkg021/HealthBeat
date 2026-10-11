@@ -84,7 +84,14 @@ export function HostDetailPage() {
             'Sunucu'
           )
         }
-        badge={host && <StatusBadge tone={host.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(host.status)}</StatusBadge>}
+        // Dar ekranda rozet yalnızca nokta: yazı ekran okuyucuya kalır, ipucunda görünür (bkz. .title-badge-text).
+        badge={
+          host && (
+            <StatusBadge tone={host.status === 'online' ? 'good' : 'critical'} title={hostStatusLabel(host.status)}>
+              <span className="title-badge-text">{hostStatusLabel(host.status)}</span>
+            </StatusBadge>
+          )
+        }
       />
       {error && <div className="error-banner">{error}</div>}
       {host?.maintenance_until_local && (

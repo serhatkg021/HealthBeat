@@ -169,6 +169,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   kuralları ve süre koşulu bekleyen alert'ler).
 
 ### Düzeltildi
+- Panel: telefonda (≤640 px) sunucu sayfasının üst çubuğunda durum rozeti sunucu adını gizliyor ve alert sayaçlarının
+  üstüne taşıyordu. Dar ekranda rozet yalnızca renkli nokta (durum ipucunda); ad görünür, uzunsa kırpılır.
 - `SECRETS_ENCRYPTION_KEY` değiştiğinde (ya da veritabanı başka bir anahtarla geri yüklendiğinde) kayıtlı SMTP şifresi
   çözülemediği için server açılmıyordu. Artık açılıyor: e-posta kanalı "şifre yeniden girilmeli" durumuna geçiyor, e-posta
   gönderimi SMTP sunucusuna bağlanmadan başarısız oluyor (bildirimler kuyrukta yeniden deneniyor, e-posta ile şifre
