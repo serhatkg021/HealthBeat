@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -109,6 +110,21 @@ func (s *Notifications) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
+// Alıcı kaynakları: bir alıcının sistem sahibi olarak mı, bir organizasyonun kuralından mı, sunucunun kendi kuralından mı
+// geldiği.
+const (
+	RecipientSourceOwner        = "owner"
+	RecipientSourceOrganization = "organization"
+	RecipientSourceHost         = "host"
+)
+
+// RecipientSource, bir alıcının nereden geldiğidir. Name yalnızca organizasyon kuralında doludur: kuralın
+// organizasyonunun adı (sunucunun kendi organizasyonu ya da bir üst organizasyon).
+type RecipientSource struct {
+	Kind string
+	Name string
+}
+
 // Recipient, bir alert bildiriminin tek bir alıcısıdır.
 type Recipient struct {
 	Channel string
@@ -117,6 +133,10 @@ type Recipient struct {
 	// ChannelOff, alıcıyı veren kuralın kanalı kapalı (ya da ayarı yapılmamış) demektir: gönderilmez, alert motoru
 	// bunu loglar. Sistem sahipleri kapalı kanaldan hiç gelmez.
 	ChannelOff bool
+	// Source alıcının ilk geldiği yerdir; Also aynı kanal ve adresi ayrıca veren öteki kaynaklardır (tekrarsız): alıcı
+	// yine tek ileti alır, bunlar yalnızca gösterim içindir (bkz. "Bu alert kime gider?" önizlemesi).
+	Source RecipientSource
+	Also   []RecipientSource
 }
 
 // ResolveRecipients, level seviyesindeki bir alert'in alıcılarını belirler (bkz. docs/MIMARI.md bölüm 8). Bildirimin
@@ -128,15 +148,16 @@ type Recipient struct {
 //  3. sunucunun kendi kuralları.
 //
 // Kuralın en düşük seviyesi alert seviyesinin altındaysa kural alıcı üretmez. Aynı kanal ve adres bir kez döner (ilk
-// geldiği yerle: önce sahipler). Hiç sahip ve kural yoksa sonuç boştur.
+// geldiği yerle: önce sahipler; öteki kaynaklar Also'da). Hiç sahip ve kural yoksa sonuç boştur.
 func (s *Notifications) ResolveRecipients(ctx context.Context, hostID, orgID uuid.UUID, level string) ([]Recipient, error) {
 	rows, err := s.pool.Query(ctx, orgChainCTE(2)+`,
 	lv AS (SELECT array_position(ARRAY['info', 'warning', 'critical'], $3::text) AS rank)
-	SELECT channel, address, name, channel_off FROM (
+	SELECT channel, address, name, channel_off, src_kind, src_name FROM (
 		SELECT c.channel,
 		       CASE c.channel WHEN 'sms' THEN CASE WHEN o.sms_enabled THEN o.phone END
 		                      ELSE CASE WHEN o.email_enabled THEN o.email END END AS address,
-		       o.name, false AS channel_off, 0 AS src, lower(o.name) AS sort_name, o.created_at
+		       o.name, false AS channel_off, 0 AS src, lower(o.name) AS sort_name, o.created_at,
+		       'owner' AS src_kind, '' AS src_name
 		FROM notification_owners o
 		JOIN notification_channels c ON c.enabled
 		WHERE array_position(ARRAY['info', 'warning', 'critical'], c.owner_min_level) <= (SELECT rank FROM lv)
@@ -144,11 +165,13 @@ func (s *Notifications) ResolveRecipients(ctx context.Context, hostID, orgID uui
 		SELECT r.channel,
 		       CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, oc.phone) ELSE COALESCE(u.email, oc.email) END,
 		       COALESCE(u.full_name, u.email, oc.name, ''), NOT c.enabled, 1, lower(COALESCE(u.full_name, u.email, oc.name, '')),
-		       r.created_at
+		       r.created_at,
+		       CASE WHEN r.host_id IS NULL THEN 'organization' ELSE 'host' END, COALESCE(og.name, '')
 		FROM notification_routes r
 		JOIN notification_channels c ON c.channel = r.channel
 		LEFT JOIN users u ON u.id = r.user_id
 		LEFT JOIN organization_contacts oc ON oc.id = r.contact_id
+		LEFT JOIN organizations og ON og.id = r.organization_id
 		WHERE (r.host_id = $1 OR r.organization_id IN (SELECT id FROM chain))
 		  AND array_position(ARRAY['info', 'warning', 'critical'], r.min_level) <= (SELECT rank FROM lv)
 	) x
@@ -159,21 +182,25 @@ func (s *Notifications) ResolveRecipients(ctx context.Context, hostID, orgID uui
 	}
 	all, err := collect(rows, func(row interface{ Scan(...any) error }) (Recipient, error) {
 		var r Recipient
-		err := row.Scan(&r.Channel, &r.Address, &r.Name, &r.ChannelOff)
+		err := row.Scan(&r.Channel, &r.Address, &r.Name, &r.ChannelOff, &r.Source.Kind, &r.Source.Name)
 		return r, err
 	})
 	if err != nil {
 		return nil, err
 	}
-	seen := map[string]bool{}
+	seen := map[string]int{} // kanal+adres → out'taki yeri
 	out := []Recipient{}
 	for _, r := range all {
 		key := r.Channel + "\x00" + strings.ToLower(r.Address)
-		if seen[key] {
+		i, dup := seen[key]
+		if !dup {
+			seen[key] = len(out)
+			out = append(out, r)
 			continue
 		}
-		seen[key] = true
-		out = append(out, r)
+		if first := &out[i]; first.Source != r.Source && !slices.Contains(first.Also, r.Source) {
+			first.Also = append(first.Also, r.Source)
+		}
 	}
 	return out, nil
 }

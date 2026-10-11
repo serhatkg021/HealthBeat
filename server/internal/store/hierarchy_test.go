@@ -548,3 +548,81 @@ func TestRecipientCandidatesAreLimitedToTheScope(t *testing.T) {
 		t.Fatalf("host users = %v", u)
 	}
 }
+
+// Alıcının kaynağı ("Bu alert kime gider?" önizlemesi için): ilk geldiği yer Source'ta, aynı kanal ve adresi ayrıca veren
+// öteki kaynaklar tekrarsız Also'da; tekilleştirme ve sıra değişmez.
+func TestNotificationRecipientSources(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	n := store.NewNotifications(pool)
+	contacts := store.NewContacts(pool)
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	route := func(r model.NotificationRoute) {
+		t.Helper()
+		if _, err := n.Create(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	contact := func(org uuid.UUID, name, email string) uuid.UUID {
+		t.Helper()
+		c, err := contacts.Create(ctx, org, store.ContactInput{Name: name, Email: ptr(email)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c.ID
+	}
+	source := func(s store.RecipientSource) string {
+		if s.Name == "" {
+			return s.Kind
+		}
+		return s.Kind + ":" + s.Name
+	}
+
+	holding := testdb.Org(t, pool, "Holding")
+	acme := testdb.ChildOrg(t, pool, "Acme", holding)
+	host := testdb.PushHost(t, pool, acme, "web", "h")
+	holdingAdmin := testdb.User(t, pool, "holding-admin@x.test", "org_admin", "pw")
+	acmeAdmin := testdb.User(t, pool, "acme-admin@x.test", "org_admin", "pw")
+	testdb.AssignOrg(t, pool, holdingAdmin, holding)
+	testdb.AssignOrg(t, pool, acmeAdmin, acme)
+
+	exec(`UPDATE notification_channels SET enabled = true WHERE channel = 'email'`)
+	exec(`INSERT INTO notification_owners (name, email) VALUES ('Ali', 'ali@x.test')`)
+	ayse := contact(acme, "Ayşe", "ayse@musteri.test")
+	route(model.NotificationRoute{OrganizationID: &holding, UserID: &holdingAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
+	route(model.NotificationRoute{HostID: &host, ContactID: &ayse, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
+	// Sahip bir kuralda da geçer (büyük/küçük harf fark etmez): tek alıcı, kural Also'da.
+	route(model.NotificationRoute{OrganizationID: &acme, ContactID: ptr(contact(acme, "Ali (kişi)", "ALI@x.test")), Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
+	// Aynı kişi hem organizasyonun hem sunucunun kuralında: ilk geldiği yer kalır, öteki Also'da.
+	route(model.NotificationRoute{OrganizationID: &acme, ContactID: &ayse, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
+	// Aynı adres aynı kaynaktan iki kez (kullanıcı ve aynı e-postalı kişi): Also'ya kaynak tekrar yazılmaz.
+	route(model.NotificationRoute{OrganizationID: &acme, UserID: &acmeAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
+	route(model.NotificationRoute{OrganizationID: &acme, ContactID: ptr(contact(acme, "Acme yönetici", "acme-admin@x.test")), Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
+
+	rs, err := n.ResolveRecipients(ctx, host, acme, model.AlertLevelWarning)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{}
+	for _, r := range rs {
+		s := r.Address + " " + source(r.Source)
+		for _, a := range r.Also {
+			s += " +" + source(a)
+		}
+		got = append(got, s)
+	}
+	want := []string{
+		"ali@x.test owner +organization:Acme",
+		"acme-admin@x.test organization:Acme",
+		"ayse@musteri.test host +organization:Acme", // aynı ad: önce yazılan kural (sunucu) ilk gelir
+		"holding-admin@x.test organization:Holding",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("sources:\n got  %q\n want %q", got, want)
+	}
+}
