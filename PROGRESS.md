@@ -4,7 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-11 — **Bakım pencereleri** (server + panel): tek seferlik ya da günlük / haftalık / aylık
+**Son güncelleme:** 2026-10-11 — **"Bu alert kime gider?"** (server + panel): bir sunucu ve seviye için bildirimin şu an
+kime gideceği, alıcının nereden geldiği ve kime neden gitmeyeceği; gerçek gönderimle aynı kurallarla hesaplanır
+(`GET /api/v1/hosts/:id/notification-preview`). Bildirim kuralları sekmesinde ve sunucu sayfasında Ayarlar → Bildirimler'de;
+"Bakım planla" sunucu başlığından Ayarlar → Bakım'a taşındı. hbe2e'de gerçek bir alert'in bildirimleriyle karşılaştırıldı.
+Aynı gün: **Bakım pencereleri** (server + panel): tek seferlik ya da günlük / haftalık / aylık
 tekrarlı pencereler, kapsam sunucular ve/veya organizasyonlar; bakımda alert'ler kaydediliyor, bildirim bakım bitince
 (hâlâ açıksa) gidiyor; "Pencereyi bitir", "Bu tekrarı bitir", "Sıradaki tekrarı atla". Kurulum geneli **saat dilimi**
 ayarı (tekrarlar ve e-postadaki saatler buna göre, ofsetiyle); panelin alt çubuğunda server saati. Migration `000008`.
@@ -96,7 +100,6 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 1. Sistem Araçları şimdilik salt okunur; kuyrukta "yeniden dene / iptal", cache'te "önbelleği boşalt" ileride ele alınabilir.
    Log Analiz bir günü baştan sona tarar: çok büyük günlerde (yüzlerce MB) yavaşlar, 15 sn'de zaman aşımına uğrar.
 2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
-3. Panelde "Yakında" olarak yeri hazır olan özellik: "bu alert kime gider?" önizlemesi.
-4. Panel: sunucu ayarlarındaki salt okunur "Geçerli alert kuralları" da konuya göre gruplanabilir; Genel sekmesinin üstündeki
-   Mod/Aralık kutuları sadeleşebilir. Çok dar ekranda (~420 px) sunucu sayfası başlığında ad görünmüyor (durum rozeti ve
-   alert sayaçları yer kaplıyor).
+3. Panel: sunucu ayarlarındaki salt okunur "Geçerli alert kuralları" da konuya göre gruplanabilir; Genel sekmesinin üstündeki
+   Mod/Aralık kutuları sadeleşebilir. Çok dar ekranda (~420 px) sunucu sayfası başlığında ad görünmüyor: durum rozeti
+   (~86 px) küçülmüyor, adı sıfıra itip alert sayaçlarının üstüne taşıyor; öneri: dar ekranda rozet yalnızca renkli nokta.

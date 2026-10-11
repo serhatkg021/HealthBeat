@@ -12,7 +12,7 @@ import { SearchInput } from '../components/SearchInput'
 import { TabPanel, Tabs } from '../components/Tabs'
 import { useTab } from '../components/useTab'
 import { navigation } from '../navigation'
-import { SAMPLE_RECIPIENTS } from './comingSoonSamples'
+import { NotificationPreviewCard } from './NotificationPreview'
 import { NotificationRules } from './NotificationRules'
 import { ChannelsSection, OwnersSection } from './NotificationSettings'
 import { filterContacts, resolveRouteScope, type ContactRow, type RouteScopeChoice } from './notifications'
@@ -130,33 +130,8 @@ function RoutesTab() {
         </div>
       )}
 
-      <div style={{ marginTop: 16 }}>
-        <ComingSoon
-          title="Bu alert kime gider?"
-          description="Bir sunucu ve seviye seçilince sistem sahipleri, organizasyon zinciri ve sunucu kuralları birleştirilip alıcılar gösterilir."
-        >
-          <p className="muted" style={{ margin: '0 0 8px' }}>
-            {SAMPLE_RECIPIENTS.host} · {SAMPLE_RECIPIENTS.level}
-          </p>
-          <table>
-            <thead>
-              <tr>
-                <th>Alıcı</th>
-                <th>Nereden</th>
-                <th>Kanal</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SAMPLE_RECIPIENTS.recipients.map((r) => (
-                <tr key={r.name}>
-                  <td>{r.name}</td>
-                  <td className="muted">{r.source}</td>
-                  <td>{r.channel}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ComingSoon>
+      <div className="page-readable" style={{ marginTop: 16 }}>
+        <NotificationPreviewCard hosts={hosts} orgNames={orgNames} scopeHostId={scope.kind === 'sunucu' ? scope.id : undefined} />
       </div>
     </div>
   )

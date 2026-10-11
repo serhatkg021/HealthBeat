@@ -12,7 +12,7 @@ import type { Host, HostThresholdsResponse, DockerContainerReport, MetricPoint }
 import { StatusBadge } from '../components/StatusBadge'
 import { PageHeader } from '../components/PageHeader'
 import { Link } from 'react-router-dom'
-import { Bell, Boxes, CalendarPlus, ChartLine, LayoutDashboard, MonitorCog, Settings, TriangleAlert, Wrench } from 'lucide-react'
+import { Bell, Boxes, ChartLine, LayoutDashboard, MonitorCog, Settings, TriangleAlert, Wrench } from 'lucide-react'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
 import { useTab } from '../components/useTab'
 import { hostStatusLabel } from '../labels'
@@ -84,19 +84,7 @@ export function HostDetailPage() {
             'Sunucu'
           )
         }
-        badge={
-          host && (
-            <>
-              <StatusBadge tone={host.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(host.status)}</StatusBadge>
-              {can('maintenance.manage') && (
-                <Link className="btn btn-sm title-action" to={`${MAINTENANCE_PATH}?sekme=yeni&sunucu=${host.id}`}>
-                  <CalendarPlus size={14} strokeWidth={1.9} />
-                  Bakım planla
-                </Link>
-              )}
-            </>
-          )
-        }
+        badge={host && <StatusBadge tone={host.status === 'online' ? 'good' : 'critical'}>{hostStatusLabel(host.status)}</StatusBadge>}
       />
       {error && <div className="error-banner">{error}</div>}
       {host?.maintenance_until_local && (

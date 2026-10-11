@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -441,4 +442,120 @@ func TestHostAPIShowsTitleReportedHostnameAndMachineDuplicates(t *testing.T) {
 	if len(got.Same) != 2 {
 		t.Fatalf("super_admin sees %d copies, want 2", len(got.Same))
 	}
+}
+
+// "Bu alert kime gider?" önizlemesi: gidecekler ve gitmeyecekler kaynaklarıyla; sistem sahipleri yalnızca settings.view
+// olana görünür, öteki kullanıcıya kanal başına sayı olarak gelir.
+func TestNotificationPreviewAPI(t *testing.T) {
+	a := newAPI(t)
+	root, _ := a.login("root@x.test", "super_admin")
+	adminTok, adminID := a.login("oa@x.test", "org_admin")
+	opTok, opID := a.login("op@x.test", "operator")
+	orgA, orgB := a.createOrg(root, "A"), a.createOrg(root, "B")
+	testdb.AssignOrg(t, a.pool, adminID, orgA)
+	host := a.createPushHost(root, orgA, "a-1")
+	hostB := a.createPushHost(root, orgB, "b-1")
+	testdb.AssignHost(t, a.pool, opID, host.ID)
+	exec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := a.pool.Exec(context.Background(), sql, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var ayse struct {
+		ID uuid.UUID `json:"id"`
+	}
+	a.expect(201, "POST", "/api/v1/organizations/"+orgA.String()+"/contacts", adminTok,
+		map[string]any{"name": "Ayşe", "email": "ayse@musteri.test", "phone": "+905550000003"}, &ayse)
+	// Sahipler: biri aynı zamanda organizasyon kuralında (aynı adres, tek ileti).
+	exec(`INSERT INTO notification_owners (name, email) VALUES ('Sahip', 'owner@x.test'), ('Ayşe (sahip)', 'ayse@musteri.test')`)
+	a.expect(201, "POST", "/api/v1/notification-routes", adminTok,
+		map[string]any{"organization_id": orgA, "contact_id": ayse.ID, "channel": "email", "min_level": "critical"}, nil)
+	a.expect(201, "POST", "/api/v1/notification-routes", adminTok,
+		map[string]any{"host_id": host.ID, "user_id": adminID, "channel": "email", "min_level": "warning"}, nil)
+	// Kapalı kanaldaki kural: gitmez, nedeniyle döner.
+	exec(`INSERT INTO notification_channels (channel, provider, enabled, owner_min_level) VALUES ('sms', 'test', false, 'critical')`)
+	exec(`INSERT INTO notification_routes (host_id, contact_id, channel, min_level) VALUES ($1, $2, 'sms', 'warning')`, host.ID, ayse.ID)
+
+	type source struct {
+		Kind string `json:"kind"`
+		Name string `json:"name"`
+	}
+	type item struct {
+		Channel string   `json:"channel"`
+		Address string   `json:"address"`
+		Source  source   `json:"source"`
+		Also    []source `json:"also"`
+		Reason  string   `json:"reason"`
+	}
+	type preview struct {
+		HostID        uuid.UUID `json:"host_id"`
+		Level         string    `json:"level"`
+		InMaintenance bool      `json:"in_maintenance"`
+		Recipients    []item    `json:"recipients"`
+		Skipped       []item    `json:"skipped"`
+		OwnersSummary []struct {
+			Channel string `json:"channel"`
+			Count   int    `json:"count"`
+		} `json:"owners_summary"`
+	}
+	str := func(items []item) string {
+		var out []string
+		for _, it := range items {
+			s := it.Channel + ":" + it.Address + " " + it.Source.Kind
+			if it.Source.Name != "" {
+				s += ":" + it.Source.Name
+			}
+			for _, al := range it.Also {
+				s += " +" + al.Kind + ":" + al.Name
+			}
+			if it.Reason != "" {
+				s += " (" + it.Reason + ")"
+			}
+			out = append(out, s)
+		}
+		return strings.Join(out, ", ")
+	}
+	url := "/api/v1/hosts/" + host.ID.String() + "/notification-preview"
+
+	// Süper admin her şeyi görür; seviye verilmezse kritik.
+	var p preview
+	a.expect(200, "GET", url, root, nil, &p)
+	if p.HostID != host.ID || p.Level != "critical" || p.InMaintenance || p.OwnersSummary != nil {
+		t.Fatalf("root preview = %+v", p)
+	}
+	if got, want := str(p.Recipients), "email:ayse@musteri.test owner +organization:A, email:owner@x.test owner, email:oa@x.test host"; got != want {
+		t.Errorf("root recipients:\n got  %s\n want %s", got, want)
+	}
+	if got, want := str(p.Skipped), "sms:+905550000003 host (channel_off)"; got != want {
+		t.Errorf("root skipped:\n got  %s\n want %s", got, want)
+	}
+
+	// Organizasyon yöneticisi ve operatör sahipleri göremez: sayı gelir; sahip olan kural alıcısı kuralıyla görünür.
+	for name, tok := range map[string]string{"org admin": adminTok, "operator": opTok} {
+		p = preview{}
+		a.expect(200, "GET", url+"?level=critical", tok, nil, &p)
+		if got, want := str(p.Recipients), "email:ayse@musteri.test organization:A, email:oa@x.test host"; got != want {
+			t.Errorf("%s recipients:\n got  %s\n want %s", name, got, want)
+		}
+		if len(p.OwnersSummary) != 1 || p.OwnersSummary[0].Channel != "email" || p.OwnersSummary[0].Count != 2 {
+			t.Errorf("%s owners summary = %+v, want 2 by email", name, p.OwnersSummary)
+		}
+		if str(p.Skipped) != "sms:+905550000003 host (channel_off)" {
+			t.Errorf("%s skipped = %s", name, str(p.Skipped))
+		}
+	}
+
+	// Seviye kuralları süzer: uyarıda organizasyonun kritik kuralı yok (Ayşe yalnızca sahip olarak kalır).
+	p = preview{}
+	a.expect(200, "GET", url+"?level=warning", root, nil, &p)
+	if got, want := str(p.Recipients), "email:ayse@musteri.test owner, email:owner@x.test owner, email:oa@x.test host"; got != want {
+		t.Errorf("warning recipients:\n got  %s\n want %s", got, want)
+	}
+
+	a.expect(400, "GET", url+"?level=fatal", root, nil, nil)
+	a.expect(403, "GET", "/api/v1/hosts/"+hostB.ID.String()+"/notification-preview", adminTok, nil, nil)
+	a.expect(403, "GET", "/api/v1/hosts/"+hostB.ID.String()+"/notification-preview", opTok, nil, nil)
+	a.expect(404, "GET", "/api/v1/hosts/"+uuid.NewString()+"/notification-preview", root, nil, nil)
+	a.expect(401, "GET", url, "", nil, nil)
 }

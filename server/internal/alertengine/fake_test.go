@@ -406,6 +406,43 @@ func TestFakeEngineQueuesOneRowPerRecipient(t *testing.T) {
 	}
 }
 
+// Önizleme gerçek gönderimle aynı ayrımı yapar: gidecekler kuyruğa yazılanlarla birebir aynıdır; atlananlar nedeniyle
+// döner. Önizleme hiçbir şey yazmaz.
+func TestFakeEnginePreviewMatchesDelivery(t *testing.T) {
+	f := newFakeEnv(t, fakeRecipients{
+		{Channel: model.ChannelEmail, Address: "a@acme.test", Name: "A"},
+		{Channel: model.ChannelSlack, Address: "#ops", Name: "Slack"},
+		{Channel: model.ChannelSMS, Address: "+905550000000", Name: "Nöbetçi"},
+		{Channel: model.ChannelEmail, Address: "c@acme.test", Name: "C", ChannelOff: true},
+	})
+	p, err := f.engine.Preview(context.Background(), f.host, f.org, model.AlertLevelCritical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.InMaintenance || len(f.outbox.rows) != 0 || len(f.alerts.alerts) != 0 {
+		t.Fatalf("preview = %+v, rows=%d alerts=%d; want no maintenance and nothing written", p, len(f.outbox.rows), len(f.alerts.alerts))
+	}
+	var send, skipped []string
+	for _, r := range p.Recipients {
+		send = append(send, r.Channel+":"+r.Address)
+	}
+	for _, r := range p.Skipped {
+		skipped = append(skipped, r.Address+" "+r.Reason)
+	}
+	if got := strings.Join(skipped, ", "); got != "#ops "+SkipChannelNotSupported+", c@acme.test "+SkipChannelOff {
+		t.Errorf("skipped = %s", got)
+	}
+
+	f.report(95)
+	var delivered []string
+	for _, row := range f.outbox.rows {
+		delivered = append(delivered, row.Channel+":"+strings.Join(row.Recipients, ","))
+	}
+	if strings.Join(send, " ") != strings.Join(delivered, " ") {
+		t.Fatalf("preview recipients %v, delivered %v; want the same", send, delivered)
+	}
+}
+
 // Teslim edilebilir alıcı yoksa bildirim metni hiç kurulmaz (sunucu/organizasyon okunmaz); alert yine kaydedilir.
 func TestFakeEngineSkipsLookupsWithoutRecipients(t *testing.T) {
 	f := newFakeEnv(t, fakeRecipients{{Channel: model.ChannelSlack, Address: "#ops", Name: "Slack"}})

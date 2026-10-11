@@ -193,6 +193,7 @@ GET    /api/v1/me (+ permissions) | /me/hosts | /meta        PATCH /api/v1/me (k
        /api/v1/thresholds[/:id]                 varsayılan eşikler (genel ya da organizasyon)
        /api/v1/status-rules                     durum kuralları (genel ya da organizasyon)
        /api/v1/notification-routes[/:id]        + .../organizations/:id|hosts/:id/notification-routes | -recipients
+GET    /api/v1/hosts/:id/notification-preview?level=…   "Bu alert kime gider?" (notification.view)
        /api/v1/maintenance-windows[/:id]        + POST …/preview | …/:id/end | …/:id/end-occurrence | …/:id/skip-next
 GET    /api/v1/alerts?status=open&level=…       POST /api/v1/alerts/:id/acknowledge · GET …/:id/notifications
        /api/v1/users[/:id]                      + organizations | hosts atamaları
@@ -284,6 +285,11 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   - Aynı kanal ve adres bir kez bildirilir (sahip olan biri bir kuralda da geçse tek ileti alır).
   - **Varsayılan alıcı yoktur:** süper admin ya da organizasyon yöneticisi olmak kendiliğinden bildirim almak demek değildir.
     Hiç sahip ve kural yoksa bildirim kimseye gitmez; panel bunu süper admine bir uyarı bandıyla söyler.
+  - **"Bu alert kime gider?"** (Bildirim → Bildirim kuralları; sunucu sayfasında Ayarlar → Bildirimler): bir sunucu ve seviye
+    için alıcılar gerçek gönderimin kurallarıyla (`alertengine.Engine.Preview`) hesaplanır: gidecekler kaynaklarıyla
+    (sahip / organizasyon / sunucu, aynı adresi ayrıca veren kaynaklar dahil), gitmeyecekler nedeniyle (kanal kapalı ya da
+    desteklenmiyor) ve sunucu bakımdaysa bunun notu. Sistem sahipleri yalnızca `settings.view` olana adıyla görünür;
+    ötekine kanal başına sayı olarak gelir.
 - **Kanallar** (`notification_channels`, Bildirim → Kanallar) sistem düzeyindedir: ayarı (ör. SMTP) ve sırrı
   (şifreli) orada tutulur; ayarı eksik ya da kapalı kanal kurallarda seçilemez. İki tür kanal vardır: **kişiye giden**
   (e-posta, SMS: adres kişinin kaydından gelir; organizasyon/sunucu kurallarında seçilebilir) ve **ortak** (ör. Slack:

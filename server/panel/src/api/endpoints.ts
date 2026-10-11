@@ -38,6 +38,7 @@ import type {
   MetricType,
   MountOverrides,
   NotificationChannel,
+  NotificationPreview,
   NotificationRoute,
   Organization,
   OrganizationContact,
@@ -153,6 +154,8 @@ export const notificationsApi = {
   update: (id: string, patch: { channel?: NotificationChannel; min_level?: AlertLevel }) =>
     apiRequest<NotificationRoute>(`/api/v1/notification-routes/${id}`, { method: 'PUT', body: patch }),
   remove: (id: string) => apiRequest<void>(`/api/v1/notification-routes/${id}`, { method: 'DELETE' }),
+  preview: (hostId: string, level: AlertLevel) =>
+    apiRequest<NotificationPreview>(`/api/v1/hosts/${hostId}/notification-preview?level=${level}`),
 }
 
 export interface CreateHostInput {

@@ -91,6 +91,33 @@ export interface RecipientCandidate {
   source: 'super_admin' | 'org_admin' | 'operator' | 'contact'
 }
 
+// "Bu alert kime gider?" önizlemesi (GET /api/v1/hosts/:id/notification-preview).
+export interface PreviewSource {
+  kind: 'owner' | 'organization' | 'host'
+  name?: string // organizasyon kuralında organizasyonun adı
+}
+
+export interface PreviewRecipient {
+  name: string
+  channel: string
+  address: string
+  source: PreviewSource
+  also?: PreviewSource[]
+  reason?: PreviewSkipReason
+}
+
+export type PreviewSkipReason = 'channel_off' | 'channel_not_supported'
+
+export interface NotificationPreview {
+  host_id: string
+  level: AlertLevel
+  in_maintenance: boolean
+  recipients: PreviewRecipient[]
+  skipped: PreviewRecipient[]
+  // Yalnızca sistem sahiplerini göremeyen kullanıcıda dolu (kanal başına sayı); o zaman sahip satırları listelerde yok.
+  owners_summary: { channel: string; count: number; reason?: PreviewSkipReason }[] | null
+}
+
 export type HostMode = 'push' | 'pull'
 export type HostStatus = 'online' | 'offline'
 
