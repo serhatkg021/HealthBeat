@@ -163,3 +163,20 @@ func TestEndingTheOccurrenceStopsSuppression(t *testing.T) {
 		t.Fatalf("after ending the occurrence: %d emails, want the level change", n)
 	}
 }
+
+// Önizleme bakımdaki sunucuda da alıcıları gösterir ve bakımda olduğunu söyler; bakım bitince işaret kalkar.
+func TestPreviewReportsMaintenance(t *testing.T) {
+	e := newEnv(t)
+	w := e.window(t, []uuid.UUID{e.host}, nil)
+	p, err := e.engine.Preview(e.ctx, e.host, e.org, model.AlertLevelCritical)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.InMaintenance || len(p.Recipients) != 1 || p.Recipients[0].Address != "owner@x.test" {
+		t.Fatalf("preview during maintenance = %+v, want the owner and the maintenance flag", p)
+	}
+	e.endWindow(t, w)
+	if p, err := e.engine.Preview(e.ctx, e.host, e.org, model.AlertLevelCritical); err != nil || p.InMaintenance {
+		t.Fatalf("preview after maintenance = %+v, %v; want no maintenance flag", p, err)
+	}
+}

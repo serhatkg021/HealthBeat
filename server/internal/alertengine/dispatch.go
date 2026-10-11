@@ -45,20 +45,68 @@ func (e *Engine) prepare(ctx context.Context, hostID, orgID uuid.UUID, level str
 		return pending{}
 	}
 	var p pending
-	for _, r := range recipients {
-		switch _, implemented := e.notifiers[r.Channel]; {
-		case r.ChannelOff:
+	var skipped []SkippedRecipient
+	p.recipients, skipped = e.deliverable(recipients)
+	for _, r := range skipped {
+		switch r.Reason {
+		case SkipChannelOff:
 			slog.WarnContext(ctx, "alert engine: notification channel is off, skipping rule", "channel", r.Channel, "recipient", r.Name, "host_id", hostID.String())
-		case !implemented:
-			slog.WarnContext(ctx, "alert engine: channel is not implemented, skipping recipient", "channel", r.Channel, "recipient", r.Name, "host_id", hostID.String())
 		default:
-			p.recipients = append(p.recipients, r)
+			slog.WarnContext(ctx, "alert engine: channel is not implemented, skipping recipient", "channel", r.Channel, "recipient", r.Name, "host_id", hostID.String())
 		}
 	}
 	if len(p.recipients) > 0 {
 		p.mc = e.messageContext(ctx, hostID, orgID)
 	}
 	return p
+}
+
+// Bir alıcının atlanma nedenleri: kuralın kanalı kapalı ya da server o kanaldan gönderemiyor.
+const (
+	SkipChannelOff          = "channel_off"
+	SkipChannelNotSupported = "channel_not_supported"
+)
+
+// SkippedRecipient, bildirimi gitmeyecek bir alıcıdır ve nedenidir.
+type SkippedRecipient struct {
+	store.Recipient
+	Reason string
+}
+
+// deliverable, alıcıları gönderilecekler ve atlananlar (nedeniyle) olarak ayırır; sıra korunur. Gerçek gönderim de
+// önizleme de bunu kullanır: ikisi ayrışamaz.
+func (e *Engine) deliverable(recipients []store.Recipient) (send []store.Recipient, skipped []SkippedRecipient) {
+	for _, r := range recipients {
+		switch _, implemented := e.notifiers[r.Channel]; {
+		case r.ChannelOff:
+			skipped = append(skipped, SkippedRecipient{Recipient: r, Reason: SkipChannelOff})
+		case !implemented:
+			skipped = append(skipped, SkippedRecipient{Recipient: r, Reason: SkipChannelNotSupported})
+		default:
+			send = append(send, r)
+		}
+	}
+	return send, skipped
+}
+
+// Preview, hostID'deki level seviyesindeki bir alert'in bildiriminin şu an kime gideceğidir ("Bu alert kime gider?").
+type Preview struct {
+	// InMaintenance, sunucunun şu an bakımda olduğunu söyler: bildirim bakım bitince gider (listeler yine doludur).
+	InMaintenance bool
+	Recipients    []store.Recipient
+	Skipped       []SkippedRecipient
+}
+
+// Preview, bir alert'in alıcılarını gerçek gönderimin kurallarıyla hesaplar; hiçbir şey yazmaz. Alıcılar okunamazsa hata
+// döner. Bakım pencereleri okunamazsa gerçek gönderim gibi sunucu bakımda sayılmaz.
+func (e *Engine) Preview(ctx context.Context, hostID, orgID uuid.UUID, level string) (Preview, error) {
+	recipients, err := e.notifs.ResolveRecipients(ctx, hostID, orgID, level)
+	if err != nil {
+		return Preview{}, fmt.Errorf("resolve recipients: %w", err)
+	}
+	p := Preview{InMaintenance: e.inMaintenance(ctx, hostID)}
+	p.Recipients, p.Skipped = e.deliverable(recipients)
+	return p, nil
 }
 
 // enqueue, alert'in event olayının bildirimini tx içinde alıcı başına bir satır olarak kuyruğa yazar: her alıcı ayrı
