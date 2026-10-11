@@ -39,6 +39,7 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/organizations/{id}/notification-recipients", d.requirePermission("notification.view", handle(d.handleOrganizationRecipientCandidates)))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/notification-routes", d.requirePermission("notification.view", handle(d.handleListHostRoutes)))
 	mux.HandleFunc("GET /api/v1/hosts/{id}/notification-recipients", d.requirePermission("notification.view", handle(d.handleHostRecipientCandidates)))
+	mux.HandleFunc("GET /api/v1/hosts/{id}/notification-preview", d.requirePermission("notification.view", handle(d.handleNotificationPreview)))
 	mux.HandleFunc("POST /api/v1/notification-routes", d.requirePermission("notification.edit", handle(d.handleCreateRoute)))
 	mux.HandleFunc("PUT /api/v1/notification-routes/{id}", d.requirePermission("notification.edit", handle(d.handleUpdateRoute)))
 	mux.HandleFunc("DELETE /api/v1/notification-routes/{id}", d.requirePermission("notification.edit", handle(d.handleDeleteRoute)))
