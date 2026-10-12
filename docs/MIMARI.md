@@ -82,7 +82,8 @@ Tam şema, ilişkiler ve kısıtlar: **`docs/VERITABANI.md`** (tek kaynak). Öne
   denetimi her zaman `permission_key` üzerindendir (`internal/rbac`). İleride özel roller eklemek yeni satırdır.
 - **Bakım pencereleri** (`maintenance_windows` + kapsam ve tek tekrar istisnası tabloları) bölüm 8'de anlatılır; tekrarlar
   kurulumun saat dilimine (`app_settings.timezone`) göre hesaplanır.
-- **Bildirim kuralları** (`notification_routes`) ve **iletişim kişileri** (`organization_contacts`) bölüm 8'de anlatılır.
+- **Bildirim kuralları** (`notification_routes`) ve **kişiler** (`contacts`: sistem kişileri ve organizasyonların iletişim
+  kişileri) bölüm 8'de anlatılır.
 - Kullanıcı tablosunda ileride iki faktörlü doğrulama için `two_factor_enabled` / `two_factor_channel` alanları hazırdır;
   şimdilik yalnızca saklanır.
 
@@ -102,8 +103,9 @@ Kurallar:
 - **Üst zincir bağlam olarak görünür:** organizasyon listesinde `access: "context"` ile, yalnızca ad ve konum; adres,
   sunucular, kişiler, eşikler ve kurallar (kendi dalının dışındakiler) kapalıdır.
 - **Organizasyon ağacını yalnızca süper admin değiştirir** (oluşturma, taşıma, silme).
-- **Sistem ayarları** (Ayarlar sayfası: çalışma zamanı ayarları, bildirim kanalları, sistem sahipleri) `settings.view` ve
-  `settings.manage` izinleriyle korunur; varsayılan olarak yalnızca süper admindedir.
+- **Sistem ayarları** (Ayarlar sayfası: çalışma zamanı ayarları; Bildirim sayfasında kanallar, sistem kişileri ve sistem
+  kapsamlı bildirim kuralları) `settings.view` ve `settings.manage` izinleriyle korunur; varsayılan olarak yalnızca süper
+  admindedir.
 - **Sistem Araçları** (server'ın iç durumunu salt okunur gösteren sayfa) araç başına ayrı izinle korunur:
   `system.queue.view` (bildirim kuyruğu), `system.cache.view` (server sürecinin bellekteki durumu: izin önbelleği, hız
   sınırlayıcılar, pull zamanlayıcı, güvenilen proxy'ler, TLS sertifikası), `system.logs.view` (kalıcı log dosyalarının gün
@@ -193,6 +195,7 @@ GET    /api/v1/me (+ permissions) | /me/hosts | /meta        PATCH /api/v1/me (k
        /api/v1/thresholds[/:id]                 varsayılan eşikler (genel ya da organizasyon)
        /api/v1/status-rules                     durum kuralları (genel ya da organizasyon)
        /api/v1/notification-routes[/:id]        + .../organizations/:id|hosts/:id/notification-routes | -recipients
+GET    /api/v1/notification-routes/system | /notification-recipients/system         (settings.view; yazmak settings.manage)
 GET    /api/v1/hosts/:id/notification-preview?level=…   "Bu alert kime gider?" (notification.view)
        /api/v1/maintenance-windows[/:id]        + POST …/preview | …/:id/end | …/:id/end-occurrence | …/:id/skip-next
 GET    /api/v1/alerts?status=open&level=…       POST /api/v1/alerts/:id/acknowledge · GET …/:id/notifications
@@ -200,7 +203,7 @@ GET    /api/v1/alerts?status=open&level=…       POST /api/v1/alerts/:id/acknow
 GET    /api/v1/audit-logs | /dashboard/summary | /dashboard/overview
 GET    /api/v1/settings  PATCH /api/v1/settings  POST /api/v1/settings/reset          (settings.view / settings.manage)
        /api/v1/notification-channels[/:channel][/test]  + GET …/options (notification.view)
-       /api/v1/notification-owners[/:id]
+       /api/v1/system-contacts[/:id]
 GET    /api/v1/system/queue | /system/queue/items?status=…&kind=…                     (system.queue.view)
 GET    /api/v1/system/cache                                                          (system.cache.view)
 GET    /api/v1/system/logs | /system/logs/entries?day=…&level=…&q=… | /system/logs/download?day=…   (system.logs.view)
@@ -272,32 +275,41 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   `/api/v1/meta` dilimi, ofseti ve server saatini döndürür; panel alt çubukta server saatini gösterir.
 - **Offline tespiti:** pull'da agent'a ulaşılamazsa, push'ta beklenen sürede veri gelmezse ayrı bir `host_offline` alert'i.
   Seçili bir disk üst üste birkaç raporda görünmezse `disk_missing`.
-- **Kime gider — sistem sahipleri ve ek alıcılar:** bildirimin amacı **sistem sahibidir**; organizasyon ve sunucu kuralları
-  "bunlara da gitsin" der. Bir alert'in alıcıları üç katmanın **toplamıdır** (hiçbiri diğerini ezmez):
-  1. **Sistem sahipleri** (`notification_owners`, Bildirim → Sistem sahipleri): her açık kanaldan, alert seviyesi kanalın
-     sahip seviyesine (`owner_min_level`, ör. e-posta ve Slack uyarı, SMS yalnızca kritik) ulaşıyorsa ve sahip o kanaldan
-     almak istiyorsa. Panel kullanıcısı olmaları gerekmez.
+- **Kime gider — bildirim kuralları:** kanal **nasıl** gideceğini, bildirim kuralı **kime** gideceğini söyler. Bir alert'in
+  alıcıları üç kapsamdaki kuralların **toplamıdır** (hiçbiri diğerini ezmez):
+  1. **Sistem kuralları** (Bildirim → Bildirim kuralları → Sistem): bütün sunucular için. Yalnızca `settings.manage`
+     yazar; alıcı yalnızca süper admin ya da **sistem kişisi** olabilir (bildirim sunucu adı, IP ve organizasyon taşır;
+     bütün sunucuları yalnızca süper admin görür).
   2. Sunucunun organizasyonunun **ve bütün üst organizasyonlarının** kuralları.
   3. Sunucunun kendi kuralları.
-  - Kural: kapsam bir **organizasyon** ya da **sunucu**, alıcı bir panel kullanıcısı ya da **iletişim kişisi**, kanal ve en
-    düşük seviye. Kurala yalnızca o kapsam için seçilebilir alıcılar yazılabilir (kapsamdaki yöneticiler, sunucuya atanmış
-    operatörler, organizasyonun kişileri).
-  - Aynı kanal ve adres bir kez bildirilir (sahip olan biri bir kuralda da geçse tek ileti alır).
+  - Kural: kapsam, alıcı (panel kullanıcısı ya da kişi), kanal ve en düşük seviye. Kurala yalnızca o kapsam için seçilebilir
+    alıcılar yazılabilir (sistem: süper adminler ve sistem kişileri; organizasyon/sunucu: kapsamdaki yöneticiler, sunucuya
+    atanmış operatörler, organizasyon zincirinin kişileri).
+  - **Kişiler** (`contacts`, Bildirim → Kişiler): organizasyonu boş olan **sistem kişisi** (panel hesabı olmayan kişi ya da
+    "NOC masası" gibi ortak adres; `settings.view` görür, `settings.manage` düzenler) ya da organizasyonun **iletişim
+    kişisi** (organizasyon sayfasında düzenlenir). Kişi silinince alıcı olduğu kurallar da silinir.
+  - **Gönderim anında erişim:** kullanıcı alıcılar her bildirimde panelin erişim kuralıyla (bölüm 4) yeniden süzülür:
+    organizasyondan çıkarılan org admin, sunucusu alınan operatör ya da sistem kuralındayken rolü düşen biri o sunucuyu
+    artık göremiyorsa ileti almaz. Kural silinmez; alert motoru WARN loglar ve önizleme "erişimi yok" gösterir. Kişilerin
+    panel hesabı olmadığı için süzülmez.
+  - Aynı kanal ve adres bir kez bildirilir (biri birden çok kuralda geçse tek ileti alır; aynı adresi erişimi olan bir
+    kaynak da veriyorsa ileti gider).
   - **Varsayılan alıcı yoktur:** süper admin ya da organizasyon yöneticisi olmak kendiliğinden bildirim almak demek değildir.
-    Hiç sahip ve kural yoksa bildirim kimseye gitmez; panel bunu süper admine bir uyarı bandıyla söyler.
+    E-posta alan bir sistem kuralı yoksa kendine kural yazılmamış sunucuların bildirimi kimseye gitmez; panel bunu süper
+    admine bir uyarı şeridiyle söyler.
   - **"Bu alert kime gider?"** (Bildirim → Bildirim kuralları; sunucu sayfasında Ayarlar → Bildirimler): bir sunucu ve seviye
     için alıcılar gerçek gönderimin kurallarıyla (`alertengine.Engine.Preview`) hesaplanır: gidecekler kaynaklarıyla
-    (sahip / organizasyon / sunucu, aynı adresi ayrıca veren kaynaklar dahil), gitmeyecekler nedeniyle (kanal kapalı ya da
-    desteklenmiyor) ve sunucu bakımdaysa bunun notu. Sistem sahipleri yalnızca `settings.view` olana adıyla görünür;
-    ötekine kanal başına sayı olarak gelir.
+    (sistem / organizasyon / sunucu, aynı adresi ayrıca veren kaynaklar dahil), gitmeyecekler nedeniyle (kanal kapalı,
+    desteklenmiyor ya da erişimi yok) ve sunucu bakımdaysa bunun notu. Sistem kurallarından gelenler yalnızca
+    `settings.view` olana adıyla görünür; ötekine kanal başına sayı olarak gelir.
 - **Kanallar** (`notification_channels`, Bildirim → Kanallar) sistem düzeyindedir: ayarı (ör. SMTP) ve sırrı
-  (şifreli) orada tutulur; ayarı eksik ya da kapalı kanal kurallarda seçilemez. İki tür kanal vardır: **kişiye giden**
-  (e-posta, SMS: adres kişinin kaydından gelir; organizasyon/sunucu kurallarında seçilebilir) ve **ortak** (ör. Slack:
-  tek bir ortak hedefe gider, yalnızca sistem sahiplerine gönderir, kurallarda seçilemez). Kanalı kapatılan kurallar
+  (şifreli) orada tutulur; kimin hangi seviyeden alacağı kanalda değil kurallardadır. Ayarı eksik ya da kapalı kanal
+  kurallarda seçilemez. Kanallar **kişiye gider**: adres alıcının kaydından gelir (e-postası, telefonu); ortak bir hedefe
+  giden kanallar (ör. Slack webhook'u) henüz yok. Kanalı kapatılan kurallar
   silinmez ama çalışmaz: alert motoru onları atlar ve loglar, panel kuralın yanında "kanal kapalı" gösterir. Şimdilik
   yalnızca e-posta uygulanmıştır.
 - **Teslim — kalıcı kuyruk:** bildirim, alert değişikliğiyle **aynı transaction'da** `notification_outbox`'a (**alıcı başına bir
-  satır**, hazır konu ve gövdeyle) yazılır; alıcılar o anki sahiplere ve kurallara göre çözülür. Her alıcı ayrı ileti alır:
+  satır**, hazır konu ve gövdeyle) yazılır; alıcılar o anki kurallara ve erişime göre çözülür. Her alıcı ayrı ileti alır:
   kişiye giden kanallarda alıcılar birbirini görmez ve bir adresin hatası yalnızca onun satırını yeniden denetir. Bir işçi satırları alıp kanalın
   `Notifier`'ıyla gönderir; başarısızlıkta geri çekilerek (30 sn, 1 dk, 2 dk… en çok 1 saat) en çok 10 kez dener, sonra
   vazgeçip ERROR loglar. Alert kaydı esastır: bildirim kuyruğa yazılamazsa alert yine kaydedilir, yalnızca o olayın
@@ -328,7 +340,8 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   Container, Saat, Sistem bakımı, Erişilebilirlik); bir konunun eşiği, durum kuralı, seçimi ve konuya özel değerleri yan
   yanadır. Devralınan değerin kaynağı (sistem ya da hangi organizasyon) yazılır; kapsamdaki değişiklikler tek Kaydet ile
   birlikte kaydedilir. Konu kataloğu `server/panel/src/pages/ruleTopics.ts`'tedir: yeni bir eşik türü ya da durum kuralı
-  bir konuya eklenmezse panel testi kırılır. **Bildirim** sayfası kanalları, sistem sahiplerini ve bildirim kurallarını toplar.
+  bir konuya eklenmezse panel testi kırılır. **Bildirim** sayfası kanalları, bildirim kurallarını (sistem / organizasyon /
+  sunucu) ve kişileri (sistem kişileri, organizasyonların iletişim kişileri) toplar.
 - **Bakım pencereleri** sayfası (Alert Yönetimi altında): pencere listesi (tür, kapsam sayısı, süren / sıradaki / son
   tekrar, durum; satır açılınca kural, geçerlilik, kapsam ve sonraki 3 tekrar), form (önizlemeli) ve ⋯ menüsünde Düzenle,
   Bu tekrarı bitir / Sıradaki tekrarı atla, Pencereyi bitir, Sil. Bakımdaki sunucu sunucu sayfasında şeritle, Sunucular ve

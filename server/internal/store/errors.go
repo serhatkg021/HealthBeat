@@ -44,6 +44,7 @@ var (
 
 	ErrContactManagerInvalid = reason(ErrConflict, "manager must be a contact of the same organization")
 	ErrContactInvalid        = reason(ErrConflict, "contact needs a phone or email and cannot manage itself")
+	ErrContactEmailTaken     = reason(ErrConflict, "a system contact with this e-mail already exists")
 )
 
 func reason(class error, text string) error { return fmt.Errorf("%w: %s", class, text) }

@@ -3,14 +3,16 @@
 import type { OrganizationContact } from '../types/api.ts'
 
 export interface RouteScopeChoice {
-  kind: 'org' | 'sunucu'
+  kind: 'sistem' | 'org' | 'sunucu'
   id?: string
 }
 
-// Bildirim kurallarının kapsamı organizasyon ya da sunucudur (sistem genelinde kural yok: sistem sahipleri her zaman
-// alır). Organizasyonları göremeyen (operatör) yalnızca sunucu kapsamını açabilir; varsayılan, görebiliyorsa organizasyon.
-export function resolveRouteScope(kapsam: string | null, id: string | null, canSeeOrganizations: boolean): RouteScopeChoice {
+// Bildirim kurallarının kapsamı sistem (bütün sunucular), organizasyon ya da sunucudur. Sistem kurallarını yalnızca
+// settings.view olan görür; organizasyonları göremeyen (operatör) yalnızca sunucu kapsamını açabilir. Varsayılan,
+// görebiliyorsa organizasyon. Sistem kapsamının seçilecek bir kimliği yoktur.
+export function resolveRouteScope(kapsam: string | null, id: string | null, canSeeOrganizations: boolean, canSeeSystem = false): RouteScopeChoice {
   const target = id?.trim() || undefined
+  if (kapsam === 'sistem' && canSeeSystem) return { kind: 'sistem' }
   if (kapsam === 'sunucu' || !canSeeOrganizations) return { kind: 'sunucu', id: kapsam === 'sunucu' ? target : undefined }
   return { kind: 'org', id: kapsam === 'org' ? target : undefined }
 }

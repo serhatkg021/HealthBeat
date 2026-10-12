@@ -6,8 +6,8 @@ import { channelLabel } from './notificationRules.ts'
 // sourceLabel, alıcının nereden geldiğidir; sunucu kuralında sunucunun adı (biliniyorsa) yazılır.
 export function sourceLabel(s: PreviewSource, hostTitle?: string): string {
   switch (s.kind) {
-    case 'owner':
-      return 'Sistem sahibi'
+    case 'system':
+      return 'Sistem kuralı'
     case 'organization':
       return `Organizasyon: ${s.name ?? '—'}`
     default:
@@ -24,13 +24,15 @@ export function alsoLabel(also: PreviewSource[] | undefined, hostTitle?: string)
 const SKIP_REASON: Record<PreviewSkipReason, string> = {
   channel_off: 'kanal kapalı',
   channel_not_supported: 'kanal henüz desteklenmiyor',
+  no_access: 'erişimi yok: bu sunucuyu artık göremiyor',
 }
 
 export const skipReasonLabel = (r: string | undefined): string => (r ? (SKIP_REASON[r as PreviewSkipReason] ?? r) : '')
 
-// ownerCounts, sistem sahiplerini göremeyen kullanıcıya gelen sayıları metne çevirir: gidenler tek satırda
-// ("E-posta: 2 · SMS: 1"), gitmeyenler nedenleriyle ayrı satırlarda. Sahipler görünüyorsa (özet yok) ikisi de boştur.
-export function ownerCounts(summary: NotificationPreview['owners_summary']): { sent: string; skipped: string[] } {
+// systemCounts, sistem kurallarını göremeyen kullanıcıya gelen sayıları metne çevirir: gidenler tek satırda
+// ("E-posta: 2 · SMS: 1"), gitmeyenler nedenleriyle ayrı satırlarda. Sistem kuralları görünüyorsa (özet yok) ikisi de
+// boştur.
+export function systemCounts(summary: NotificationPreview['system_summary']): { sent: string; skipped: string[] } {
   const sent: string[] = []
   const skipped: string[] = []
   for (const c of summary ?? []) {
@@ -41,7 +43,8 @@ export function ownerCounts(summary: NotificationPreview['owners_summary']): { s
   return { sent: sent.join(' · '), skipped }
 }
 
-// nobodyNotified, bildirimin kimseye gitmeyeceğini söyler: ne gidecek bir alıcı ne de gidecek bir sistem sahibi var.
+// nobodyNotified, bildirimin kimseye gitmeyeceğini söyler: ne gidecek bir alıcı ne de sistem kurallarından gidecek biri
+// var.
 export function nobodyNotified(p: NotificationPreview): boolean {
-  return p.recipients.length === 0 && !(p.owners_summary ?? []).some((c) => !c.reason)
+  return p.recipients.length === 0 && !(p.system_summary ?? []).some((c) => !c.reason)
 }

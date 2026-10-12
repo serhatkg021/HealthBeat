@@ -77,11 +77,12 @@ const (
 	OrgAccessContext = "context"
 )
 
-// OrganizationContact, bir organizasyonun sunucu işleri için başvurulacak kişisidir (paneli olmayan
-// müşteri yetkilileri dahil).
-type OrganizationContact struct {
+// Contact, bildirim alabilen ve başvurulabilen bir kişidir (panel hesabı olması gerekmez). OrganizationID doluysa bir
+// organizasyonun iletişim kişisidir (sunucu işleri için kiminle görüşüleceği, müşteri yetkilileri dahil); boşsa sistem
+// kişisidir: bütün kurulumun bildirimlerini alabilen kişi ya da ortak adres (eski "sistem sahibi").
+type Contact struct {
 	ID               uuid.UUID  `json:"id"`
-	OrganizationID   uuid.UUID  `json:"organization_id"`
+	OrganizationID   *uuid.UUID `json:"organization_id"`
 	Department       *string    `json:"department,omitempty"`
 	Title            *string    `json:"title,omitempty"`
 	Name             string     `json:"name"`
@@ -90,6 +91,29 @@ type OrganizationContact struct {
 	Email            *string    `json:"email,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+// Kişinin kapsamı: organizasyon kişisi ya da sistem kişisi (organizasyonsuz).
+const (
+	ContactScopeOrganization = "organization"
+	ContactScopeSystem       = "system"
+)
+
+// Scope, kişinin kapsamıdır; organizasyonundan çıkar (veritabanında ayrı bir sütun yoktur).
+func (c Contact) Scope() string {
+	if c.OrganizationID == nil {
+		return ContactScopeSystem
+	}
+	return ContactScopeOrganization
+}
+
+// MarshalJSON, kişiyi hesaplanan kapsamıyla (scope) birlikte yazar.
+func (c Contact) MarshalJSON() ([]byte, error) {
+	type plain Contact
+	return json.Marshal(struct {
+		plain
+		Scope string `json:"scope"`
+	}{plain(c), c.Scope()})
 }
 
 type Host struct {
@@ -670,10 +694,10 @@ func LevelRank(l string) int {
 	return -1
 }
 
-// NotificationRoute, bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceğini söyler. Kapsam bir
-// organizasyon (altındaki dal için de geçerli) ya da tek bir sunucudur; alıcı bir panel kullanıcısı ya da
-// organizasyonun bir iletişim kişisidir. Bildirim her zaman sistem sahiplerine gider; sunucunun ve organizasyon
-// zincirinin bütün kuralları buna ek alıcı ekler.
+// NotificationRoute, bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceğini söyler. Kapsam sistem
+// (OrganizationID ve HostID boş: bütün sunucular), bir organizasyon (altındaki dal için de geçerli) ya da tek bir
+// sunucudur; alıcı bir panel kullanıcısı ya da bir kişidir (sistem kişisi ya da organizasyonun iletişim kişisi). Bir
+// alert'in alıcıları ona uyan bütün kuralların toplamıdır.
 type NotificationRoute struct {
 	ID             uuid.UUID  `json:"id"`
 	OrganizationID *uuid.UUID `json:"organization_id,omitempty"`

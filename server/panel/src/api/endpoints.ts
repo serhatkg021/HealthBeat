@@ -3,7 +3,6 @@ import type {
   Alert,
   ChannelInfo,
   ChannelOption,
-  NotificationOwner,
   SettingsField,
   SettingsResponse,
   SettingsValues,
@@ -42,6 +41,7 @@ import type {
   NotificationRoute,
   Organization,
   OrganizationContact,
+  SystemContact,
   ContactInput,
   RecipientCandidate,
   AlertLevel,
@@ -125,8 +125,18 @@ export const contactsApi = {
   remove: (id: string) => apiRequest<void>(`/api/v1/contacts/${id}`, { method: 'DELETE' }),
 }
 
-// Bildirim kuralları: kapsam bir organizasyon ya da bir sunucudur.
-export type RouteScope = { organizationId: string } | { hostId: string }
+// Bildirim kuralları: kapsam sistem (bütün sunucular), bir organizasyon ya da bir sunucudur.
+export type RouteScope = { system: true } | { organizationId: string } | { hostId: string }
+
+function scopePath(scope: RouteScope, what: 'notification-routes' | 'notification-recipients'): string {
+  if ('system' in scope) return `/api/v1/${what}/system`
+  return 'organizationId' in scope ? `/api/v1/organizations/${scope.organizationId}/${what}` : `/api/v1/hosts/${scope.hostId}/${what}`
+}
+
+function scopeBody(scope: RouteScope): { organization_id?: string; host_id?: string } {
+  if ('system' in scope) return {}
+  return 'organizationId' in scope ? { organization_id: scope.organizationId } : { host_id: scope.hostId }
+}
 
 export interface CreateRouteInput {
   user_id?: string
@@ -136,21 +146,10 @@ export interface CreateRouteInput {
 }
 
 export const notificationsApi = {
-  list: (scope: RouteScope) =>
-    apiRequest<NotificationRoute[]>(
-      'organizationId' in scope ? `/api/v1/organizations/${scope.organizationId}/notification-routes` : `/api/v1/hosts/${scope.hostId}/notification-routes`,
-    ),
-  candidates: (scope: RouteScope) =>
-    apiRequest<RecipientCandidate[]>(
-      'organizationId' in scope
-        ? `/api/v1/organizations/${scope.organizationId}/notification-recipients`
-        : `/api/v1/hosts/${scope.hostId}/notification-recipients`,
-    ),
+  list: (scope: RouteScope) => apiRequest<NotificationRoute[]>(scopePath(scope, 'notification-routes')),
+  candidates: (scope: RouteScope) => apiRequest<RecipientCandidate[]>(scopePath(scope, 'notification-recipients')),
   create: (scope: RouteScope, input: CreateRouteInput) =>
-    apiRequest<NotificationRoute>('/api/v1/notification-routes', {
-      method: 'POST',
-      body: { ...('organizationId' in scope ? { organization_id: scope.organizationId } : { host_id: scope.hostId }), ...input },
-    }),
+    apiRequest<NotificationRoute>('/api/v1/notification-routes', { method: 'POST', body: { ...scopeBody(scope), ...input } }),
   update: (id: string, patch: { channel?: NotificationChannel; min_level?: AlertLevel }) =>
     apiRequest<NotificationRoute>(`/api/v1/notification-routes/${id}`, { method: 'PUT', body: patch }),
   remove: (id: string) => apiRequest<void>(`/api/v1/notification-routes/${id}`, { method: 'DELETE' }),
@@ -351,7 +350,6 @@ export interface ChannelPatch {
   config?: Partial<SMTPConfig>
   // "" şifreyi siler; verilmezse değişmez.
   secret?: string
-  owner_min_level?: AlertLevel
 }
 
 export const channelsApi = {
@@ -363,17 +361,10 @@ export const channelsApi = {
   test: (channel: string, to: string) => apiRequest<void>(`/api/v1/notification-channels/${channel}/test`, { method: 'POST', body: { to } }),
 }
 
-export interface OwnerInput {
-  name: string
-  email: string | null
-  phone: string | null
-  email_enabled: boolean
-  sms_enabled: boolean
-}
-
-export const ownersApi = {
-  list: () => apiRequest<NotificationOwner[]>('/api/v1/notification-owners'),
-  create: (input: OwnerInput) => apiRequest<NotificationOwner>('/api/v1/notification-owners', { method: 'POST', body: input }),
-  update: (id: string, input: OwnerInput) => apiRequest<NotificationOwner>(`/api/v1/notification-owners/${id}`, { method: 'PUT', body: input }),
-  remove: (id: string) => apiRequest<void>(`/api/v1/notification-owners/${id}`, { method: 'DELETE' }),
+// Sistem kişileri: organizasyonsuz kişiler (görmek settings.view, değiştirmek settings.manage).
+export const systemContactsApi = {
+  list: () => apiRequest<SystemContact[]>('/api/v1/system-contacts'),
+  create: (input: ContactInput) => apiRequest<SystemContact>('/api/v1/system-contacts', { method: 'POST', body: input }),
+  update: (id: string, input: ContactInput) => apiRequest<SystemContact>(`/api/v1/system-contacts/${id}`, { method: 'PUT', body: input }),
+  remove: (id: string) => apiRequest<void>(`/api/v1/system-contacts/${id}`, { method: 'DELETE' }),
 }

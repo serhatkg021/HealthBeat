@@ -35,10 +35,9 @@ type SMTPConfig struct {
 // ChannelPatch, bir kanal değişikliğidir: nil alan "dokunma" demektir. Config'te verilen anahtarlar mevcut ayarın üstüne
 // yazılır (verilmeyenler korunur). Secret "" ise şifre silinir.
 type ChannelPatch struct {
-	Enabled       *bool           `json:"enabled"`
-	Config        json.RawMessage `json:"config"`
-	Secret        *string         `json:"secret"`
-	OwnerMinLevel *string         `json:"owner_min_level"`
+	Enabled *bool           `json:"enabled"`
+	Config  json.RawMessage `json:"config"`
+	Secret  *string         `json:"secret"`
 }
 
 // Channels, bildirim kanallarının bellekteki kopyasını tutar ve değişiklikleri doğrulayıp yazar (bkz. Service). Kanal
@@ -103,7 +102,7 @@ func (c *Channels) OnChange(fn func(old, updated model.NotificationChannel)) {
 // Update, kanalı doğrular ve yazar. Geçersiz bir değer *FieldError döndürür ve hiçbir şey yazılmaz. Dönen değişiklik
 // listesinde şifrenin kendisi yer almaz (yalnızca ayarlı olup olmadığı).
 func (c *Channels) Update(ctx context.Context, actor *uuid.UUID, channel string, p ChannelPatch) (Changes, error) {
-	if p.Enabled == nil && p.Config == nil && p.Secret == nil && p.OwnerMinLevel == nil {
+	if p.Enabled == nil && p.Config == nil && p.Secret == nil {
 		return nil, ErrNothingToChange
 	}
 	c.mu.Lock()
@@ -116,13 +115,6 @@ func (c *Channels) Update(ctx context.Context, actor *uuid.UUID, channel string,
 	next := old
 	if p.Enabled != nil {
 		next.Enabled = *p.Enabled
-	}
-	if p.OwnerMinLevel != nil {
-		level := strings.TrimSpace(*p.OwnerMinLevel)
-		if !model.ValidAlertLevel(level) {
-			return nil, &FieldError{"owner_min_level", "info, warning ya da critical olmalı"}
-		}
-		next.OwnerMinLevel = level
 	}
 	if p.Secret != nil {
 		if strings.ContainsAny(*p.Secret, "\r\n") {
@@ -321,9 +313,6 @@ func channelChanges(old, next model.NotificationChannel, secretGiven bool) Chang
 	changes := Changes{}
 	if old.Enabled != next.Enabled {
 		changes["enabled"] = Change{Old: old.Enabled, New: next.Enabled}
-	}
-	if old.OwnerMinLevel != next.OwnerMinLevel {
-		changes["owner_min_level"] = Change{Old: old.OwnerMinLevel, New: next.OwnerMinLevel}
 	}
 	var before, after map[string]any
 	_ = json.Unmarshal(old.Config, &before)

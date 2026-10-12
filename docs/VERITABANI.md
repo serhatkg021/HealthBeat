@@ -19,12 +19,15 @@ uygulanarak** üretilmiştir; şema değişince tablo ayrıntılarını yeniden 
 - **Protokol 4 verisi** (`000007`): zaman serisi metrik satırının JSONB sütunlarında (`system_json`, `disk_io_json`,
   `net_io_json`), geçmişi tutulmayan anlık durumlar `host_status.system_state`'te, systemd servisleri `host_services`'te.
   Değerler ölçüldüğü gibi saklanır; yuvarlama panelde yapılır.
-- **Bildirimler.** Her alert'in bildirimi **sistem sahiplerine** (`notification_owners`) gider; `notification_routes`
-  kuralları bunlara **ek alıcı** ekler. Alıcılar sahipler, sunucunun organizasyon zincirindeki (üst şirketler dahil) ve
-  sunucunun kendi kurallarının **toplamıdır**; varsayılan alıcı yoktur. Kanallar (`notification_channels`) sistem
-  düzeyindedir: ayarı ve şifreli sırrı orada, açık/kapalı durumu ve sahiplere hangi seviyeden itibaren gideceği
-  (`owner_min_level`) oradadır. Kural yalnızca tanımlı bir kanala yazılabilir (yabancı anahtar); kanalı kapalı kural
-  çalışmaz. Her alıcı ayrı ileti alır (`notification_outbox`'ta alıcı başına bir satır). Bkz. `docs/MIMARI.md` bölüm 8.
+- **Bildirimler.** Kanal **nasıl** gider, bildirim kuralı **kime** gider sorusunu cevaplar. Kanallar
+  (`notification_channels`) sistem düzeyindedir: yalnızca ayarı, şifreli sırrı ve açık/kapalı durumu tutar.
+  `notification_routes` kuralları kapsam (**sistem** — organizasyon ve sunucu boş: bütün sunucular —, organizasyon ya da
+  sunucu) × alıcı × kanal × en düşük seviyedir; bir alert'in alıcıları sistem kurallarının, sunucunun organizasyon
+  zincirindeki (üst şirketler dahil) ve sunucunun kendi kurallarının **toplamıdır**; varsayılan alıcı yoktur. Alıcı bir
+  panel kullanıcısı ya da bir **kişidir** (`contacts`: organizasyonu boş olan sistem kişisi, dolu olan organizasyonun
+  iletişim kişisi; `000009`). Kullanıcı alıcılar gönderim anında da panelin erişim kuralıyla süzülür. Kural yalnızca
+  tanımlı bir kanala yazılabilir (yabancı anahtar); kanalı kapalı kural çalışmaz. Her alıcı ayrı ileti alır
+  (`notification_outbox`'ta alıcı başına bir satır). Bkz. `docs/MIMARI.md` bölüm 8.
 - **Çalışma zamanı ayarları.** Panelden değişen işletim ayarları (`app_settings`, tek satır) veritabanındadır; varsayılanları
   sütunların `DEFAULT`'ları, sınırları `CHECK`'lerdir ("varsayılana dön" = `SET sütun = DEFAULT`).
 - **Bakım pencereleri** (`000008`): `maintenance_windows` ve kapsamı (`maintenance_window_hosts`,
@@ -41,8 +44,8 @@ erDiagram
     roles ||--o{ role_permissions : ""
     roles ||--o{ users : ""
     organizations ||--o{ organizations : ""
-    organization_contacts ||--o{ organization_contacts : ""
-    organizations ||--o{ organization_contacts : ""
+    contacts ||--o{ contacts : ""
+    organizations ||--o{ contacts : ""
     organizations ||--o{ user_organizations : ""
     users ||--o{ user_organizations : ""
     organizations ||--o{ hosts : ""
@@ -62,7 +65,7 @@ erDiagram
     hosts ||--o{ host_custom_thresholds : ""
     users ||--o{ alerts : ""
     hosts ||--o{ alerts : ""
-    organization_contacts ||--o{ notification_routes : ""
+    contacts ||--o{ notification_routes : ""
     hosts ||--o{ notification_routes : ""
     organizations ||--o{ notification_routes : ""
     users ||--o{ notification_routes : ""
@@ -167,14 +170,18 @@ Müşteri/marka birimleri; **ağaç** oluşturur (`parent_organization_id`). Ayn
 - **Tetikleyici** `organizations_no_cycle` (BEFORE INSERT)
 - **Tetikleyici** `organizations_no_cycle` (BEFORE UPDATE)
 
-### `organization_contacts`
+### `contacts`
 
-Organizasyonun başvurulacak kişileri (panel kullanıcısı olmak zorunda değil): departman, unvan, yönetici (aynı organizasyondan), telefon/e-posta (en az biri). Bildirim kurallarında alıcı olabilir.
+Kişiler (panel kullanıcısı olmak zorunda değil; `000009`'a kadar adı `organization_contacts`): `organization_id` doluysa
+organizasyonun başvurulacak kişisidir (departman, unvan, yönetici — aynı organizasyondan); boşsa **sistem kişisidir**
+(bütün kurulumun bildirimlerini alabilen kişi ya da ortak adres, eski "sistem sahibi"; yöneticisi olmaz, e-postası sistem
+kişileri arasında büyük/küçük harf duyarsız tekildir). Telefon ya da e-postadan en az biri gerekir. Bildirim kurallarında
+alıcı olabilir; silinince kuralları da silinir.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
 | `id` | uuid | hayır | `gen_random_uuid()` |
-| `organization_id` | uuid | hayır |  |
+| `organization_id` | uuid | evet |  |
 | `department` | text | evet |  |
 | `title` | text | evet |  |
 | `name` | text | hayır |  |
@@ -184,12 +191,14 @@ Organizasyonun başvurulacak kişileri (panel kullanıcısı olmak zorunda deği
 | `created_at` | timestamptz | hayır | `now()` |
 | `updated_at` | timestamptz | hayır | `now()` |
 
-- **CHECK** `organization_contacts_not_own_manager_chk`: ((manager_contact_id IS DISTINCT FROM id))
-- **CHECK** `organization_contacts_reachable_chk`: (((phone IS NOT NULL) OR (email IS NOT NULL)))
-- **FK** (organization_id, manager_contact_id) REFERENCES organization_contacts(organization_id, id) ON DELETE SET NULL (manager_contact_id)
+- **CHECK** `contacts_not_own_manager_chk`: ((manager_contact_id IS DISTINCT FROM id))
+- **CHECK** `contacts_reachable_chk`: (((phone IS NOT NULL) OR (email IS NOT NULL)))
+- **CHECK** `contacts_system_no_manager_chk`: (((organization_id IS NOT NULL) OR (manager_contact_id IS NULL)))
+- **FK** (organization_id, manager_contact_id) REFERENCES contacts(organization_id, id) ON DELETE SET NULL (manager_contact_id)
 - **FK** (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 - **PK** (id)
-- **UNIQUE** `organization_contacts_org_id_key`: (organization_id, id)
+- **UNIQUE** `contacts_org_id_key`: (organization_id, id)
+- **Benzersiz indeks** `contacts_system_email_uidx`: `btree (lower(email)) WHERE ((organization_id IS NULL) AND (email IS NOT NULL))`
 
 ### `user_organizations`
 
@@ -625,9 +634,11 @@ bitirilmiştir.
 
 ### `notification_routes`
 
-Bildirim kuralları (sistem sahiplerine **ek** alıcılar): kapsam (organizasyon **ya da** sunucu) × alıcı (kullanıcı **ya da**
-kişi) × kanal × en düşük seviye. Bir alert'e sunucunun ve organizasyon zincirinin bütün kuralları birlikte uygulanır. Kanal
-`notification_channels`'ta tanımlı olmalıdır (`000005`); API ayrıca açık ve kişiye giden bir kanal ister.
+Bildirim kuralları: kapsam (**sistem** — organizasyon ve sunucu boş, bütün sunucular; `000009` —, organizasyon **ya da**
+sunucu) × alıcı (kullanıcı **ya da** kişi) × kanal × en düşük seviye. Bir alert'e sistem kurallarıyla sunucunun ve
+organizasyon zincirinin bütün kuralları birlikte uygulanır. Kanal `notification_channels`'ta tanımlı olmalıdır
+(`000005`); API ayrıca açık ve kişiye giden bir kanal ister. Sistem kurallarını yalnızca `settings.manage` yazar ve alıcı
+yalnızca süper admin ya da sistem kişisi olabilir.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -642,9 +653,9 @@ kişi) × kanal × en düşük seviye. Bir alert'e sunucunun ve organizasyon zin
 
 - **CHECK** `notification_routes_min_level_check`: ((min_level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
 - **CHECK** `notification_routes_one_recipient_chk`: (((user_id IS NOT NULL) <> (contact_id IS NOT NULL)))
-- **CHECK** `notification_routes_one_scope_chk`: (((organization_id IS NOT NULL) <> (host_id IS NOT NULL)))
+- **CHECK** `notification_routes_one_scope_chk`: (((organization_id IS NULL) OR (host_id IS NULL)))
 - **FK** (channel) REFERENCES notification_channels(channel)
-- **FK** (contact_id) REFERENCES organization_contacts(id) ON DELETE CASCADE
+- **FK** (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
 - **FK** (host_id) REFERENCES hosts(id) ON DELETE CASCADE
 - **FK** (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 - **FK** (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -805,8 +816,8 @@ Sistem düzeyindeki bildirim kanalları (`000005`): server'ın desteklediği her
 `provider = smtp`, başlangıçta kapalı). `config` sır olmayan ayardır (biçimini kanalın göndericisi doğrular); `secret_enc`
 şifre ya da token'dır, `SECRETS_ENCRYPTION_KEY` ile şifreli ve kanal adına bağlıdır, API'den asla okunmaz; anahtar
 değiştiği için çözülemiyorsa kanal gönderemez ve API'de `secret_unreadable` olarak görünür (şifre yeniden girilir).
-`owner_min_level` sistem sahiplerine hangi seviyeden itibaren gönderileceğidir; `verified_at` son başarılı deneme
-gönderimidir ve ayar ya da şifre değişince sıfırlanır.
+`verified_at` son başarılı deneme gönderimidir ve ayar ya da şifre değişince sıfırlanır. Kimin hangi seviyeden alacağı
+kanalda değil bildirim kurallarındadır (`owner_min_level` `000009` ile kalktı).
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -815,36 +826,13 @@ gönderimidir ve ayar ya da şifre değişince sıfırlanır.
 | `enabled` | boolean | hayır | `false` |
 | `config` | jsonb | hayır | `'{}'::jsonb` |
 | `secret_enc` | text | evet |  |
-| `owner_min_level` | text | hayır | `'warning'::text` |
 | `verified_at` | timestamptz | evet |  |
 | `updated_at` | timestamptz | hayır | `now()` |
 | `updated_by` | uuid | evet |  |
 
 - **CHECK** `notification_channels_config_object_chk`: ((jsonb_typeof(config) = 'object'::text))
-- **CHECK** `notification_channels_owner_min_level_chk`: ((owner_min_level = ANY (ARRAY['info'::text, 'warning'::text, 'critical'::text])))
 - **FK** (updated_by) REFERENCES users(id) ON DELETE SET NULL
 - **PK** (channel)
-
-### `notification_owners`
-
-Sistem sahipleri (`000005`): her alert'in bildirimini alanlar; panel kullanıcısı olmaları gerekmez. E-postası e-posta
-kanalında, telefonu SMS kanalında kullanılır; `email_enabled` / `sms_enabled` o kanaldan almak isteyip istemediğidir.
-
-| Sütun | Tip | Boş olabilir | Varsayılan |
-| --- | --- | --- | --- |
-| `id` | uuid | hayır | `gen_random_uuid()` |
-| `name` | text | hayır |  |
-| `email` | text | evet |  |
-| `phone` | text | evet |  |
-| `email_enabled` | boolean | hayır | `true` |
-| `sms_enabled` | boolean | hayır | `true` |
-| `created_at` | timestamptz | hayır | `now()` |
-| `updated_at` | timestamptz | hayır | `now()` |
-
-- **CHECK** `notification_owners_email_lowercase_chk`: ((email = lower(email)))
-- **CHECK** `notification_owners_reachable_chk`: (((email IS NOT NULL) OR (phone IS NOT NULL)))
-- **PK** (id)
-- **Benzersiz indeks** `notification_owners_email_uidx`: `btree (email) WHERE (email IS NOT NULL)`
 
 ### `healthbeat_migrations`
 

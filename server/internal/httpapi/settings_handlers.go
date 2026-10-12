@@ -10,10 +10,9 @@ import (
 
 	"healthbeat-server/internal/model"
 	"healthbeat-server/internal/settings"
-	"healthbeat-server/internal/store"
 )
 
-// Sistem ayarları (Ayarlar sayfası): çalışma zamanı ayarları, bildirim kanalları ve sistem sahipleri. Okumak
+// Sistem ayarları (Ayarlar sayfası): çalışma zamanı ayarları ve bildirim kanalları. Okumak
 // settings.view, değiştirmek settings.manage ister (varsayılan olarak yalnızca super_admin). Her değişiklik denetim
 // kaydına yazılır; kanal şifresi hiçbir yanıtta ya da kayıtta yer almaz.
 
@@ -146,7 +145,6 @@ type channelResponse struct {
 	SecretSet bool            `json:"secret_set"` // şifrenin kendisi asla verilmez
 	// SecretUnreadable: kayıtlı şifre bu server'ın anahtarıyla çözülemiyor, yeniden girilmeli (Ready de false olur).
 	SecretUnreadable bool       `json:"secret_unreadable"`
-	OwnerMinLevel    string     `json:"owner_min_level"`
 	VerifiedAt       *time.Time `json:"verified_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
 	UpdatedBy        *userRef   `json:"updated_by"`
@@ -162,7 +160,7 @@ func (d *Deps) channelView(r *http.Request, ch model.NotificationChannel, ruleCo
 	personal, implemented := d.alertEngine.Notifier(ch.Channel)
 	return channelResponse{
 		Channel: ch.Channel, Provider: ch.Provider, Enabled: ch.Enabled, Config: settings.DisplayConfig(ch),
-		SecretSet: ch.SecretSet, SecretUnreadable: ch.SecretUnreadable, OwnerMinLevel: ch.OwnerMinLevel, VerifiedAt: ch.VerifiedAt,
+		SecretSet: ch.SecretSet, SecretUnreadable: ch.SecretUnreadable, VerifiedAt: ch.VerifiedAt,
 		UpdatedAt: ch.UpdatedAt, UpdatedBy: d.userRefOf(r, ch.UpdatedBy),
 		Ready: settings.Ready(ch), Implemented: implemented, Personal: personal, RuleCount: ruleCount,
 	}
@@ -181,7 +179,7 @@ func (d *Deps) handleListChannels(w http.ResponseWriter, r *http.Request) error 
 	return nil
 }
 
-// channelOption, kural ekranının bir kanal hakkında bilmesi gerekenlerdir (ayrıntısız: config, şifre ya da sahip seviyesi
+// channelOption, kural ekranının bir kanal hakkında bilmesi gerekenlerdir (ayrıntısız: config ya da şifre
 // yok); notification.view ile okunur.
 type channelOption struct {
 	Channel     string `json:"channel"`
@@ -266,126 +264,6 @@ func (d *Deps) handleTestChannel(w http.ResponseWriter, r *http.Request) error {
 		return e
 	}
 	d.logAudit(r, "notification_channel.test", "notification_channel", &ch.Channel, map[string]any{"to": req.To, "ok": true})
-	w.WriteHeader(http.StatusNoContent)
-	return nil
-}
-
-// ---------------------------------------------------------------- sistem sahipleri
-
-// ownerRequest, bir sistem sahibidir. Güncellemede verilmeyen email_enabled/sms_enabled korunur; yeni sahipte ikisi de
-// varsayılan olarak açıktır.
-type ownerRequest struct {
-	Name         string  `json:"name"`
-	Email        *string `json:"email"`
-	Phone        *string `json:"phone"`
-	EmailEnabled *bool   `json:"email_enabled"`
-	SMSEnabled   *bool   `json:"sms_enabled"`
-}
-
-func (req ownerRequest) apply(o model.NotificationOwner) (model.NotificationOwner, error) {
-	o.Name, o.Email, o.Phone = req.Name, req.Email, req.Phone
-	if req.EmailEnabled != nil {
-		o.EmailEnabled = *req.EmailEnabled
-	}
-	if req.SMSEnabled != nil {
-		o.SMSEnabled = *req.SMSEnabled
-	}
-	if err := o.Normalize(); err != nil {
-		return o, badRequest(err.Error())
-	}
-	return o, nil
-}
-
-func ownerAudit(o model.NotificationOwner) map[string]any {
-	return map[string]any{"name": o.Name, "email": o.Email, "phone": o.Phone, "email_enabled": o.EmailEnabled, "sms_enabled": o.SMSEnabled}
-}
-
-func (d *Deps) handleListOwners(w http.ResponseWriter, r *http.Request) error {
-	owners, err := d.owners.List(r.Context())
-	if err != nil {
-		return failWith("sistem sahipleri alınamadı")("list owners", err)
-	}
-	writeJSON(w, http.StatusOK, owners)
-	return nil
-}
-
-func (d *Deps) handleCreateOwner(w http.ResponseWriter, r *http.Request) error {
-	fail := failWith("sistem sahibi eklenemedi")
-	req, err := bind[ownerRequest](r)
-	if err != nil {
-		return err
-	}
-	o, err := req.apply(model.NotificationOwner{EmailEnabled: true, SMSEnabled: true})
-	if err != nil {
-		return err
-	}
-	created, err := d.owners.Create(r.Context(), o)
-	if errors.Is(err, store.ErrOwnerEmailTaken) {
-		return conflict("bu e-postayla bir sistem sahibi zaten var")
-	}
-	if err != nil {
-		return fail("create owner", err)
-	}
-	id := created.ID.String()
-	d.logAudit(r, "notification_owner.create", "notification_owner", &id, ownerAudit(created))
-	writeJSON(w, http.StatusCreated, created)
-	return nil
-}
-
-func (d *Deps) handleUpdateOwner(w http.ResponseWriter, r *http.Request) error {
-	fail := failWith("sistem sahibi güncellenemedi")
-	id, err := pathID(r, "geçersiz kimlik")
-	if err != nil {
-		return err
-	}
-	existing, err := d.owners.Get(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		return notFound("sistem sahibi bulunamadı")
-	}
-	if err != nil {
-		return fail("update owner: lookup", err)
-	}
-	req, err := bind[ownerRequest](r)
-	if err != nil {
-		return err
-	}
-	o, err := req.apply(existing)
-	if err != nil {
-		return err
-	}
-	updated, err := d.owners.Update(r.Context(), o)
-	switch {
-	case errors.Is(err, store.ErrOwnerEmailTaken):
-		return conflict("bu e-postayla bir sistem sahibi zaten var")
-	case errors.Is(err, store.ErrNotFound):
-		return notFound("sistem sahibi bulunamadı")
-	case err != nil:
-		return fail("update owner", err)
-	}
-	target := id.String()
-	d.logAudit(r, "notification_owner.update", "notification_owner", &target, map[string]any{"old": ownerAudit(existing), "new": ownerAudit(updated)})
-	writeJSON(w, http.StatusOK, updated)
-	return nil
-}
-
-func (d *Deps) handleDeleteOwner(w http.ResponseWriter, r *http.Request) error {
-	fail := failWith("sistem sahibi silinemedi")
-	id, err := pathID(r, "geçersiz kimlik")
-	if err != nil {
-		return err
-	}
-	existing, err := d.owners.Get(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		return notFound("sistem sahibi bulunamadı")
-	}
-	if err != nil {
-		return fail("delete owner: lookup", err)
-	}
-	if err := d.owners.Delete(r.Context(), id); err != nil {
-		return storeError(err, "sistem sahibi bulunamadı", fail, "delete owner")
-	}
-	target := id.String()
-	d.logAudit(r, "notification_owner.delete", "notification_owner", &target, ownerAudit(existing))
 	w.WriteHeader(http.StatusNoContent)
 	return nil
 }

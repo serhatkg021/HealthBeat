@@ -28,18 +28,28 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   Güncelleme sırasında hâlâ çalışan eski server süreci bu şemayla çalışır. Geri dönüş
   `000008_maintenance_windows.down.sql` (sonra `000007`'ninki, `000006`'nınki) ya da yedekle: `.down.sql` bakım
   pencerelerini ve saat dilimi ayarını siler; bakım yüzünden ertelenmiş bildirimler gönderilmeden kalır.
+- Migration `000009` (sistem bildirim kuralları) de açılışta uygulanır ve **yalnızca ekleme yapmaz**:
+  `organization_contacts` tablosunun adı `contacts` olur, `notification_owners` tablosu ve
+  `notification_channels.owner_min_level` sütunu silinir. Sistem sahipleri aynı kimliklerle sistem kişisi olur; e-posta
+  almak isteyen ve adresi olan her sahip için e-posta kanalının sahip seviyesiyle bir sistem kuralı yazılır (bildirim
+  alanlar değişmez). Güncelleme anında hâlâ çalışan eski bir server süreci varsa onun alıcı sorguları hata verir ve o
+  arada açılan alert'in bildirimi gitmez; belgelenen Docker Compose kurulumunda (tek kopya, sabit port) bu aralık
+  oluşmaz, çakışmalı kurulumlarda önce eski süreç durdurulmalı (`docs/COMPATIBILITY.md` §4). Geri dönüş
+  `000009_system_notification_rules.down.sql` (sonra `000008`'inki…) ya da yedekle: sistem kişileri sahip olarak geri
+  döner (e-posta kuralı olan e-posta alır), kanalın sahip seviyesi sistem e-posta kurallarının en düşüğü olur; sistem
+  kuralındaki süper adminler ve kişi başına farklı seviyeler geri alınamaz.
 - **Yeni alert türleri kapalı gelir.** Disk gecikmesi, sıcaklık, servis yeniden başlatma ve saat farkı için eşik; servis
   çalışmıyor, container sağlıksız, RAID bozuk gibi durumlar için durum kuralı tanımlanmadıkça alert açılmaz (sistem
   varsayılanı yoktur). Panelde Alert kuralları'ndan açılır.
 
 ### Eklendi
 - **Panel: "Bu alert kime gider?"** (önceden "Yakında"): bir sunucu ve seviye seçilince bildirimin şu an kime gideceği.
-  Alıcılar gerçek gönderimin kurallarıyla hesaplanır: sistem sahipleri, sunucunun organizasyonu ile üst organizasyonların
+  Alıcılar gerçek gönderimin kurallarıyla hesaplanır: sistem kuralları, sunucunun organizasyonu ile üst organizasyonların
   kuralları ve sunucunun kendi kuralları. Her alıcının nereden geldiği yazılır (aynı adresi ayrıca veren kurallar
   "ayrıca: …" olarak; adres yine tek ileti alır); kanalı kapalı ya da desteklenmeyen alıcılar "Gitmeyecekler"de nedeniyle
-  listelenir; sunucu bakımdaysa bildirimin bakım bitince gideceği yazılır. Bildirim → Bildirim kuralları sekmesinde ve
-  sunucu sayfasında Ayarlar → Bildirimler'de. Sistem sahiplerinin adları yalnızca `settings.view` olana gösterilir;
-  ötekine kanal başına sayı olarak gelir.
+  listelenir (sunucuyu artık göremeyen kullanıcı "erişimi yok" nedeniyle); sunucu bakımdaysa bildirimin bakım bitince
+  gideceği yazılır. Bildirim → Bildirim kuralları sekmesinde ve sunucu sayfasında Ayarlar → Bildirimler'de. Sistem
+  kurallarından gelen alıcıların adları yalnızca `settings.view` olana gösterilir; ötekine kanal başına sayı olarak gelir.
 - API: `GET /api/v1/hosts/:id/notification-preview?level=…` (`notification.view`; seviye verilmezse `critical`).
 - **Bakım pencereleri** (Alert Yönetimi → Bakım pencereleri; önceden "Yakında"). Pencere sürerken kapsamındaki
   sunucuların alert'leri kaydedilir ama **bildirim gönderilmez**; bakım bitince hâlâ açık olan alert'ler güncel
@@ -125,6 +135,27 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
+- **Bildirim modeli sadeleşti: kanal "nasıl", bildirim kuralı "kime" gider.** "Sistem sahipleri" yerine bildirim
+  kurallarında **Sistem** kapsamı var (bütün sunucular; Bildirim → Bildirim kuralları → Sistem). Bir alert'in alıcıları
+  sistem, organizasyon zinciri ve sunucu kurallarının toplamıdır. Sistem kurallarını yalnızca `settings.manage` yazar;
+  alıcı süper admin ya da **sistem kişisi** olabilir (bildirim sunucu adı, IP ve organizasyon taşır). Kanalın "sistem
+  sahiplerine hangi seviyeden" ayarı ve sahip başına "e-posta / SMS alsın" seçimi kalktı; seviye ve kanal kuralda seçilir.
+  Kanalı kapalı bir sistem kuralı artık önizlemede "kanal kapalı" olarak görünür ve loglanır (önceden sahipler kapalı
+  kanaldan sessizce gelmezdi; gönderim aynı).
+- Panel: **Bildirim** sayfasının sekmeleri Kanallar · Bildirim kuralları · Kişiler. "Sistem sahipleri" sekmesi kalktı:
+  sistem kişileri (panel hesabı olmayan kişi ya da "NOC masası" gibi ortak adres) Kişiler'de eklenir, düzenlenir ve
+  silinir (silinince alıcı olduğu kurallar da silinir; pencere kaç kural olduğunu söyler); organizasyonların iletişim
+  kişileri aynı sekmede salt okunur listelenir. Eski adresler yeni yerlerine yönlenir. Alt çubuktaki uyarı şeridi artık
+  "e-posta alan bir sistem kuralı yok" der ve Sistem kurallarına götürür.
+- Panel: Denetim Kaydı süzgecinde **Kişi** kategorisi (sistem kişileri ve iletişim kişileri; sistem kişisi işlemleri
+  `contact.*` olarak yazılır, eski `notification_owner.*` kayıtları Bildirim'de kalır).
+- API: `/api/v1/notification-owners` kaldırıldı; yerine `GET/POST /api/v1/system-contacts`, `PUT/DELETE
+  /api/v1/system-contacts/:id` (`settings.view` / `settings.manage`; yanıtta `rule_count` ve `scope`). Sistem kuralları
+  `organization_id` ve `host_id` verilmeden `POST /api/v1/notification-routes` ile yazılır; `GET
+  /api/v1/notification-routes/system` ve `GET /api/v1/notification-recipients/system` eklendi. Kişi yanıtlarında `scope`
+  (`system` / `organization`); organizasyon kişisi uçları sistem kişisini görmez. Kanal yanıtından ve `PATCH`'ten
+  `owner_min_level` kalktı (gönderilirse 400). Önizlemede `owners_summary` → `system_summary`, kaynak türü `owner` →
+  `system`, yeni atlama nedeni `no_access`.
 - Panel: sunucu sayfasında Ayarlar → Geçerli alert kuralları, Alert kuralları sayfasındaki konulara göre gruplu (CPU ve
   bellek, Disk, Sıcaklık, Servisler, Container, Saat, Sistem bakımı); disk alert seçimi Disk konusunda.
 - Panel: sunucu sayfasının Genel sekmesinde ayrı "Aralık" kutusu kaldırıldı; aralık Agent kutusunda çalışma biçimiyle
@@ -158,8 +189,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
     değişince kaydedilmemiş değişiklikler atılır. Devralınan değerin kaynağı yazılır ("Devralındı · Ana Şirket"). Sunucu
     ayarlarında geçerli kurallar ve nereden geldikleri (devralındı / bu sunucuya özel) salt okunur gösterilir. Kuralların ve
     kapsam özetinin açıklaması adın yanındaki ⓘ düğmesinde.
-  - **Bildirim:** kanallar, sistem sahipleri, bildirim kuralları (organizasyon ya da sunucu kapsamı) ve tüm organizasyonların
-    iletişim kişileri (salt okunur, aranabilir) tek sayfada. Kişiler organizasyon sayfasında düzenlenir.
+  - **Bildirim:** kanallar, bildirim kuralları (sistem, organizasyon ya da sunucu kapsamı) ve kişiler (sistem kişileri;
+    tüm organizasyonların iletişim kişileri salt okunur ve aranabilir) tek sayfada. İletişim kişileri organizasyon
+    sayfasında düzenlenir.
   - **Organizasyon ayarları** (ad, adres, üst şirket, silme) organizasyon listesindeki ve organizasyon sayfasındaki çarkla
     açılan pencerede; silme pencerenin içinde ikinci bir onay ister.
   - **Denetim Kaydı** Sistem Araçları'na taşındı; **Ayarlar** yalnızca kurulum yapılandırmasıdır (agent sürümleri, saklama,
@@ -173,6 +205,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   kuralları ve süre koşulu bekleyen alert'ler).
 
 ### Düzeltildi
+- Bildirim kuralının alıcısı olan kullanıcı organizasyondan çıkarılsa, rolü düşürülse ya da sunucu ataması kaldırılsa da
+  o sunucuların alert e-postalarını (sunucu adı, IP ve organizasyonuyla) almaya devam ediyordu: erişim yalnızca kural
+  eklenirken denetleniyordu. Artık her bildirimde de denetleniyor; sunucuyu göremeyen kullanıcıya ileti gitmez, kural
+  silinmez, server WARN loglar ve "Bu alert kime gider?" onu "erişimi yok" nedeniyle gösterir.
 - Panel: telefonda (≤640 px) sunucu sayfasının üst çubuğunda durum rozeti sunucu adını gizliyor ve alert sayaçlarının
   üstüne taşıyordu. Dar ekranda rozet yalnızca renkli nokta (durum ipucunda); ad görünür, uzunsa kırpılır.
 - `SECRETS_ENCRYPTION_KEY` değiştiğinde (ya da veritabanı başka bir anahtarla geri yüklendiğinde) kayıtlı SMTP şifresi

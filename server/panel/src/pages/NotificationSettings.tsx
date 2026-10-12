@@ -1,26 +1,23 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Mail, Pencil, Plus, Save, Send, Trash2, Users } from 'lucide-react'
 import { ApiError } from '../api/client'
-import { channelsApi, ownersApi, type OwnerInput } from '../api/endpoints'
+import { channelsApi, systemContactsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import { EmptyState } from '../components/EmptyState'
 import { FieldLabel } from '../components/FieldLabel'
 import { InfoTip } from '../components/InfoTip'
 import { Modal } from '../components/Modal'
 import { StatusBadge } from '../components/StatusBadge'
-import { alertLevelLabel } from '../labels'
-import type { AlertLevel, ChannelInfo, NotificationOwner } from '../types/api'
+import type { ChannelInfo, ContactInput, SystemContact } from '../types/api'
 import { SETTINGS_CHANGED, channelStatus } from './settingsForm'
 
-
-const LEVELS: AlertLevel[] = ['info', 'warning', 'critical']
 
 const message = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback)
 const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString() : '—')
 const announce = () => window.dispatchEvent(new Event(SETTINGS_CHANGED))
 
-// Bildirim sayfasının Kanallar ve Sistem sahipleri sekmeleri. Okumak settings.view, değiştirmek settings.manage ister
-// (varsayılan olarak yalnızca süper admin).
+// Bildirim sayfasının Kanallar sekmesi ve Kişiler sekmesindeki sistem kişileri. Okumak settings.view, değiştirmek
+// settings.manage ister (varsayılan olarak yalnızca süper admin).
 
 // ---------------------------------------------------------------- bildirim kanalları
 
@@ -75,7 +72,6 @@ function EmailChannelCard({
   const [from, setFrom] = useState(channel.config.from)
   const [secret, setSecret] = useState('')
   const [clearSecret, setClearSecret] = useState(false)
-  const [ownerLevel, setOwnerLevel] = useState<AlertLevel>(channel.owner_min_level)
   const [enabled, setEnabled] = useState(channel.enabled)
   const [testTo, setTestTo] = useState(user?.email ?? '')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -94,7 +90,6 @@ function EmailChannelCard({
     setFrom(channel.config.from)
     setSecret('')
     setClearSecret(false)
-    setOwnerLevel(channel.owner_min_level)
     setEnabled(channel.enabled)
   }
 
@@ -106,7 +101,6 @@ function EmailChannelCard({
     try {
       const updated = await channelsApi.update(channel.channel, {
         enabled,
-        owner_min_level: ownerLevel,
         config: { host: host.trim(), port: Number(port), username: username.trim(), from: from.trim() },
         ...(clearSecret ? { secret: '' } : secret !== '' ? { secret } : {}),
       })
@@ -145,8 +139,8 @@ function EmailChannelCard({
         <Mail size={16} strokeWidth={1.75} />
         E-posta (SMTP)
         <InfoTip label="E-posta (SMTP)">
-          Alert bildirimleri ve “Şifremi unuttum” e-postaları bu sunucu üzerinden gönderilir. Kaydettikten sonra “Deneme gönder” ile ayarı
-          doğrulayın.
+          Alert bildirimleri ve “Şifremi unuttum” e-postaları bu sunucu üzerinden gönderilir. Kimin hangi seviyeden alacağı bildirim
+          kurallarındadır. Kaydettikten sonra “Deneme gönder” ile ayarı doğrulayın.
         </InfoTip>
         <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
       </h2>
@@ -209,20 +203,6 @@ function EmailChannelCard({
           {field('secret')}
         </div>
       )}
-      <div className="form-row">
-        <FieldLabel
-          htmlFor="smtp-owner-level"
-          label="Sistem sahiplerine"
-          hint="Organizasyon ve sunucu kurallarındaki ek alıcılar kendi seviyelerini kullanır."
-        />
-        <select id="smtp-owner-level" value={ownerLevel} disabled={!canEdit} onChange={(e) => setOwnerLevel(e.target.value as AlertLevel)}>
-          {LEVELS.map((l) => (
-            <option key={l} value={l}>
-              {alertLevelLabel(l)} ve üstü
-            </option>
-          ))}
-        </select>
-      </div>
       {canEdit && (
         <div className="form-actions">
           <button className="btn btn-primary" type="submit" disabled={busy}>
@@ -254,22 +234,25 @@ function EmailChannelCard({
   )
 }
 
-// ---------------------------------------------------------------- sistem sahipleri
+// ---------------------------------------------------------------- sistem kişileri
 
-const emptyOwner: OwnerInput = { name: '', email: '', phone: '', email_enabled: true, sms_enabled: true }
+const emptyContact: ContactInput = { name: '', email: '', phone: '' }
 
-export function OwnersSection({ canEdit }: { canEdit: boolean }) {
-  const [owners, setOwners] = useState<NotificationOwner[] | null>(null)
+// Sistem kişileri: organizasyonsuz kişiler ya da ortak adresler (ör. "NOC masası"). Panel hesabı gerekmez; bütün
+// sunucuların bildirimlerini sistem kurallarıyla alırlar. Silinen kişinin kuralları da silinir.
+export function SystemContactsSection({ canEdit }: { canEdit: boolean }) {
+  const [contacts, setContacts] = useState<SystemContact[] | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [editing, setEditing] = useState<{ id: string | null; input: OwnerInput } | null>(null)
+  const [editing, setEditing] = useState<{ id: string | null; input: ContactInput } | null>(null)
+  const [deleting, setDeleting] = useState<SystemContact | null>(null)
   const [formError, setFormError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const load = useCallback(() => {
-    ownersApi
+    systemContactsApi
       .list()
-      .then(setOwners)
-      .catch((err) => setError(message(err, 'sistem sahipleri yüklenemedi')))
+      .then(setContacts)
+      .catch((err) => setError(message(err, 'sistem kişileri yüklenemedi')))
   }, [])
   useEffect(load, [load])
 
@@ -278,53 +261,54 @@ export function OwnersSection({ canEdit }: { canEdit: boolean }) {
     if (!editing) return
     setBusy(true)
     setFormError(null)
-    const input: OwnerInput = {
-      ...editing.input,
-      email: editing.input.email?.trim() ? editing.input.email.trim() : null,
-      phone: editing.input.phone?.trim() ? editing.input.phone.trim() : null,
-    }
+    const input: ContactInput = { name: editing.input.name.trim(), email: editing.input.email?.trim() ?? '', phone: editing.input.phone?.trim() ?? '' }
     try {
-      if (editing.id) await ownersApi.update(editing.id, input)
-      else await ownersApi.create(input)
+      if (editing.id) await systemContactsApi.update(editing.id, input)
+      else await systemContactsApi.create(input)
       setEditing(null)
       load()
       announce()
     } catch (err) {
-      setFormError(message(err, 'sistem sahibi kaydedilemedi'))
+      setFormError(message(err, 'sistem kişisi kaydedilemedi'))
     } finally {
       setBusy(false)
     }
   }
 
-  async function handleDelete(o: NotificationOwner) {
-    if (!confirm(`${o.name} sistem sahiplerinden çıkarılsın mı? Artık alert bildirimi almaz.`)) return
+  async function handleDelete() {
+    if (!deleting) return
+    setBusy(true)
     try {
-      await ownersApi.remove(o.id)
+      await systemContactsApi.remove(deleting.id)
+      setDeleting(null)
       load()
       announce()
     } catch (err) {
-      setError(message(err, 'sistem sahibi silinemedi'))
+      setError(message(err, 'sistem kişisi silinemedi'))
+      setDeleting(null)
+    } finally {
+      setBusy(false)
     }
   }
 
-  const set = (patch: Partial<OwnerInput>) => editing && setEditing({ ...editing, input: { ...editing.input, ...patch } })
+  const set = (patch: Partial<ContactInput>) => editing && setEditing({ ...editing, input: { ...editing.input, ...patch } })
 
   return (
     <div className="card table-card">
       <div className="card-head">
         <div>
           <h2 className="card-title">
-            Sistem sahipleri
-            <InfoTip label="Sistem sahipleri">
-              Her alert bu kişilere gider (kanalın sahip seviyesinden itibaren). Panel kullanıcısı olmaları gerekmez; organizasyon ve sunucu
-              kuralları bunlara ek alıcı ekler.
+            Sistem kişileri
+            <InfoTip label="Sistem kişileri">
+              Bir organizasyona bağlı olmayan kişiler ya da ortak adresler (ör. “NOC masası”); panel hesabı gerekmez. Bütün sunucuların
+              alert’lerini almaları için Bildirim kuralları → Sistem’de kural yazılır.
             </InfoTip>
           </h2>
         </div>
         {canEdit && (
-          <button className="btn btn-primary" type="button" onClick={() => { setFormError(null); setEditing({ id: null, input: emptyOwner }) }}>
+          <button className="btn btn-primary" type="button" onClick={() => { setFormError(null); setEditing({ id: null, input: emptyContact }) }}>
             <Plus size={15} strokeWidth={1.9} />
-            Sahip ekle
+            Kişi ekle
           </button>
         )}
       </div>
@@ -335,26 +319,28 @@ export function OwnersSection({ canEdit }: { canEdit: boolean }) {
             <th>Ad</th>
             <th>E-posta</th>
             <th>Telefon</th>
+            <th>Kurallar</th>
             {canEdit && <th className="actions" />}
           </tr>
         </thead>
         <tbody>
-          {owners?.map((o) => (
-            <tr key={o.id}>
-              <td className="primary">{o.name}</td>
-              <td data-label="E-posta">
-                {o.email ?? '—'} {o.email && !o.email_enabled && <StatusBadge tone="neutral">almıyor</StatusBadge>}
+          {contacts?.map((c) => (
+            <tr key={c.id}>
+              <td className="primary">{c.name}</td>
+              <td data-label="E-posta">{c.email ?? <span className="muted">—</span>}</td>
+              <td data-label="Telefon" className="tnum">
+                {c.phone ?? <span className="muted">—</span>}
               </td>
-              <td data-label="Telefon">
-                {o.phone ?? '—'} {o.phone && !o.sms_enabled && <StatusBadge tone="neutral">almıyor</StatusBadge>}
+              <td data-label="Kurallar">
+                {c.rule_count > 0 ? c.rule_count : <StatusBadge tone="neutral">kural yok</StatusBadge>}
               </td>
               {canEdit && (
                 <td className="actions">
-                  <button className="btn btn-sm" type="button" onClick={() => { setFormError(null); setEditing({ id: o.id, input: { name: o.name, email: o.email ?? '', phone: o.phone ?? '', email_enabled: o.email_enabled, sms_enabled: o.sms_enabled } }) }}>
+                  <button className="btn btn-sm" type="button" onClick={() => { setFormError(null); setEditing({ id: c.id, input: { name: c.name, email: c.email ?? '', phone: c.phone ?? '' } }) }}>
                     <Pencil size={14} strokeWidth={1.9} />
                     Düzenle
                   </button>
-                  <button className="btn btn-sm btn-danger" type="button" onClick={() => handleDelete(o)}>
+                  <button className="btn btn-sm btn-danger" type="button" onClick={() => setDeleting(c)}>
                     <Trash2 size={14} strokeWidth={1.9} />
                     Sil
                   </button>
@@ -362,39 +348,31 @@ export function OwnersSection({ canEdit }: { canEdit: boolean }) {
               )}
             </tr>
           ))}
-          {owners?.length === 0 && (
+          {contacts?.length === 0 && (
             <tr>
-              <td colSpan={canEdit ? 4 : 3} className="empty-cell">
-                <EmptyState icon={Users}>Sistem sahibi yok — alert bildirimleri yalnızca kurallardaki ek alıcılara gider.</EmptyState>
+              <td colSpan={canEdit ? 5 : 4} className="empty-cell">
+                <EmptyState icon={Users}>Sistem kişisi yok.</EmptyState>
               </td>
             </tr>
           )}
         </tbody>
       </table>
 
-      <Modal open={editing !== null} title={editing?.id ? 'Sistem sahibini düzenle' : 'Sistem sahibi ekle'} onClose={() => setEditing(null)}>
+      <Modal open={editing !== null} title={editing?.id ? 'Sistem kişisini düzenle' : 'Sistem kişisi ekle'} onClose={() => setEditing(null)}>
         {editing && (
           <form onSubmit={handleSave}>
             {formError && <div className="error-banner">{formError}</div>}
             <div className="form-row">
-              <FieldLabel htmlFor="owner-name" label="Ad" hint="Kişi ya da ortak adres (ör. “NOC masası”)." />
-              <input id="owner-name" value={editing.input.name} maxLength={200} required onChange={(e) => set({ name: e.target.value })} />
+              <FieldLabel htmlFor="system-contact-name" label="Ad" hint="Kişi ya da ortak adres (ör. “NOC masası”)." />
+              <input id="system-contact-name" value={editing.input.name} maxLength={200} required onChange={(e) => set({ name: e.target.value })} />
             </div>
             <div className="form-row">
-              <label htmlFor="owner-email">E-posta</label>
-              <input id="owner-email" type="email" value={editing.input.email ?? ''} onChange={(e) => set({ email: e.target.value })} />
-              <label className="check-row">
-                <input type="checkbox" checked={editing.input.email_enabled} onChange={(e) => set({ email_enabled: e.target.checked })} />
-                E-posta bildirimi alsın
-              </label>
+              <label htmlFor="system-contact-email">E-posta</label>
+              <input id="system-contact-email" type="email" value={editing.input.email ?? ''} onChange={(e) => set({ email: e.target.value })} />
             </div>
             <div className="form-row">
-              <label htmlFor="owner-phone">Telefon</label>
-              <input id="owner-phone" value={editing.input.phone ?? ''} inputMode="tel" placeholder="+905551234567" onChange={(e) => set({ phone: e.target.value })} />
-              <label className="check-row">
-                <input type="checkbox" checked={editing.input.sms_enabled} onChange={(e) => set({ sms_enabled: e.target.checked })} />
-                SMS bildirimi alsın (SMS kanalı eklendiğinde)
-              </label>
+              <label htmlFor="system-contact-phone">Telefon</label>
+              <input id="system-contact-phone" value={editing.input.phone ?? ''} inputMode="tel" placeholder="+905551234567" onChange={(e) => set({ phone: e.target.value })} />
             </div>
             <p className="form-hint" style={{ margin: '0 0 14px' }}>
               E-posta ya da telefondan en az biri gerekli.
@@ -409,6 +387,28 @@ export function OwnersSection({ canEdit }: { canEdit: boolean }) {
               </button>
             </div>
           </form>
+        )}
+      </Modal>
+
+      <Modal open={deleting !== null} size="sm" title="Sistem kişisini sil" onClose={() => setDeleting(null)}>
+        {deleting && (
+          <div>
+            <p style={{ marginTop: 0 }}>
+              <strong>{deleting.name}</strong> silinsin mi?
+              {deleting.rule_count > 0
+                ? ` Alıcı olduğu ${deleting.rule_count} bildirim kuralı da silinir; artık alert bildirimi almaz.`
+                : ' Hiçbir bildirim kuralında alıcı değil.'}
+            </p>
+            <div className="form-actions">
+              <button className="btn btn-danger" type="button" disabled={busy} onClick={handleDelete}>
+                <Trash2 size={15} strokeWidth={1.9} />
+                Sil
+              </button>
+              <button className="btn" type="button" onClick={() => setDeleting(null)}>
+                Vazgeç
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

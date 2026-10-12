@@ -4,7 +4,14 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-11 — Sunucu sayfası: Ayarlar'daki geçerli alert kuralları konuya göre gruplu; Genel'de
+**Son güncelleme:** 2026-10-13 — **Bildirim modeli sadeleşti** (server + panel): kanal "nasıl", bildirim kuralı "kime"
+gider. "Sistem sahipleri" yerine bildirim kurallarında **Sistem** kapsamı (bütün sunucular; alıcı süper admin ya da sistem
+kişisi); sistem sahipleri ile organizasyonların iletişim kişileri tek `contacts` tablosunda (organizasyonu boş = sistem
+kişisi), Bildirim → Kişiler'de. Kanaldan sahip seviyesi kalktı. Kullanıcı alıcılar artık **gönderim anında da** erişime
+göre süzülüyor (organizasyondan çıkarılan ya da rolü düşen biri o sunucuların bildirimini almıyor; önizlemede "erişimi
+yok"). Migration `000009` yalnızca ekleme yapmıyor (tablo adı değişiyor, eski tablo ve sütun siliniyor); etkisi
+`docs/COMPATIBILITY.md` §4'te. hbe2e'de mevcut veriyle migrate edilip panelde (açık/koyu, telefon) denendi. Önceki:
+2026-10-11 — Sunucu sayfası: Ayarlar'daki geçerli alert kuralları konuya göre gruplu; Genel'de
 "Aralık" kutusu Agent kutusuna katıldı. Aynı gün: telefonda sunucu sayfası başlığında durum rozeti yalnızca nokta; sunucu
 adı artık görünüyor. Aynı gün: **"Bu alert kime gider?"** (server + panel): bir sunucu ve seviye için bildirimin şu an
 kime gideceği, alıcının nereden geldiği ve kime neden gitmeyeceği; gerçek gönderimle aynı kurallarla hesaplanır
@@ -58,7 +65,8 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 - **Server (`server/`)**: `config`, `db`, `migrate`, `authsvc`, `rbac`, `store`, `alertengine` (cpu/ram/disk[mount başına]/docker_restart
   [container başına]/offline/disk_missing; protokol 4: disk gecikmesi/sıcaklık/servis yeniden başlatma/saat farkı [konu başına,
-  süre koşulu `alert_pending`'de] ve durum kuralları; sistem sahipleri + toplanan kurallar; alıcı başına kalıcı kuyruk), `notify` (SMTP),
+  süre koşulu `alert_pending`'de] ve durum kuralları; sistem + organizasyon zinciri + sunucu kuralları toplanır, kullanıcı
+  alıcılar gönderimde erişime göre süzülür; alıcı başına kalıcı kuyruk), `notify` (SMTP),
   `settings` (panelden değişen ayarlar ve bildirim kanalları; bellekte, yeniden başlatmadan uygulanır), `maintenance` (bakım
   pencerelerinin tekrar hesabı; saf), `tz` (kurulumun saat dilimi, gömülü tzdata), `offlinemonitor`,
   `pullscheduler`, `retention`, `secretbox`, `tlsreload`, `ratelimit`, `httpapi`, `testdb`/`testsmtp`; migration'lar binary'ye gömülü.
@@ -101,4 +109,6 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
 
 1. Sistem Araçları şimdilik salt okunur; kuyrukta "yeniden dene / iptal", cache'te "önbelleği boşalt" ileride ele alınabilir.
    Log Analiz bir günü baştan sona tarar: çok büyük günlerde (yüzlerce MB) yavaşlar, 15 sn'de zaman aşımına uğrar.
-2. Ek bildirim kanalları (SMS; Slack/Discord/Telegram yalnızca sistem sahiplerine giden ortak kanallar) ve iki faktörlü doğrulama.
+2. Panel: Bildirim → Kanallar kart düzeni (E-posta özet kartı + düzenleme penceresi; Webhook ve SMS "Yakında").
+3. Ek bildirim kanalları: webhook (Slack, Discord, Teams, Google Chat, genel JSON) her hedef bir `notification_channels`
+   satırı olarak, kurallarda alıcısı kanalın kendisi; SMS. Ayrıca iki faktörlü doğrulama.

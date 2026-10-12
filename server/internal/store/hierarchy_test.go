@@ -236,6 +236,63 @@ func TestThresholdsAreInheritedFromTheNearestAncestor(t *testing.T) {
 	}
 }
 
+// Sistem kişileri organizasyonsuzdur: organizasyon listelerinde görünmez, yöneticisi olmaz, e-postaları kendi aralarında
+// (büyük/küçük harf duyarsız) tekildir; silinince alıcı oldukları kurallar da gider.
+func TestSystemContacts(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	contacts := store.NewContacts(pool)
+	n := store.NewNotifications(pool)
+	org := testdb.Org(t, pool, "acme")
+
+	noc, err := contacts.Create(ctx, nil, store.ContactInput{Name: "NOC masası", Email: ptr("noc@x.test")})
+	if err != nil || noc.OrganizationID != nil || noc.Scope() != model.ContactScopeSystem {
+		t.Fatalf("system contact: %+v err=%v", noc, err)
+	}
+	orgContact, err := contacts.Create(ctx, &org, store.ContactInput{Name: "Aynı adres", Email: ptr("noc@x.test")})
+	if err != nil || orgContact.Scope() != model.ContactScopeOrganization {
+		t.Fatalf("an organization contact may share a system contact's address: %+v err=%v", orgContact, err)
+	}
+	if _, err := contacts.Create(ctx, nil, store.ContactInput{Name: "Tekrar", Email: ptr("NOC@x.test")}); !errors.Is(err, store.ErrContactEmailTaken) {
+		t.Fatalf("duplicate system e-mail: err=%v, want ErrContactEmailTaken", err)
+	}
+	if _, err := contacts.Create(ctx, nil, store.ContactInput{Name: "Yönetici", Email: ptr("y@x.test"), ManagerContactID: &orgContact.ID}); err == nil {
+		t.Fatal("a system contact with a manager was accepted")
+	}
+	ali, err := contacts.Create(ctx, nil, store.ContactInput{Name: "ali", Phone: ptr("+905550000001")})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	list, err := contacts.ListSystem(ctx)
+	if err != nil || len(list) != 2 || list[0].ID != ali.ID || list[1].ID != noc.ID {
+		t.Fatalf("system list = %+v err=%v, want ali and NOC by name", list, err)
+	}
+	if list, err := contacts.ListByOrganization(ctx, org); err != nil || len(list) != 1 || list[0].ID != orgContact.ID {
+		t.Fatalf("organization list = %+v err=%v, want only the organization's contact", list, err)
+	}
+
+	testdb.EnableEmailChannel(t, pool)
+	for _, r := range []model.NotificationRoute{
+		{ContactID: &noc.ID, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{OrganizationID: &org, ContactID: &noc.ID, Channel: model.ChannelEmail, MinLevel: model.AlertLevelCritical},
+	} {
+		if _, err := n.Create(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	counts, err := contacts.SystemRuleCounts(ctx)
+	if err != nil || counts[noc.ID] != 2 || counts[ali.ID] != 0 || len(counts) != 1 {
+		t.Fatalf("rule counts = %v err=%v", counts, err)
+	}
+	if err := contacts.Delete(ctx, noc.ID); err != nil {
+		t.Fatal(err)
+	}
+	if rules, err := n.ListSystem(ctx); err != nil || len(rules) != 0 {
+		t.Fatalf("system rules after deleting the contact = %d err=%v, want 0", len(rules), err)
+	}
+}
+
 func TestContactsCRUDAndConstraints(t *testing.T) {
 	pool := testdb.New(t)
 	ctx := context.Background()
@@ -243,22 +300,22 @@ func TestContactsCRUDAndConstraints(t *testing.T) {
 	org := testdb.Org(t, pool, "acme")
 	other := testdb.Org(t, pool, "other")
 
-	boss, err := contacts.Create(ctx, org, store.ContactInput{Name: "Ayşe Yılmaz", Department: ptr("BT"), Title: ptr("Müdür"), Email: ptr("ayse@x.test")})
+	boss, err := contacts.Create(ctx, &org, store.ContactInput{Name: "Ayşe Yılmaz", Department: ptr("BT"), Title: ptr("Müdür"), Email: ptr("ayse@x.test")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	dev, err := contacts.Create(ctx, org, store.ContactInput{Name: "Ali Kaya", ManagerContactID: &boss.ID, Phone: ptr("+905551112233")})
+	dev, err := contacts.Create(ctx, &org, store.ContactInput{Name: "Ali Kaya", ManagerContactID: &boss.ID, Phone: ptr("+905551112233")})
 	if err != nil || dev.ManagerContactID == nil || *dev.ManagerContactID != boss.ID {
 		t.Fatalf("contact with a manager: %+v err=%v", dev, err)
 	}
 
 	// Telefon ya da e-postadan en az biri şart (veritabanı da reddeder).
-	if _, err := contacts.Create(ctx, org, store.ContactInput{Name: "İletişimsiz"}); err == nil {
+	if _, err := contacts.Create(ctx, &org, store.ContactInput{Name: "İletişimsiz"}); err == nil {
 		t.Fatal("a contact with neither phone nor email was accepted")
 	}
 	// Yönetici başka organizasyondan olamaz.
-	foreign, _ := contacts.Create(ctx, other, store.ContactInput{Name: "Yabancı", Email: ptr("y@x.test")})
-	if _, err := contacts.Create(ctx, org, store.ContactInput{Name: "X", Email: ptr("x@x.test"), ManagerContactID: &foreign.ID}); err == nil {
+	foreign, _ := contacts.Create(ctx, &other, store.ContactInput{Name: "Yabancı", Email: ptr("y@x.test")})
+	if _, err := contacts.Create(ctx, &org, store.ContactInput{Name: "X", Email: ptr("x@x.test"), ManagerContactID: &foreign.ID}); err == nil {
 		t.Fatal("a manager from another organization was accepted")
 	}
 	// Kendi yöneticisi olamaz.
@@ -304,6 +361,9 @@ func resolve(t *testing.T, n *store.Notifications, host, org uuid.UUID, level st
 		if r.ChannelOff {
 			s += " (kapalı)"
 		}
+		if r.NoAccess {
+			s += " (erişimi yok)"
+		}
 		out = append(out, s)
 	}
 	sort.Strings(out)
@@ -343,16 +403,32 @@ func TestNotificationRecipientResolution(t *testing.T) {
 	childAdmin := testdb.User(t, pool, "child-admin@x.test", "org_admin", "pw")
 	testdb.AssignOrg(t, pool, holdingAdmin, holding)
 	testdb.AssignOrg(t, pool, acmeAdmin, acme)
+	testdb.AssignOrg(t, pool, childAdmin, child)
 
 	// 1) Varsayılan alıcı yoktur: super_admin ya da org_admin olmak bildirim almak demek değildir.
-	check("no owners, no rules", host, acme, model.AlertLevelCritical, "")
+	check("no rules", host, acme, model.AlertLevelCritical, "")
 
-	// 2) Sistem sahipleri: her açık kanaldan, kanalın sahip seviyesinden itibaren; sahip o kanaldan almak istemiyorsa almaz.
-	exec(`UPDATE notification_channels SET enabled = true WHERE channel = 'email'`) // sahip seviyesi warning
-	exec(`INSERT INTO notification_channels (channel, provider, enabled, owner_min_level) VALUES ('sms', 'test', true, 'critical')`)
-	exec(`INSERT INTO notification_owners (name, email, phone) VALUES ('Ali', 'ali@x.test', '+905550000001')`)
-	exec(`INSERT INTO notification_owners (name, email) VALUES ('NOC', 'noc@x.test')`)
-	exec(`INSERT INTO notification_owners (name, email, phone, email_enabled) VALUES ('Veli', 'veli@x.test', '+905550000002', false)`)
+	// 2) Sistem kuralları bütün sunucular içindir; her kural kendi kanalı ve seviyesiyle (e-posta warning, SMS critical).
+	exec(`UPDATE notification_channels SET enabled = true WHERE channel = 'email'`)
+	exec(`INSERT INTO notification_channels (channel, provider, enabled) VALUES ('sms', 'test', true)`)
+	system := func(name string, email, phone *string, rules ...model.NotificationRoute) {
+		t.Helper()
+		c, err := contacts.Create(ctx, nil, store.ContactInput{Name: name, Email: email, Phone: phone})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, r := range rules {
+			r.ContactID = &c.ID
+			if _, err := n.Create(ctx, r); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	emailWarning := model.NotificationRoute{Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning}
+	smsCritical := model.NotificationRoute{Channel: model.ChannelSMS, MinLevel: model.AlertLevelCritical}
+	system("Ali", ptr("ali@x.test"), ptr("+905550000001"), emailWarning, smsCritical)
+	system("NOC", ptr("noc@x.test"), nil, emailWarning)
+	system("Veli", ptr("veli@x.test"), ptr("+905550000002"), smsCritical) // e-posta istemiyor: e-posta kuralı yok
 	owners := "email:ali@x.test, email:noc@x.test"
 	ownersCritical := "email:ali@x.test, email:noc@x.test, sms:+905550000001, sms:+905550000002"
 	check("owners", host, acme, model.AlertLevelWarning, owners)
@@ -361,7 +437,7 @@ func TestNotificationRecipientResolution(t *testing.T) {
 	check("owners, unrelated organization", otherHost, other, model.AlertLevelWarning, owners)
 
 	// 3) Kurallar toplanır: üst organizasyonların, organizasyonun ve sunucunun kuralları birlikte geçerlidir.
-	ayse, err := contacts.Create(ctx, acme, store.ContactInput{Name: "Ayşe", Email: ptr("ayse@musteri.test"), Phone: ptr("+905550000003")})
+	ayse, err := contacts.Create(ctx, &acme, store.ContactInput{Name: "Ayşe", Email: ptr("ayse@musteri.test"), Phone: ptr("+905550000003")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -385,27 +461,61 @@ func TestNotificationRecipientResolution(t *testing.T) {
 		"email:ali@x.test, email:ayse@musteri.test, email:child-admin@x.test, email:holding-admin@x.test, email:noc@x.test, sms:+905550000001, sms:+905550000002")
 	check("unrelated organization", otherHost, other, model.AlertLevelCritical, ownersCritical)
 
-	// 4) Aynı kanal ve adres bir kez: sahip olan biri bir kuralda da geçse tek ileti alır (büyük/küçük harf fark etmez).
-	nocContact, err := contacts.Create(ctx, acme, store.ContactInput{Name: "NOC masası", Email: ptr("NOC@x.test")})
+	// 4) Aynı kanal ve adres bir kez: sistem kuralındaki biri bir kuralda da geçse tek ileti alır (büyük/küçük harf fark
+	// etmez).
+	nocContact, err := contacts.Create(ctx, &acme, store.ContactInput{Name: "NOC masası", Email: ptr("NOC@x.test")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := n.Create(ctx, model.NotificationRoute{OrganizationID: &acme, ContactID: &nocContact.ID, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning}); err != nil {
 		t.Fatal(err)
 	}
-	check("owner also in a rule", host2, acme, model.AlertLevelWarning, "email:ali@x.test, email:holding-admin@x.test, email:noc@x.test")
+	check("system contact also in a rule", host2, acme, model.AlertLevelWarning, "email:ali@x.test, email:holding-admin@x.test, email:noc@x.test")
 
-	// 5) Kapalı kanal: sahipler o kanaldan hiç gelmez; kurallar "kapalı" işaretiyle döner (motor atlar ve loglar).
+	// 5) Kapalı kanal: kurallar "kapalı" işaretiyle döner (motor atlar ve loglar), sistem kuralları da.
 	if _, err := n.Create(ctx, model.NotificationRoute{HostID: &host2, ContactID: &ayse.ID, Channel: model.ChannelSMS, MinLevel: model.AlertLevelWarning}); err != nil {
 		t.Fatal(err)
 	}
 	check("sms rule", host2, acme, model.AlertLevelWarning, "email:ali@x.test, email:holding-admin@x.test, email:noc@x.test, sms:+905550000003")
 	exec(`UPDATE notification_channels SET enabled = false WHERE channel = 'sms'`)
 	check("sms channel off", host2, acme, model.AlertLevelCritical,
-		"email:ali@x.test, email:ayse@musteri.test, email:holding-admin@x.test, email:noc@x.test, sms:+905550000003 (kapalı)")
+		"email:ali@x.test, email:ayse@musteri.test, email:holding-admin@x.test, email:noc@x.test, "+
+			"sms:+905550000001 (kapalı), sms:+905550000002 (kapalı), sms:+905550000003 (kapalı)")
 	exec(`UPDATE notification_channels SET enabled = false WHERE channel = 'email'`)
-	check("every channel off", host2, acme, model.AlertLevelWarning, // sahip gidince kişinin kendi yazımı görünür
-		"email:NOC@x.test (kapalı), email:holding-admin@x.test (kapalı), sms:+905550000003 (kapalı)")
+	check("every channel off", host2, acme, model.AlertLevelWarning,
+		"email:ali@x.test (kapalı), email:holding-admin@x.test (kapalı), email:noc@x.test (kapalı), sms:+905550000003 (kapalı)")
+	exec(`UPDATE notification_channels SET enabled = true`)
+
+	// 6) Kullanıcı alıcılar gönderimde de erişime göre süzülür (kural durur, ileti gitmez): atanmamış org admin, bu
+	// sunucuya atanmamış operatör ve sistem kuralındayken rolü düşürülmüş biri; atanmış operatör ve süper admin alır.
+	gone := testdb.User(t, pool, "gone@x.test", "org_admin", "pw")
+	opHere := testdb.User(t, pool, "op-here@x.test", "operator", "pw")
+	opElse := testdb.User(t, pool, "op-else@x.test", "operator", "pw")
+	testdb.AssignHost(t, pool, opHere, host2)
+	testdb.AssignHost(t, pool, opElse, host)
+	root := testdb.User(t, pool, "root2@x.test", "super_admin", "pw")
+	demoted := testdb.User(t, pool, "demoted@x.test", "org_admin", "pw")
+	testdb.AssignOrg(t, pool, demoted, other)
+	for _, r := range []model.NotificationRoute{
+		{OrganizationID: &acme, UserID: &gone},
+		{HostID: &host2, UserID: &opHere},
+		{HostID: &host2, UserID: &opElse},
+		{UserID: &root},
+		{UserID: &demoted},
+	} {
+		r.Channel, r.MinLevel = model.ChannelEmail, model.AlertLevelWarning
+		if _, err := n.Create(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check("access at delivery", host2, acme, model.AlertLevelWarning,
+		"email:ali@x.test, email:demoted@x.test (erişimi yok), email:gone@x.test (erişimi yok), email:holding-admin@x.test, "+
+			"email:noc@x.test, email:op-else@x.test (erişimi yok), email:op-here@x.test, email:root2@x.test, sms:+905550000003")
+	// Org admin, sunucunun organizasyon zincirinden birine atanınca görür (atama aşağı miras kalır).
+	testdb.AssignOrg(t, pool, gone, holding)
+	check("access through a parent organization", host2, acme, model.AlertLevelWarning,
+		"email:ali@x.test, email:demoted@x.test (erişimi yok), email:gone@x.test, email:holding-admin@x.test, "+
+			"email:noc@x.test, email:op-else@x.test (erişimi yok), email:op-here@x.test, email:root2@x.test, sms:+905550000003")
 }
 
 func TestNotificationRouteConstraints(t *testing.T) {
@@ -417,10 +527,9 @@ func TestNotificationRouteConstraints(t *testing.T) {
 	org := testdb.Org(t, pool, "acme")
 	host := testdb.PushHost(t, pool, org, "web", "h")
 	admin := testdb.User(t, pool, "a@x.test", "org_admin", "pw")
-	c, _ := contacts.Create(ctx, org, store.ContactInput{Name: "Ayşe", Email: ptr("ayse@x.test")})
+	c, _ := contacts.Create(ctx, &org, store.ContactInput{Name: "Ayşe", Email: ptr("ayse@x.test")})
 
 	bad := map[string]model.NotificationRoute{
-		"no scope":        {UserID: &admin, Channel: "email", MinLevel: "warning"},
 		"two scopes":      {OrganizationID: &org, HostID: &host, UserID: &admin, Channel: "email", MinLevel: "warning"},
 		"no recipient":    {OrganizationID: &org, Channel: "email", MinLevel: "warning"},
 		"two recipients":  {OrganizationID: &org, UserID: &admin, ContactID: &c.ID, Channel: "email", MinLevel: "warning"},
@@ -434,6 +543,15 @@ func TestNotificationRouteConstraints(t *testing.T) {
 		if _, err := n.Create(ctx, r); err == nil {
 			t.Errorf("%s: the route was accepted", name)
 		}
+	}
+
+	// Kapsamsız kural sistem kuralıdır (bütün sunucular).
+	sys, err := n.Create(ctx, model.NotificationRoute{UserID: &admin, Channel: "email", MinLevel: "warning"})
+	if err != nil || sys.OrganizationID != nil || sys.HostID != nil {
+		t.Fatalf("system rule: %+v err=%v", sys, err)
+	}
+	if list, err := n.ListSystem(ctx); err != nil || len(list) != 1 || list[0].ID != sys.ID || list[0].RecipientName == "" {
+		t.Fatalf("system rules: %+v err=%v", list, err)
 	}
 
 	r, err := n.Create(ctx, model.NotificationRoute{OrganizationID: &org, UserID: &admin, Channel: "email", MinLevel: "warning"})
@@ -503,9 +621,9 @@ func TestRecipientCandidatesAreLimitedToTheScope(t *testing.T) {
 	testdb.AssignOrg(t, pool, betaAdmin, beta)
 	testdb.AssignHost(t, pool, op, host)
 	testdb.AssignHost(t, pool, otherOp, testdb.PushHost(t, pool, beta, "x", "h"))
-	mine, _ := contacts.Create(ctx, acme, store.ContactInput{Name: "Ayşe", Email: ptr("a@m.test")})
-	contacts.Create(ctx, beta, store.ContactInput{Name: "Başkası", Email: ptr("b@m.test")})
-	parentContact, _ := contacts.Create(ctx, holding, store.ContactInput{Name: "Genel", Email: ptr("g@m.test")})
+	mine, _ := contacts.Create(ctx, &acme, store.ContactInput{Name: "Ayşe", Email: ptr("a@m.test")})
+	contacts.Create(ctx, &beta, store.ContactInput{Name: "Başkası", Email: ptr("b@m.test")})
+	parentContact, _ := contacts.Create(ctx, &holding, store.ContactInput{Name: "Genel", Email: ptr("g@m.test")})
 
 	users := func(cs []store.Candidate) map[uuid.UUID]bool {
 		m := map[uuid.UUID]bool{}
@@ -547,6 +665,19 @@ func TestRecipientCandidatesAreLimitedToTheScope(t *testing.T) {
 	if u := users(cs); !u[op] || u[otherOp] || len(u) != 4 {
 		t.Fatalf("host users = %v", u)
 	}
+
+	// Sistem kapsamı: yalnızca süper adminler ve sistem kişileri (organizasyon kişileri ve dar kapsamlı kullanıcılar yok).
+	sysContact, err := contacts.Create(ctx, nil, store.ContactInput{Name: "NOC", Email: ptr("noc@m.test")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cs, err = n.SystemCandidates(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u, c := users(cs), contactIDs(cs); !u[root] || len(u) != 1 || !c[sysContact.ID] || len(c) != 1 {
+		t.Fatalf("system candidates: users=%v contacts=%v", u, c)
+	}
 }
 
 // Alıcının kaynağı ("Bu alert kime gider?" önizlemesi için): ilk geldiği yer Source'ta, aynı kanal ve adresi ayrıca veren
@@ -570,7 +701,7 @@ func TestNotificationRecipientSources(t *testing.T) {
 	}
 	contact := func(org uuid.UUID, name, email string) uuid.UUID {
 		t.Helper()
-		c, err := contacts.Create(ctx, org, store.ContactInput{Name: name, Email: ptr(email)})
+		c, err := contacts.Create(ctx, &org, store.ContactInput{Name: name, Email: ptr(email)})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -592,11 +723,15 @@ func TestNotificationRecipientSources(t *testing.T) {
 	testdb.AssignOrg(t, pool, acmeAdmin, acme)
 
 	exec(`UPDATE notification_channels SET enabled = true WHERE channel = 'email'`)
-	exec(`INSERT INTO notification_owners (name, email) VALUES ('Ali', 'ali@x.test')`)
+	ali, err := contacts.Create(ctx, nil, store.ContactInput{Name: "Ali", Email: ptr("ali@x.test")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	route(model.NotificationRoute{ContactID: &ali.ID, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
 	ayse := contact(acme, "Ayşe", "ayse@musteri.test")
 	route(model.NotificationRoute{OrganizationID: &holding, UserID: &holdingAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
 	route(model.NotificationRoute{HostID: &host, ContactID: &ayse, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
-	// Sahip bir kuralda da geçer (büyük/küçük harf fark etmez): tek alıcı, kural Also'da.
+	// Sistem kuralındaki kişi bir kuralda da geçer (büyük/küçük harf fark etmez): tek alıcı, kural Also'da.
 	route(model.NotificationRoute{OrganizationID: &acme, ContactID: ptr(contact(acme, "Ali (kişi)", "ALI@x.test")), Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
 	// Aynı kişi hem organizasyonun hem sunucunun kuralında: ilk geldiği yer kalır, öteki Also'da.
 	route(model.NotificationRoute{OrganizationID: &acme, ContactID: &ayse, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning})
@@ -617,7 +752,7 @@ func TestNotificationRecipientSources(t *testing.T) {
 		got = append(got, s)
 	}
 	want := []string{
-		"ali@x.test owner +organization:Acme",
+		"ali@x.test system +organization:Acme",
 		"acme-admin@x.test organization:Acme",
 		"ayse@musteri.test host +organization:Acme", // aynı ad: önce yazılan kural (sunucu) ilk gelir
 		"holding-admin@x.test organization:Holding",

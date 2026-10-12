@@ -1,37 +1,40 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
-import { BellRing, Building2, Contact, Server, Users, Webhook, type LucideIcon } from 'lucide-react'
+import { BellRing, Building2, Contact, Server, Webhook, type LucideIcon } from 'lucide-react'
 import { contactsApi, organizationsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import { ComingSoon } from '../components/ComingSoon'
 import { EmptyState } from '../components/EmptyState'
+import { InfoTip } from '../components/InfoTip'
 import { PageHeader } from '../components/PageHeader'
 import { HostPicker, OrgPicker } from '../components/ScopePickers'
 import { useScopeData } from '../components/useScopeData'
 import { SearchInput } from '../components/SearchInput'
 import { TabPanel, Tabs } from '../components/Tabs'
 import { useTab } from '../components/useTab'
-import { navigation } from '../navigation'
+import { navigation, notificationsPath } from '../navigation'
 import { NotificationPreviewCard } from './NotificationPreview'
 import { NotificationRules } from './NotificationRules'
-import { ChannelsSection, OwnersSection } from './NotificationSettings'
+import { ChannelsSection, SystemContactsSection } from './NotificationSettings'
 import { filterContacts, resolveRouteScope, type ContactRow, type RouteScopeChoice } from './notifications'
 
 const ICONS: Record<string, LucideIcon> = {
   kanallar: BellRing,
-  sahipler: Users,
   kurallar: Webhook,
   kisiler: Contact,
 }
 
-// Bildirim: bir alert'in kime, hangi kanaldan gideceği tek yerde. Kanallar ve sistem sahipleri kurulum genelidir; kurallar
-// organizasyon ya da sunucu kapsamındadır; iletişim kişileri burada salt okunur listelenir (düzenleme organizasyon
-// sayfasında). Her sekme yalnızca izni olana görünür.
+// Bildirim: bir alert'in nasıl (kanallar) ve kime (kurallar) gideceği tek yerde. Kanallar kurulum genelidir; kurallar
+// sistem, organizasyon ya da sunucu kapsamındadır; Kişiler sekmesinde sistem kişileri düzenlenir, organizasyonların
+// iletişim kişileri salt okunur listelenir (düzenleme organizasyon sayfasında). Her sekme yalnızca izni olana görünür.
 export function NotificationsPage() {
   const { can } = useAuth()
+  const [params] = useSearchParams()
   const tabs = navigation(can).notifications
   const ids = tabs.map((t) => t.id)
   const [active, setActive] = useTab(ids, ids[0] ?? '')
+  // Eski "Sistem sahipleri" sekmesinin adresi: sistem kişileri artık Kişiler sekmesinde.
+  if (params.get('sekme') === 'sahipler') return <Navigate to={notificationsPath('kisiler')} replace />
   if (tabs.length === 0) return <Navigate to="/" replace />
   return (
     <div>
@@ -66,25 +69,27 @@ export function NotificationsPage() {
           </ComingSoon>
         </div>
       </TabPanel>
-      <TabPanel id="sahipler" active={active}>
-        <OwnersSection canEdit={can('settings.manage')} />
-      </TabPanel>
       <TabPanel id="kurallar" active={active}>
         <RoutesTab />
       </TabPanel>
       <TabPanel id="kisiler" active={active}>
-        <ContactsTab />
+        <div className="stack-col">
+          {can('settings.view') && <SystemContactsSection canEdit={can('settings.manage')} />}
+          {can('contact.view') && <ContactsTab />}
+        </div>
       </TabPanel>
     </div>
   )
 }
 
-// Bildirim kuralları: organizasyon ya da sunucu seçilir, o kapsamın kuralları düzenlenir. Kapsam adreste (`?kapsam=&id=`).
+// Bildirim kuralları: sistem, organizasyon ya da sunucu seçilir, o kapsamın kuralları düzenlenir. Kapsam adreste
+// (`?kapsam=&id=`). Sistem kurallarını settings.view görür, settings.manage düzenler.
 function RoutesTab() {
   const { can } = useAuth()
   const canSeeOrgs = can('organization.view')
+  const canSeeSystem = can('settings.view')
   const [params, setParams] = useSearchParams()
-  const scope = resolveRouteScope(params.get('kapsam'), params.get('id'), canSeeOrgs)
+  const scope = resolveRouteScope(params.get('kapsam'), params.get('id'), canSeeOrgs, canSeeSystem)
   const { orgs, hosts, orgNames } = useScopeData(canSeeOrgs)
 
   function select(next: RouteScopeChoice) {
@@ -98,8 +103,13 @@ function RoutesTab() {
   return (
     <div>
       <div className="toolbar" style={{ justifyContent: 'flex-start' }}>
-        {canSeeOrgs && (
+        {(canSeeOrgs || canSeeSystem) && (
           <div className="segmented" role="group" aria-label="Kapsam">
+            {canSeeSystem && (
+              <button type="button" aria-pressed={scope.kind === 'sistem'} onClick={() => select({ kind: 'sistem' })}>
+                Sistem
+              </button>
+            )}
             <button type="button" aria-pressed={scope.kind === 'org'} onClick={() => select({ kind: 'org' })}>
               Organizasyon
             </button>
@@ -114,7 +124,11 @@ function RoutesTab() {
         )}
       </div>
 
-      {scope.id ? (
+      {scope.kind === 'sistem' ? (
+        <div className="page-readable">
+          <NotificationRules key="sistem" scope={{ system: true }} canEdit={can('settings.manage')} />
+        </div>
+      ) : scope.id ? (
         <div className="page-readable">
           <NotificationRules
             key={`${scope.kind}-${scope.id}`}
@@ -164,14 +178,15 @@ function ContactsTab() {
 
   return (
     <div>
-      <div className="toolbar">
-        <SearchInput value={q} onChange={setQ} placeholder="Kişi ya da organizasyon ara…" debounceMs={0} />
-        <span className="muted" style={{ fontSize: 13 }}>
-          Salt okunur; kişiler organizasyon sayfasında düzenlenir.
-        </span>
-      </div>
       {error && <div className="error-banner">{error}</div>}
       <div className="card table-card">
+        <div className="card-head">
+          <h2 className="card-title">
+            Organizasyon kişileri
+            <InfoTip label="Organizasyon kişileri">Burada salt okunur listelenir; kişiler organizasyon sayfasında düzenlenir.</InfoTip>
+          </h2>
+          <SearchInput value={q} onChange={setQ} placeholder="Kişi ya da organizasyon ara…" debounceMs={0} />
+        </div>
         <table className="stack">
           <thead>
             <tr>

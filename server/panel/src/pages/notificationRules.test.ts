@@ -22,17 +22,21 @@ test('labels show name, address and where the recipient comes from', () => {
   assert.equal(candidateLabel(user('u1', 'ali', 'super_admin')), 'ali — ali@x.test (Süper Admin)')
   assert.equal(candidateLabel({ contact_id: 'c', name: 'Ayşe', phone: '+90 555', source: 'contact' }), 'Ayşe — +90 555 (İletişim kişisi)')
   assert.equal(candidateLabel({ user_id: 'u', name: 'x', source: 'operator' }), 'x (Operatör)')
+  assert.equal(candidateLabel({ contact_id: 'c', name: 'NOC', email: 'noc@x.test', source: 'system_contact' }), 'NOC — noc@x.test (Sistem kişisi)')
 })
 
-test('the coverage text says owners always get alerts and rules add up', () => {
+test('the coverage text says system rules also apply and rules add up', () => {
   for (const text of [describeCoverage('organization', true), describeCoverage('host', false)]) {
-    assert.match(text, /her zaman sistem sahiplerine/)
-    assert.match(text, /ek alıcı/)
-    assert.doesNotMatch(text, /YALNIZCA|varsayılan alıcı/)
+    assert.match(text, /sistem kurallarındaki alıcılara da gider/)
+    assert.match(text, /onlara eklenir/)
+    assert.doesNotMatch(text, /YALNIZCA|varsayılan alıcı|sistem sahib/)
   }
   assert.match(describeCoverage('host', true), /birlikte uygulanır/)
-  assert.match(describeCoverage('organization', true), /Sistem sahipleri\)/)
-  assert.doesNotMatch(describeCoverage('organization', false), /Bildirim →/)
+  assert.match(describeCoverage('organization', true), /→ Sistem\)/)
+  assert.doesNotMatch(describeCoverage('organization', false), /→/)
+  // Sistem kapsamı: bütün sunucular; alıcılar yalnızca süper adminler ve sistem kişileri.
+  assert.match(describeCoverage('system', true), /bütün sunucuların/)
+  assert.match(describeCoverage('system', true), /süper adminler ve sistem kişileri/)
 })
 
 test('only personal channels the server can send are offered; closed ones say why', () => {
@@ -44,7 +48,7 @@ test('only personal channels the server can send are offered; closed ones say wh
       opt('email'),
       opt('sms', { enabled: false, ready: false }),
       opt('telegram', { enabled: false }),
-      opt('slack', { personal: false }), // yalnızca sistem sahiplerine gider
+      opt('slack', { personal: false }), // ortak hedefe gider: kuralın alıcısı bir kişidir
       opt('discord', { implemented: false }),
     ]),
     [

@@ -23,7 +23,7 @@ func TestNotificationChannelsSaveAndSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if email.Provider != "smtp" || email.Enabled || email.SecretSet || email.OwnerMinLevel != "warning" || email.VerifiedAt != nil {
+	if email.Provider != "smtp" || email.Enabled || email.SecretSet || email.VerifiedAt != nil {
 		t.Fatalf("seeded email channel = %+v", email)
 	}
 	if _, err := s.Get(ctx, "pigeon"); !errors.Is(err, store.ErrNotFound) {
@@ -44,11 +44,11 @@ func TestNotificationChannelsSaveAndSecrets(t *testing.T) {
 		t.Fatalf("stored secret = %q err=%v, want it sealed", raw, err)
 	}
 
-	// Doğrulama: yalnızca açma/kapama ya da sahip seviyesi değişirse korunur; ayar ya da şifre değişince sıfırlanır.
+	// Doğrulama: yalnızca açma/kapama değişirse korunur; ayar ya da şifre değişince sıfırlanır.
 	if _, err := s.MarkVerified(ctx, "email"); err != nil {
 		t.Fatal(err)
 	}
-	saved.Enabled, saved.OwnerMinLevel = true, "critical"
+	saved.Enabled = true
 	if saved, err = s.Save(ctx, &admin, saved, nil); err != nil || saved.VerifiedAt == nil || saved.Secret != "gizli-şifre" {
 		t.Fatalf("enable only: verified=%v secret kept=%v err=%v", saved.VerifiedAt, saved.Secret == "gizli-şifre", err)
 	}
@@ -69,9 +69,9 @@ func TestNotificationChannelsSaveAndSecrets(t *testing.T) {
 	}
 
 	// CHECK ihlali ErrSettingsInvalid olur.
-	saved.OwnerMinLevel = "loud"
+	saved.Config = json.RawMessage(`[]`)
 	if _, err := s.Save(ctx, nil, saved, nil); !errors.Is(err, store.ErrSettingsInvalid) {
-		t.Fatalf("invalid owner level: err=%v", err)
+		t.Fatalf("non-object config: err=%v", err)
 	}
 }
 
@@ -131,9 +131,9 @@ func TestNotificationChannelWithAnUnreadableSecretIsStillReadable(t *testing.T) 
 	}
 
 	// Şifreye dokunmayan kayıt çalışır ve işaret kalır.
-	got.OwnerMinLevel = "critical"
+	got.Enabled = !got.Enabled
 	saved, err := s.Save(ctx, nil, *got, nil)
-	if err != nil || !saved.SecretUnreadable || saved.OwnerMinLevel != "critical" {
+	if err != nil || !saved.SecretUnreadable || saved.Enabled != got.Enabled {
 		t.Fatalf("saving without touching the secret: %+v err=%v", saved, err)
 	}
 	if saved, err = s.Save(ctx, nil, saved, str("yeni-anahtarla")); err != nil || saved.SecretUnreadable || saved.Secret != "yeni-anahtarla" {

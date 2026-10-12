@@ -32,7 +32,8 @@ type env struct {
 }
 
 // newEnv, migration'ları uygulanmış bir şema üzerinde gerçek bir engine kurar: bir org, bir push
-// host, global cpu eşiği 80 (uyarı) / 95 (kritik), açık e-posta kanalı ve bir sistem sahibi (owner@x.test) ve e-postalar
+// host, global cpu eşiği 80 (uyarı) / 95 (kritik), açık e-posta kanalı, bir sistem kişisi (owner@x.test) ve ona sistem
+// kuralı; e-postalar
 // denetlenebilsin diye gerçek bir SMTP dinleyicisi.
 func newEnv(t *testing.T) *env {
 	t.Helper()
@@ -49,7 +50,7 @@ func newEnvWithPanel(t *testing.T, panelBaseURL string) *env {
 	host := testdb.PushHost(t, pool, org, "web-1", "h")
 	testdb.Threshold(t, pool, nil, nil, "cpu", 80, 95)
 	admin := testdb.User(t, pool, "root@x.test", "super_admin", "pw") // alert'leri onaylayan kullanıcı
-	testdb.EmailOwner(t, pool, "owner@x.test")                        // sistem sahibi: her alert'ten haberdar olur
+	testdb.SystemEmailContact(t, pool, "owner@x.test")                // sistem kuralı: her alert'ten haberdar olur
 
 	return &env{
 		ctx: context.Background(), pool: pool, smtp: smtp, org: org, host: host, admin: admin,
@@ -304,11 +305,11 @@ func TestNoThresholdNoAlert(t *testing.T) {
 	}
 }
 
-// Bildirim sistem sahiplerine gider; super_admin, org_admin ya da operatör olmak kendiliğinden bildirim almak demek
-// değildir. Her sahip ayrı ileti alır: bir iletide tek alıcı görünür.
-func TestAlertGoesToTheOwnersEachSeparately(t *testing.T) {
+// Bildirim sistem kurallarındaki alıcılara gider; super_admin, org_admin ya da operatör olmak kendiliğinden bildirim almak
+// demek değildir. Her alıcı ayrı ileti alır: bir iletide tek alıcı görünür.
+func TestAlertGoesToTheSystemRecipientsEachSeparately(t *testing.T) {
 	e := newEnv(t)
-	testdb.EmailOwner(t, e.pool, "noc@x.test")
+	testdb.SystemEmailContact(t, e.pool, "noc@x.test")
 	orgAdmin := testdb.User(t, e.pool, "admin-acme@x.test", "org_admin", "pw")
 	operator := testdb.User(t, e.pool, "op@x.test", "operator", "pw")
 	testdb.AssignOrg(t, e.pool, orgAdmin, e.org)
@@ -390,11 +391,11 @@ func TestEmailTimesFollowTheInstallationTimezone(t *testing.T) {
 	}
 }
 
-// Organizasyon kuralı sahiplere ek alıcı ekler (sahipleri devre dışı bırakmaz); kuralın en düşük seviyesinin altındaki
-// alert'te kural alıcı üretmez.
+// Organizasyon kuralı sistem kurallarına ek alıcı ekler (onları devre dışı bırakmaz); kuralın en düşük seviyesinin
+// altındaki alert'te kural alıcı üretmez.
 func TestOrganizationRuleAddsRecipientsToTheOwners(t *testing.T) {
 	e := newEnv(t)
-	contact, err := store.NewContacts(e.pool).Create(e.ctx, e.org, store.ContactInput{Name: "Ayşe", Email: ptr("ayse@musteri.test")})
+	contact, err := store.NewContacts(e.pool).Create(e.ctx, &e.org, store.ContactInput{Name: "Ayşe", Email: ptr("ayse@musteri.test")})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -416,7 +417,7 @@ func TestOrganizationRuleAddsRecipientsToTheOwners(t *testing.T) {
 }
 
 // Kurallar toplanır: üst organizasyonun, organizasyonun ve sunucunun kuralları birlikte geçerlidir; hiçbiri diğerini
-// ezmez. Sahip olan biri bir kuralda da geçse tek ileti alır.
+// ezmez. Sistem kuralındaki biri bir organizasyon ya da sunucu kuralında da geçse tek ileti alır.
 func TestHostAndOrganizationRulesAddUp(t *testing.T) {
 	e := newEnv(t)
 	child := testdb.ChildOrg(t, e.pool, "acme-ist", e.org)
@@ -425,6 +426,10 @@ func TestHostAndOrganizationRulesAddUp(t *testing.T) {
 	orgAdmin := testdb.User(t, e.pool, "org@x.test", "org_admin", "pw")
 	hostAdmin := testdb.User(t, e.pool, "host@x.test", "org_admin", "pw")
 	ownerAsUser := testdb.User(t, e.pool, "owner@x.test", "org_admin", "pw")
+	testdb.AssignOrg(t, e.pool, parentAdmin, e.org)
+	for _, u := range []uuid.UUID{orgAdmin, hostAdmin, ownerAsUser} {
+		testdb.AssignOrg(t, e.pool, u, child)
+	}
 	routes := store.NewNotifications(e.pool)
 	for _, r := range []model.NotificationRoute{
 		{OrganizationID: &e.org, UserID: &parentAdmin, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
@@ -442,6 +447,50 @@ func TestHostAndOrganizationRulesAddUp(t *testing.T) {
 	}
 }
 
+// Kural yalnızca eklenirken değil gönderimde de erişime bakar: organizasyondan çıkarılan org admin, sunucusu alınmış
+// operatör ve sistem kuralındayken rolü düşürülen biri bu sunucuyu artık göremez; kuralları durur ama ileti almazlar.
+func TestRecipientsWhoLostAccessAreSkipped(t *testing.T) {
+	e := newEnv(t)
+	removed := testdb.User(t, e.pool, "removed@x.test", "org_admin", "pw")
+	stays := testdb.User(t, e.pool, "stays@x.test", "org_admin", "pw")
+	testdb.AssignOrg(t, e.pool, stays, e.org)
+	opGone := testdb.User(t, e.pool, "op-gone@x.test", "operator", "pw")
+	opHere := testdb.User(t, e.pool, "op-here@x.test", "operator", "pw")
+	testdb.AssignHost(t, e.pool, opHere, e.host)
+	demoted := testdb.User(t, e.pool, "demoted@x.test", "org_admin", "pw")
+	other := testdb.Org(t, e.pool, "other")
+	testdb.AssignOrg(t, e.pool, demoted, other)
+	routes := store.NewNotifications(e.pool)
+	for _, r := range []model.NotificationRoute{
+		{OrganizationID: &e.org, UserID: &removed, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{OrganizationID: &e.org, UserID: &stays, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{HostID: &e.host, UserID: &opGone, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{HostID: &e.host, UserID: &opHere, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+		{UserID: &demoted, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},
+	} {
+		if _, err := routes.Create(e.ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.feedCPU(85)
+	if got := recipients(t, e.messages()); got != "op-here@x.test,owner@x.test,stays@x.test" {
+		t.Fatalf("recipients = %s, want only those who can still see the host", got)
+	}
+	p, err := e.engine.Preview(e.ctx, e.host, e.org, model.AlertLevelWarning)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var skipped []string
+	for _, r := range p.Skipped {
+		if r.Reason == alertengine.SkipNoAccess {
+			skipped = append(skipped, r.Address)
+		}
+	}
+	if got := strings.Join(skipped, ","); got != "demoted@x.test,op-gone@x.test,removed@x.test" {
+		t.Fatalf("preview no_access = %s, want the three who lost access (system rules first, then by name)", got)
+	}
+}
+
 // Alert seviyesi değiştiğinde (warning->critical YA DA critical->warning, alert hâlâ açıkken),
 // o anki seviyenin TÜM alıcılarına gider — daha önce başka seviyede bilgilendirilmiş olan da dahil:
 // kimse durumun kötüleştiğinden ya da iyileştiğinden habersiz kalmamalı. Yalnızca AYNI seviyede
@@ -450,6 +499,8 @@ func TestEscalationNotifiesTheFullNewLevelAudience(t *testing.T) {
 	e := newEnv(t)
 	early := testdb.User(t, e.pool, "early@x.test", "org_admin", "pw")
 	late := testdb.User(t, e.pool, "late@x.test", "org_admin", "pw")
+	testdb.AssignOrg(t, e.pool, early, e.org)
+	testdb.AssignOrg(t, e.pool, late, e.org)
 	routes := store.NewNotifications(e.pool)
 	for _, r := range []model.NotificationRoute{
 		{OrganizationID: &e.org, UserID: &early, Channel: model.ChannelEmail, MinLevel: model.AlertLevelWarning},

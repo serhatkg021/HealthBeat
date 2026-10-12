@@ -27,7 +27,7 @@ SELECT r.id, r.organization_id, r.host_id, r.user_id, r.contact_id, r.channel, r
 FROM notification_routes r
 JOIN notification_channels c ON c.channel = r.channel
 LEFT JOIN users u ON u.id = r.user_id
-LEFT JOIN organization_contacts oc ON oc.id = r.contact_id`
+LEFT JOIN contacts oc ON oc.id = r.contact_id`
 
 func scanRoute(row interface{ Scan(...any) error }) (model.NotificationRoute, error) {
 	var r model.NotificationRoute
@@ -51,6 +51,15 @@ func (s *Notifications) ListByHost(ctx context.Context, hostID uuid.UUID) ([]mod
 	return collect(rows, scanRoute)
 }
 
+// ListSystem, sistem kapsamlı kurallardır (organizasyon ve sunucu boş: bütün sunucular için).
+func (s *Notifications) ListSystem(ctx context.Context) ([]model.NotificationRoute, error) {
+	rows, err := s.pool.Query(ctx, routeSelect+` WHERE r.organization_id IS NULL AND r.host_id IS NULL ORDER BY r.created_at`)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, scanRoute)
+}
+
 func (s *Notifications) GetByID(ctx context.Context, id uuid.UUID) (model.NotificationRoute, error) {
 	r, err := scanRoute(s.pool.QueryRow(ctx, routeSelect+` WHERE r.id = $1`, id))
 	if err != nil {
@@ -62,8 +71,8 @@ func (s *Notifications) GetByID(ctx context.Context, id uuid.UUID) (model.Notifi
 	return r, nil
 }
 
-// Create, bir kural ekler. Kapsam (organizasyon ya da sunucu) ve alıcı (kullanıcı ya da iletişim kişisi) tam olarak
-// birer tane dolu olmalıdır.
+// Create, bir kural ekler. Kapsam organizasyon, sunucu ya da hiçbiri (sistem: bütün sunucular); alıcı kullanıcı ya da
+// kişiden tam olarak biri olmalıdır.
 func (s *Notifications) Create(ctx context.Context, in model.NotificationRoute) (model.NotificationRoute, error) {
 	var id uuid.UUID
 	err := s.pool.QueryRow(ctx,
@@ -110,10 +119,10 @@ func (s *Notifications) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// Alıcı kaynakları: bir alıcının sistem sahibi olarak mı, bir organizasyonun kuralından mı, sunucunun kendi kuralından mı
+// Alıcı kaynakları: bir alıcının sistem kuralından mı, bir organizasyonun kuralından mı, sunucunun kendi kuralından mı
 // geldiği.
 const (
-	RecipientSourceOwner        = "owner"
+	RecipientSourceSystem       = "system"
 	RecipientSourceOrganization = "organization"
 	RecipientSourceHost         = "host"
 )
@@ -131,58 +140,63 @@ type Recipient struct {
 	Address string // e-posta adresi ya da telefon numarası
 	Name    string
 	// ChannelOff, alıcıyı veren kuralın kanalı kapalı (ya da ayarı yapılmamış) demektir: gönderilmez, alert motoru
-	// bunu loglar. Sistem sahipleri kapalı kanaldan hiç gelmez.
+	// bunu loglar.
 	ChannelOff bool
+	// NoAccess, alıcı bir panel kullanıcısıdır ve bu sunucuyu artık göremiyor demektir (organizasyondan çıkarılmış, rolü
+	// düşmüş ya da sunucu ataması kaldırılmış): kural yerinde kalır ama ileti gitmez; alert motoru bunu loglar.
+	NoAccess bool
 	// Source alıcının ilk geldiği yerdir; Also aynı kanal ve adresi ayrıca veren öteki kaynaklardır (tekrarsız): alıcı
 	// yine tek ileti alır, bunlar yalnızca gösterim içindir (bkz. "Bu alert kime gider?" önizlemesi).
 	Source RecipientSource
 	Also   []RecipientSource
 }
 
-// ResolveRecipients, level seviyesindeki bir alert'in alıcılarını belirler (bkz. docs/MIMARI.md bölüm 8). Bildirimin
-// amacı sistem sahibidir; organizasyon ve sunucu kuralları "bunlara da gitsin" der ve toplanır, hiçbiri diğerini ezmez:
+// ResolveRecipients, hostID'deki level seviyesindeki bir alert'in alıcılarını belirler (bkz. docs/MIMARI.md bölüm 8).
+// Alıcılar yalnızca bildirim kurallarından gelir; kurallar toplanır, hiçbiri diğerini ezmez:
 //
-//  1. sistem sahipleri: her açık kanaldan, seviye kanalın sahip seviyesine (owner_min_level) ulaşıyorsa ve sahip o
-//     kanaldan almak istiyorsa (email_enabled / sms_enabled);
+//  1. sistem kuralları (bütün sunucular);
 //  2. sunucunun organizasyonunun ve bütün üst organizasyonlarının kuralları;
 //  3. sunucunun kendi kuralları.
 //
-// Kuralın en düşük seviyesi alert seviyesinin altındaysa kural alıcı üretmez. Aynı kanal ve adres bir kez döner (ilk
-// geldiği yerle: önce sahipler; öteki kaynaklar Also'da). Hiç sahip ve kural yoksa sonuç boştur.
+// Kuralın en düşük seviyesi alert seviyesinin altındaysa kural alıcı üretmez. Kullanıcı alıcılar gönderim anında da
+// panelin erişim kuralıyla süzülür (access.Scope.CanViewHost): süper admin her sunucuyu, org admin atandığı
+// organizasyonların (ve alt dallarının) sunucularını, operatör yalnızca kendisine atanmış sunucuları görür; göremeyen
+// NoAccess işaretlenir. Kişiler (sistem ya da organizasyon) panel hesabı olmadığı için süzülmez.
+//
+// Aynı kanal ve adres bir kez döner (ilk geldiği yerle: önce sistem kuralları, sonra organizasyon ve sunucu kuralları
+// alıcı adına göre; öteki kaynaklar Also'da). Aynı adresi erişimi olan bir kaynak da veriyorsa ileti gider. Hiç kural
+// yoksa sonuç boştur.
 func (s *Notifications) ResolveRecipients(ctx context.Context, hostID, orgID uuid.UUID, level string) ([]Recipient, error) {
 	rows, err := s.pool.Query(ctx, orgChainCTE(2)+`,
 	lv AS (SELECT array_position(ARRAY['info', 'warning', 'critical'], $3::text) AS rank)
-	SELECT channel, address, name, channel_off, src_kind, src_name FROM (
-		SELECT c.channel,
-		       CASE c.channel WHEN 'sms' THEN CASE WHEN o.sms_enabled THEN o.phone END
-		                      ELSE CASE WHEN o.email_enabled THEN o.email END END AS address,
-		       o.name, false AS channel_off, 0 AS src, lower(o.name) AS sort_name, o.created_at,
-		       'owner' AS src_kind, '' AS src_name
-		FROM notification_owners o
-		JOIN notification_channels c ON c.enabled
-		WHERE array_position(ARRAY['info', 'warning', 'critical'], c.owner_min_level) <= (SELECT rank FROM lv)
-		UNION ALL
-		SELECT r.channel,
-		       CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, oc.phone) ELSE COALESCE(u.email, oc.email) END,
-		       COALESCE(u.full_name, u.email, oc.name, ''), NOT c.enabled, 1, lower(COALESCE(u.full_name, u.email, oc.name, '')),
-		       r.created_at,
-		       CASE WHEN r.host_id IS NULL THEN 'organization' ELSE 'host' END, COALESCE(og.name, '')
-		FROM notification_routes r
-		JOIN notification_channels c ON c.channel = r.channel
-		LEFT JOIN users u ON u.id = r.user_id
-		LEFT JOIN organization_contacts oc ON oc.id = r.contact_id
-		LEFT JOIN organizations og ON og.id = r.organization_id
-		WHERE (r.host_id = $1 OR r.organization_id IN (SELECT id FROM chain))
-		  AND array_position(ARRAY['info', 'warning', 'critical'], r.min_level) <= (SELECT rank FROM lv)
-	) x
-	WHERE COALESCE(address, '') <> ''
-	ORDER BY src, sort_name, created_at`, hostID, orgID, level)
+	SELECT r.channel,
+	       CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, k.phone) ELSE COALESCE(u.email, k.email) END AS address,
+	       COALESCE(u.full_name, u.email, k.name, ''),
+	       NOT c.enabled,
+	       CASE WHEN u.id IS NULL OR u.role = $4 THEN false
+	            WHEN u.role = $5 THEN NOT EXISTS (SELECT 1 FROM user_organizations uo JOIN chain ch ON ch.id = uo.organization_id
+	                                              WHERE uo.user_id = u.id)
+	            WHEN u.role = $6 THEN NOT EXISTS (SELECT 1 FROM user_hosts uh WHERE uh.user_id = u.id AND uh.host_id = $1)
+	            ELSE true END,
+	       CASE WHEN r.host_id IS NOT NULL THEN 'host' WHEN r.organization_id IS NOT NULL THEN 'organization' ELSE 'system' END,
+	       COALESCE(og.name, '')
+	FROM notification_routes r
+	JOIN notification_channels c ON c.channel = r.channel
+	LEFT JOIN users u ON u.id = r.user_id
+	LEFT JOIN contacts k ON k.id = r.contact_id
+	LEFT JOIN organizations og ON og.id = r.organization_id
+	WHERE (r.host_id = $1 OR r.organization_id IN (SELECT id FROM chain) OR (r.organization_id IS NULL AND r.host_id IS NULL))
+	  AND array_position(ARRAY['info', 'warning', 'critical'], r.min_level) <= (SELECT rank FROM lv)
+	  AND COALESCE(CASE r.channel WHEN 'sms' THEN COALESCE(u.phone, k.phone) ELSE COALESCE(u.email, k.email) END, '') <> ''
+	ORDER BY CASE WHEN r.organization_id IS NULL AND r.host_id IS NULL THEN 0 ELSE 1 END,
+	         lower(COALESCE(u.full_name, u.email, k.name, '')), r.created_at`,
+		hostID, orgID, level, model.RoleSuperAdmin, model.RoleOrgAdmin, model.RoleOperator)
 	if err != nil {
 		return nil, err
 	}
 	all, err := collect(rows, func(row interface{ Scan(...any) error }) (Recipient, error) {
 		var r Recipient
-		err := row.Scan(&r.Channel, &r.Address, &r.Name, &r.ChannelOff, &r.Source.Kind, &r.Source.Name)
+		err := row.Scan(&r.Channel, &r.Address, &r.Name, &r.ChannelOff, &r.NoAccess, &r.Source.Kind, &r.Source.Name)
 		return r, err
 	})
 	if err != nil {
@@ -198,22 +212,55 @@ func (s *Notifications) ResolveRecipients(ctx context.Context, hostID, orgID uui
 			out = append(out, r)
 			continue
 		}
-		if first := &out[i]; first.Source != r.Source && !slices.Contains(first.Also, r.Source) {
+		first := &out[i]
+		if first.NoAccess && !r.NoAccess {
+			// Aynı adresi erişimi olan bir kaynak da veriyor: ileti gider, kaynağı bu olur.
+			moved := first.Source
+			also := first.Also
+			*first = r
+			first.Also = also
+			if !slices.Contains(first.Also, moved) {
+				first.Also = append(first.Also, moved)
+			}
+			continue
+		}
+		if first.Source != r.Source && !slices.Contains(first.Also, r.Source) {
 			first.Also = append(first.Also, r.Source)
 		}
 	}
 	return out, nil
 }
 
-// Candidate, bir kapsam için alıcı olabilecek bir panel kullanıcısı ya da iletişim kişisidir.
+// Candidate, bir bildirim kuralına alıcı olarak seçilebilecek bir kullanıcı ya da kişidir.
 type Candidate struct {
 	UserID    *uuid.UUID `json:"user_id,omitempty"`
 	ContactID *uuid.UUID `json:"contact_id,omitempty"`
 	Name      string     `json:"name"`
 	Email     string     `json:"email,omitempty"`
 	Phone     string     `json:"phone,omitempty"`
-	// Source alıcının nereden geldiğini söyler: "super_admin", "org_admin", "operator" ya da "contact".
+	// Source alıcının nereden geldiğini söyler: "super_admin", "org_admin", "operator", "contact" ya da "system_contact".
 	Source string `json:"source"`
+}
+
+// SystemCandidates, sistem kurallarının alıcı adaylarıdır: süper adminler (bütün sunucuları yalnızca onlar görür) ve
+// sistem kişileri. Bildirim sunucu adı, IP ve organizasyon taşıdığı için kapsamı dar bir kullanıcı sistem kuralına
+// yazılamaz.
+func (s *Notifications) SystemCandidates(ctx context.Context) ([]Candidate, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT u.id, NULL::uuid, COALESCE(u.full_name, u.email), u.email, COALESCE(u.phone, ''), u.role
+		   FROM users u WHERE u.role = $1
+		 UNION ALL
+		 SELECT NULL::uuid, k.id, k.name, COALESCE(k.email, ''), COALESCE(k.phone, ''), 'system_contact'
+		   FROM contacts k WHERE k.organization_id IS NULL
+		 ORDER BY 3`, model.RoleSuperAdmin)
+	if err != nil {
+		return nil, err
+	}
+	return collect(rows, func(row interface{ Scan(...any) error }) (Candidate, error) {
+		var c Candidate
+		err := row.Scan(&c.UserID, &c.ContactID, &c.Name, &c.Email, &c.Phone, &c.Source)
+		return c, err
+	})
 }
 
 // Candidates, orgID kapsamındaki (hostID verilmişse o sunucunun) bildirim alıcı adaylarını döndürür: her super_admin,
@@ -253,7 +300,7 @@ func (s *Notifications) Candidates(ctx context.Context, orgID uuid.UUID, hostID 
 	crows, err := s.pool.Query(ctx,
 		orgChainCTE(1)+`
 		 SELECT oc.id, oc.name, COALESCE(oc.email, ''), COALESCE(oc.phone, '')
-		 FROM organization_contacts oc JOIN chain c ON c.id = oc.organization_id ORDER BY oc.name`, orgID)
+		 FROM contacts oc JOIN chain c ON c.id = oc.organization_id ORDER BY oc.name`, orgID)
 	if err != nil {
 		return nil, err
 	}

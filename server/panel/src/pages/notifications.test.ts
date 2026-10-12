@@ -8,6 +8,10 @@ test('rules scope: organization by default, server on request; an operator only 
   assert.deepEqual(resolveRouteScope('sunucu', 'h1', true), { kind: 'sunucu', id: 'h1' })
   assert.deepEqual(resolveRouteScope('org', 'o1', false), { kind: 'sunucu', id: undefined })
   assert.deepEqual(resolveRouteScope('sunucu', 'h1', false), { kind: 'sunucu', id: 'h1' })
+  // Sistem kapsamı yalnızca onu görebilene açılır; göremeyen varsayılana düşer.
+  assert.deepEqual(resolveRouteScope('sistem', 'x', true, true), { kind: 'sistem' })
+  assert.deepEqual(resolveRouteScope('sistem', null, true, false), { kind: 'org', id: undefined })
+  assert.deepEqual(resolveRouteScope('sistem', null, false, false), { kind: 'sunucu', id: undefined })
 })
 
 const row = (name: string, org: string, extra: Partial<ContactRow> = {}): ContactRow => ({

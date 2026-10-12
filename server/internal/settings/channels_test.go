@@ -63,7 +63,6 @@ func TestChannelUpdateValidatesAndNotifies(t *testing.T) {
 		"not an object":  {ChannelPatch{Config: json.RawMessage(`[1]`)}, "config"},
 		"host with url":  {ChannelPatch{Config: json.RawMessage(`{"host": "smtp://x.test"}`)}, "config.host"},
 		"from":           {ChannelPatch{Config: json.RawMessage(`{"from": "HealthBeat <hb@x.test>"}`)}, "config.from"},
-		"owner level":    {ChannelPatch{OwnerMinLevel: ptr("loud")}, "owner_min_level"},
 		"secret newline": {ChannelPatch{Secret: ptr("a\r\nRCPT TO:<x>")}, "secret"},
 	} {
 		if _, err := c.Update(ctx, &admin, "email", tc.p); !errors.As(err, &fe) || fe.Field != tc.field {
@@ -235,7 +234,7 @@ func TestChannelWithAnUnreadableSecretLoadsAndBlocksSending(t *testing.T) {
 	if err := c.Test(ctx, "email", "a@x.test"); !errors.As(err, &fe) || fe.Field != "secret" {
 		t.Fatalf("test with an unreadable secret: err=%v", err)
 	}
-	if _, err := c.Update(ctx, &admin, "email", ChannelPatch{OwnerMinLevel: ptr("critical")}); !errors.As(err, &fe) || fe.Field != "secret" {
+	if _, err := c.Update(ctx, &admin, "email", ChannelPatch{Config: json.RawMessage(`{"port": 2525}`)}); !errors.As(err, &fe) || fe.Field != "secret" {
 		t.Fatalf("changing an open channel without entering the secret: err=%v", err)
 	}
 	if n := len(srv.Messages()); n != 0 {

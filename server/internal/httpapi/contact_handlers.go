@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -12,8 +13,11 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-// İletişim kişileri: bir organizasyonun sunucu işleri için başvurulacak kişiler (paneli olmayan müşteri yetkilileri dahil).
-// Görme contact.view, düzenleme contact.edit izni ve organizasyona TAM erişim ister.
+// Kişiler. Organizasyon kişileri bir organizasyonun sunucu işleri için başvurulacak kişilerdir (paneli olmayan müşteri
+// yetkilileri dahil): görme contact.view, düzenleme contact.edit izni ve organizasyona TAM erişim ister. Sistem kişileri
+// organizasyonsuzdur ve bütün kurulumun bildirimlerini alabilir (sistem kuralları): görme settings.view, düzenleme
+// settings.manage ister (varsayılan olarak yalnızca süper admin). İkisi aynı tablodadır ama uçları ayrıdır; organizasyon
+// kişisi uçları sistem kişisini görmez.
 
 const maxContactTextLen = 200
 
@@ -89,7 +93,7 @@ func (d *Deps) handleCreateContact(w http.ResponseWriter, r *http.Request) error
 	if err != nil {
 		return err
 	}
-	c, err := d.contacts.Create(r.Context(), orgID, req.input)
+	c, err := d.contacts.Create(r.Context(), &orgID, req.input)
 	if err != nil {
 		return storeError(err, "kayıt bulunamadı", fail, "create contact")
 	}
@@ -161,25 +165,153 @@ func (d *Deps) managedOrg(r *http.Request, op string, fail failFunc) (uuid.UUID,
 	return orgID, nil
 }
 
-// managedContact, yoldaki iletişim kişisini yükler ve organizasyonuna erişimi denetler.
-func (d *Deps) managedContact(r *http.Request, op string, fail failFunc) (model.OrganizationContact, error) {
+// managedContact, yoldaki organizasyon kişisini yükler ve organizasyonuna erişimi denetler. Sistem kişisi burada yoktur
+// (404): onu yalnızca sistem kişisi uçları değiştirir.
+func (d *Deps) managedContact(r *http.Request, op string, fail failFunc) (model.Contact, error) {
 	id, err := pathID(r, "geçersiz kimlik")
 	if err != nil {
-		return model.OrganizationContact{}, err
+		return model.Contact{}, err
 	}
 	c, err := d.contacts.GetByID(r.Context(), id)
-	if errors.Is(err, store.ErrNotFound) {
-		return model.OrganizationContact{}, notFound("iletişim kişisi bulunamadı")
+	if errors.Is(err, store.ErrNotFound) || (err == nil && c.OrganizationID == nil) {
+		return model.Contact{}, notFound("iletişim kişisi bulunamadı")
 	}
 	if err != nil {
-		return model.OrganizationContact{}, fail(op+": lookup contact", err)
+		return model.Contact{}, fail(op+": lookup contact", err)
 	}
-	allowed, err := d.scope(r).CanManageOrg(r.Context(), c.OrganizationID)
+	allowed, err := d.scope(r).CanManageOrg(r.Context(), *c.OrganizationID)
 	if err != nil {
-		return model.OrganizationContact{}, fail(op+": check organization access", err)
+		return model.Contact{}, fail(op+": check organization access", err)
 	}
 	if !allowed {
-		return model.OrganizationContact{}, forbidden()
+		return model.Contact{}, forbidden()
 	}
 	return c, nil
+}
+
+// ---------------------------------------------------------------- sistem kişileri
+
+// systemContactResponse, bir sistem kişisi ve alıcı olduğu bildirim kuralı sayısıdır (silinince kurallar da silinir).
+type systemContactResponse struct {
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	Department *string   `json:"department,omitempty"`
+	Title      *string   `json:"title,omitempty"`
+	Phone      *string   `json:"phone,omitempty"`
+	Email      *string   `json:"email,omitempty"`
+	Scope      string    `json:"scope"`
+	RuleCount  int       `json:"rule_count"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func systemContactView(c model.Contact, ruleCount int) systemContactResponse {
+	return systemContactResponse{ID: c.ID, Name: c.Name, Department: c.Department, Title: c.Title, Phone: c.Phone, Email: c.Email,
+		Scope: c.Scope(), RuleCount: ruleCount, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+}
+
+func contactAudit(c model.Contact) map[string]any {
+	return map[string]any{"scope": c.Scope(), "organization_id": c.OrganizationID, "name": c.Name, "email": c.Email, "phone": c.Phone}
+}
+
+// bindSystemContact, sistem kişisi isteğini doğrular: kişi kuralları geçerlidir, yönetici olmaz (yönetici bağı
+// organizasyon içindir).
+func bindSystemContact(r *http.Request) (store.ContactInput, error) {
+	req, err := bind[contactRequest](r)
+	if err != nil {
+		return store.ContactInput{}, err
+	}
+	if req.input.ManagerContactID != nil {
+		return store.ContactInput{}, fieldError400("manager_contact_id", "sistem kişisinin yöneticisi olmaz")
+	}
+	return req.input, nil
+}
+
+func (d *Deps) handleListSystemContacts(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("sistem kişileri alınamadı")
+	list, err := d.contacts.ListSystem(r.Context())
+	if err != nil {
+		return fail("list system contacts", err)
+	}
+	counts, err := d.contacts.SystemRuleCounts(r.Context())
+	if err != nil {
+		return fail("list system contacts: rule counts", err)
+	}
+	out := make([]systemContactResponse, 0, len(list))
+	for _, c := range list {
+		out = append(out, systemContactView(c, counts[c.ID]))
+	}
+	writeJSON(w, http.StatusOK, out)
+	return nil
+}
+
+func (d *Deps) handleCreateSystemContact(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("sistem kişisi eklenemedi")
+	in, err := bindSystemContact(r)
+	if err != nil {
+		return err
+	}
+	c, err := d.contacts.Create(r.Context(), nil, in)
+	if err != nil {
+		return storeError(err, "kayıt bulunamadı", fail, "create system contact")
+	}
+	targetID := c.ID.String()
+	d.logAudit(r, "contact.create", "contact", &targetID, contactAudit(c))
+	writeJSON(w, http.StatusCreated, systemContactView(c, 0))
+	return nil
+}
+
+// systemContactFromPath, yoldaki sistem kişisini yükler; organizasyon kişisi burada yoktur (404).
+func (d *Deps) systemContactFromPath(r *http.Request, op string, fail failFunc) (model.Contact, error) {
+	id, err := pathID(r, "geçersiz kimlik")
+	if err != nil {
+		return model.Contact{}, err
+	}
+	c, err := d.contacts.GetByID(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) || (err == nil && c.OrganizationID != nil) {
+		return model.Contact{}, notFound("sistem kişisi bulunamadı")
+	}
+	if err != nil {
+		return model.Contact{}, fail(op+": lookup contact", err)
+	}
+	return c, nil
+}
+
+func (d *Deps) handleUpdateSystemContact(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("sistem kişisi güncellenemedi")
+	existing, err := d.systemContactFromPath(r, "update system contact", fail)
+	if err != nil {
+		return err
+	}
+	in, err := bindSystemContact(r)
+	if err != nil {
+		return err
+	}
+	c, err := d.contacts.Update(r.Context(), existing.ID, in)
+	if err != nil {
+		return storeError(err, "sistem kişisi bulunamadı", fail, "update system contact")
+	}
+	counts, err := d.contacts.SystemRuleCounts(r.Context())
+	if err != nil {
+		return fail("update system contact: rule counts", err)
+	}
+	targetID := c.ID.String()
+	d.logAudit(r, "contact.update", "contact", &targetID, map[string]any{"old": contactAudit(existing), "new": contactAudit(c)})
+	writeJSON(w, http.StatusOK, systemContactView(c, counts[c.ID]))
+	return nil
+}
+
+func (d *Deps) handleDeleteSystemContact(w http.ResponseWriter, r *http.Request) error {
+	fail := failWith("sistem kişisi silinemedi")
+	existing, err := d.systemContactFromPath(r, "delete system contact", fail)
+	if err != nil {
+		return err
+	}
+	if err := d.contacts.Delete(r.Context(), existing.ID); err != nil {
+		return storeError(err, "sistem kişisi bulunamadı", fail, "delete system contact")
+	}
+	targetID := existing.ID.String()
+	d.logAudit(r, "contact.delete", "contact", &targetID, contactAudit(existing))
+	w.WriteHeader(http.StatusNoContent)
+	return nil
 }

@@ -10,12 +10,12 @@ import { useAuth } from '../auth/AuthContext'
 import { alertLevelLabel } from '../labels'
 import { LEVEL_CHOICES, candidateKey, candidateLabel, candidatesForNewRoute, channelChoices, channelLabel, describeCoverage } from './notificationRules'
 
-// Bir kapsamın (organizasyon ya da sunucu) bildirim kuralları: sistem sahiplerine ek alıcılar. Sunucu, organizasyon ve
-// üst organizasyon kuralları toplanır. Yalnızca açık ve kişiye giden kanallar seçilebilir; kanalı kapalı kural işaretlenir.
+// Bir kapsamın (sistem, organizasyon ya da sunucu) bildirim kuralları. Sistem, organizasyon zinciri ve sunucu kuralları
+// toplanır. Yalnızca açık ve kişiye giden kanallar seçilebilir; kanalı kapalı kural işaretlenir.
 export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEdit: boolean }) {
   const { can } = useAuth()
-  const isHost = 'hostId' in scope
-  const scopeId = isHost ? scope.hostId : scope.organizationId
+  const kind = 'system' in scope ? 'system' : 'hostId' in scope ? 'host' : 'organization'
+  const scopeId = 'system' in scope ? '' : 'hostId' in scope ? scope.hostId : scope.organizationId
   const [routes, setRoutes] = useState<NotificationRoute[] | null>(null)
   const [candidates, setCandidates] = useState<RecipientCandidate[]>([])
   const [options, setOptions] = useState<ChannelOption[]>([])
@@ -26,7 +26,7 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
   const [minLevel, setMinLevel] = useState<AlertLevel>('warning')
 
   const load = useCallback(() => {
-    const s: RouteScope = isHost ? { hostId: scopeId } : { organizationId: scopeId }
+    const s: RouteScope = kind === 'system' ? { system: true } : kind === 'host' ? { hostId: scopeId } : { organizationId: scopeId }
     notificationsApi
       .list(s)
       .then(setRoutes)
@@ -35,7 +35,7 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
       notificationsApi.candidates(s).then(setCandidates).catch(() => undefined)
       channelsApi.options().then(setOptions).catch(() => undefined)
     }
-  }, [isHost, scopeId, canEdit])
+  }, [kind, scopeId, canEdit])
 
   useEffect(load, [load])
 
@@ -78,12 +78,16 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
       <h2 className="card-title">
         <BellRing size={16} strokeWidth={1.75} />
         Bildirim kuralları
-        <InfoTip label="Bildirim kuralları">{describeCoverage(isHost ? 'host' : 'organization', can('settings.view'))}</InfoTip>
+        <InfoTip label="Bildirim kuralları">{describeCoverage(kind, can('settings.view'))}</InfoTip>
       </h2>
       {error && <div className="error-banner">{error}</div>}
 
       {routes !== null && list.length === 0 ? (
-        <EmptyState icon={BellRing}>{isHost ? 'Bu sunucuya' : 'Bu organizasyona'} özel ek alıcı yok.</EmptyState>
+        <EmptyState icon={BellRing}>
+          {kind === 'system'
+            ? 'Sistem kuralı yok: bütün sunucuların alert’lerini alan kimse yok.'
+            : `${kind === 'host' ? 'Bu sunucuya' : 'Bu organizasyona'} özel ek alıcı yok.`}
+        </EmptyState>
       ) : (
         <table className="stack">
           <thead>
@@ -149,7 +153,11 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
             <FieldLabel
               htmlFor="rule-recipient"
               label="Alıcı"
-              hint={`Yalnızca bu kapsamdaki yöneticiler${isHost ? ', bu sunucuya atanmış operatörler' : ''} ve organizasyonun iletişim kişileri seçilebilir.`}
+              hint={
+                kind === 'system'
+                  ? 'Yalnızca süper adminler ve sistem kişileri seçilebilir (sistem kişileri Bildirim → Kişiler’de eklenir).'
+                  : `Yalnızca bu kapsamdaki yöneticiler${kind === 'host' ? ', bu sunucuya atanmış operatörler' : ''} ve organizasyonun iletişim kişileri seçilebilir.`
+              }
             />
             <select id="rule-recipient" value={recipient} onChange={(e) => setRecipient(e.target.value)} required>
               <option value="">Seçin…</option>
