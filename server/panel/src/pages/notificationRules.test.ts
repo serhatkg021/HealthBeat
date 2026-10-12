@@ -48,7 +48,7 @@ test('only personal channels the server can send are offered; closed ones say wh
       opt('email'),
       opt('sms', { enabled: false, ready: false }),
       opt('telegram', { enabled: false }),
-      opt('slack', { personal: false }), // yalnızca sistem sahiplerine gider
+      opt('slack', { personal: false }), // ortak hedefe gider: kuralın alıcısı bir kişidir
       opt('discord', { implemented: false }),
     ]),
     [

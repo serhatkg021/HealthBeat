@@ -32,7 +32,8 @@ type env struct {
 }
 
 // newEnv, migration'ları uygulanmış bir şema üzerinde gerçek bir engine kurar: bir org, bir push
-// host, global cpu eşiği 80 (uyarı) / 95 (kritik), açık e-posta kanalı ve bir sistem sahibi (owner@x.test) ve e-postalar
+// host, global cpu eşiği 80 (uyarı) / 95 (kritik), açık e-posta kanalı, bir sistem kişisi (owner@x.test) ve ona sistem
+// kuralı; e-postalar
 // denetlenebilsin diye gerçek bir SMTP dinleyicisi.
 func newEnv(t *testing.T) *env {
 	t.Helper()
@@ -304,9 +305,9 @@ func TestNoThresholdNoAlert(t *testing.T) {
 	}
 }
 
-// Bildirim sistem sahiplerine gider; super_admin, org_admin ya da operatör olmak kendiliğinden bildirim almak demek
-// değildir. Her sahip ayrı ileti alır: bir iletide tek alıcı görünür.
-func TestAlertGoesToTheOwnersEachSeparately(t *testing.T) {
+// Bildirim sistem kurallarındaki alıcılara gider; super_admin, org_admin ya da operatör olmak kendiliğinden bildirim almak
+// demek değildir. Her alıcı ayrı ileti alır: bir iletide tek alıcı görünür.
+func TestAlertGoesToTheSystemRecipientsEachSeparately(t *testing.T) {
 	e := newEnv(t)
 	testdb.SystemEmailContact(t, e.pool, "noc@x.test")
 	orgAdmin := testdb.User(t, e.pool, "admin-acme@x.test", "org_admin", "pw")

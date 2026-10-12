@@ -19,8 +19,7 @@ type Notifier interface {
 	// Channel, kanalın adıdır; notification_routes.channel değerleriyle aynıdır (model.Channel*).
 	Channel() string
 	// Personal, kanalın kişiye (e-posta adresi, telefon) mi yoksa ortak bir hedefe (Slack kanalı gibi) mi gittiğidir.
-	// Organizasyon/sunucu kurallarında yalnızca kişiye giden kanallar seçilebilir; ortak kanallar yalnızca sistem
-	// sahibine gider.
+	// Bildirim kurallarının alıcısı bir kişi olduğu için kurallarda yalnızca kişiye giden kanallar seçilebilir.
 	Personal() bool
 	// Send, msg'yi recipient'a (kanalın adres biçiminde: e-posta adresi, telefon…) iletir; ctx süreyi sınırlar.
 	Send(ctx context.Context, recipient string, msg Message) error

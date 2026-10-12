@@ -51,16 +51,16 @@ flowchart LR
 
 ### 2.1 Panelden yönetilen ayarlar
 
-Aşağıdakiler veritabanında (`app_settings`, `notification_channels`, `notification_owners`; bkz. `docs/VERITABANI.md`)
-tutulur ve panelde **Ayarlar** sayfasından (izin: `settings.view` okur, `settings.manage` değiştirir; varsayılan olarak
-yalnızca süper admin) ya da `/api/v1/settings`, `/api/v1/notification-channels`, `/api/v1/notification-owners`
-uçlarından değişir. Değişiklik **yeniden başlatmadan** uygulanır, server loguna (`settings: changed`) ve denetim kaydına
+Aşağıdakiler veritabanında (`app_settings`, `notification_channels`, `contacts`, `notification_routes`; bkz.
+`docs/VERITABANI.md`) tutulur ve panelde **Ayarlar** ve **Bildirim** sayfalarından (izin: `settings.view` okur,
+`settings.manage` değiştirir; varsayılan olarak yalnızca süper admin) ya da `/api/v1/settings`,
+`/api/v1/notification-channels`, `/api/v1/system-contacts`, `/api/v1/notification-routes` uçlarından değişir. Değişiklik **yeniden başlatmadan** uygulanır, server loguna (`settings: changed`) ve denetim kaydına
 eski/yeni değerleriyle yazılır. Varsayılanlar ve sınırlar veritabanındadır; "Varsayılana dön" ayarı ona döndürür.
 
 | Ayar | Varsayılan | Açıklama |
 | --- | --- | --- |
-| Sistem sahipleri | yok | **Her alert'in bildirimini alanlar** (panel kullanıcısı olmaları gerekmez). E-postası e-posta kanalında, telefonu SMS kanalında kullanılır. Hiç sahip yoksa alert bildirimi yalnızca kurallardaki ek alıcılara gider; panel bunu bir uyarı bandıyla söyler. |
-| E-posta kanalı (SMTP) | kapalı | Sunucu, port (varsayılan 587), kullanıcı adı, şifre, gönderen adres ve sistem sahiplerine hangi seviyeden itibaren gönderileceği (varsayılan uyarı). Sunucu ve gönderen girilmeden açılamaz ("Ayar gerekli"). **Port 465 = implicit TLS**; diğer portlarda sunucu STARTTLS sunuyorsa kullanılır; kullanıcı adı/şifre yalnızca TLS üzerinden (ya da localhost'a) gönderilir. Şifre `SECRETS_ENCRYPTION_KEY` ile şifreli saklanır ve API'den asla geri okunmaz. **Deneme gönder** kayıtlı ayarla (kanal kapalıyken de) hemen bir e-posta yollar. Kanal kapalıyken alert ve şifre e-postaları yalnızca loglanır. |
+| Sistem kuralları ve sistem kişileri | yok | **Bütün sunucuların alert'lerini alanlar** (Bildirim → Bildirim kuralları → Sistem). Alıcı bir süper admin ya da bir **sistem kişisidir** (Bildirim → Kişiler; panel hesabı gerekmez, "NOC masası" gibi ortak adres olabilir); kural kanalı ve en düşük seviyeyi seçer. Organizasyon ve sunucu kuralları bunlara eklenir. E-posta alan bir sistem kuralı yoksa kendine kural yazılmamış sunucuların bildirimi kimseye gitmez; panel bunu bir uyarı şeridiyle söyler. |
+| E-posta kanalı (SMTP) | kapalı | Sunucu, port (varsayılan 587), kullanıcı adı, şifre ve gönderen adres (kimin hangi seviyeden alacağı bildirim kurallarındadır). Sunucu ve gönderen girilmeden açılamaz ("Ayar gerekli"). **Port 465 = implicit TLS**; diğer portlarda sunucu STARTTLS sunuyorsa kullanılır; kullanıcı adı/şifre yalnızca TLS üzerinden (ya da localhost'a) gönderilir. Şifre `SECRETS_ENCRYPTION_KEY` ile şifreli saklanır ve API'den asla geri okunmaz. **Deneme gönder** kayıtlı ayarla (kanal kapalıyken de) hemen bir e-posta yollar. Kanal kapalıyken alert ve şifre e-postaları yalnızca loglanır. |
 | Panel adresi | boş | Panelin kullanıcıya görünen adresi (`scheme://host[:port]`), ör. `https://panel.example.com`. Alert e-postalarındaki bağlantının ve **"Şifremi unuttum" bağlantısının kökü**; isteğin `Host` başlığından türetilmez (başlık enjeksiyonuyla bağlantının saldırgan bir alan adına yöneltilmesini önler). Boşsa e-posta ile şifre sıfırlama kapalıdır. |
 | Saat dilimi | boş | Kurulumun saat dilimi (IANA adı, ör. `Europe/Istanbul`; panelde aranabilir liste, ofsetiyle). **Tekrarlı bakım pencereleri** bu dilimde hesaplanır ("her gün 02:00" = bu dilimde 02:00; yaz saati geçişleri kendiliğinden izlenir) ve **alert e-postalarındaki saatler** bu dilimde, dilimin adı ve o andaki ofsetiyle yazılır ("11.10.2026 00:57:21 (Europe/Istanbul, UTC+3)"). Boşsa server sürecinin `TZ` ortam değişkeni (geçerliyse), o da yoksa UTC; container'lar varsayılan olarak UTC'dir, yani ayar boşken e-postalar eskisi gibi UTC yazar. Değişince panelin alt çubuğundaki server saati de güncellenir. Saat dilimi verisi binary'ye gömülüdür. |
 | Agent sürüm politikası | en güncel `1.0.0`, en düşük boş | Panelin agent'ları "güncel / güncelleme var / desteklenmiyor" diye sınıflandırdığı sürümler (SemVer). **Elle yönetilir:** yeni bir agent yayınlanınca en güncel sürüm buradan girilir. Yalnızca bilgilendirir, hiçbir agent reddedilmez. Bkz. `docs/COMPATIBILITY.md`. |
@@ -387,8 +387,8 @@ olmadığından CORS'tan etkilenmez.
       denetim kaydında (`/audit`) iki farklı IP görüldü
 - [ ] Panel gerçek bir sertifika sunuyor (kendinden imzalı değil) — bkz. "Gerçek sertifika kullanmak"
 - [ ] Bildirim → Kanallar'nda e-posta kanalı kuruldu, "Deneme gönder" ile doğrulandı ve kanal açıldı
-- [ ] Bildirim → Sistem sahipleri'ne alert'leri alacak kişiler/ortak adresler eklendi (alt çubuktaki uyarı şeridi kalmadı) ve bir test
-      alert'iyle e-postanın gittiği görüldü
+- [ ] Bildirim → Kişiler'e alert'leri alacak sistem kişileri (ya da ortak adresler) eklendi, Bildirim kuralları → Sistem'de
+      onlara kural yazıldı (alt çubuktaki uyarı şeridi kalmadı) ve bir test alert'iyle e-postanın gittiği görüldü
 - [ ] Ayarlar → Saat dilimi seçildi (bakım pencereleri ve e-postalardaki saatler için; alt çubuktaki server saati doğru)
 - [ ] Ayarlar → Panel adresi girildi; "Şifremi unuttum" bir hesapla uçtan uca denendi
 - [ ] `.env`'de 2.0.0'da taşınan eski değişken kalmadı (açılış logunda `is no longer read` uyarısı yok)
@@ -415,9 +415,9 @@ docker compose up -d --build
   sil ve yeniden çalıştır (bu, saklı pull secret'ları ve mevcut oturumları geçersiz kılar).
 - Çıktıdaki geçici admin şifresi yalnızca o an gösterilir (`.env`'de `BOOTSTRAP_ADMIN_PASSWORD`
   olarak da durur); ilk girişte yeni şifre belirlemen istenir.
-- **İlk girişten sonra** panelde **Ayarlar**'a git: Bildirim kanalları'nda e-posta (SMTP) ayarını gir, "Deneme gönder" ile
-  doğrula ve kanalı aç; Sistem sahipleri'ne alert'leri alacak kişileri ekle; Panel adresi'ni yaz ("Şifremi unuttum" ve
-  e-postalardaki bağlantılar için). Bunlar yapılana kadar panelin üstünde "alert bildirimleri kimseye gitmiyor" uyarısı
+- **İlk girişten sonra:** Bildirim → Kanallar'da e-posta (SMTP) ayarını gir, "Deneme gönder" ile doğrula ve kanalı aç;
+  Bildirim → Kişiler'e alert'leri alacak sistem kişilerini ekle ve Bildirim kuralları → Sistem'de onlara kural yaz;
+  Ayarlar'da Panel adresi'ni yaz ("Şifremi unuttum" ve e-postalardaki bağlantılar için). Bunlar yapılana kadar panelin üstünde "alert bildirimleri kimseye gitmiyor" uyarısı
   görünür (bölüm 2.1).
 
 **Servisler:**
