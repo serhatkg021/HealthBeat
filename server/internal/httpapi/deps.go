@@ -79,10 +79,9 @@ type Deps struct {
 	resetIPs    *ratelimit.Limiter
 	resetEmails *ratelimit.Limiter
 
-	// appSettings ve channels, çalışma zamanı ayarları ve bildirim kanallarıdır (SetSettings); owners sistem sahipleridir.
+	// appSettings ve channels, çalışma zamanı ayarları ve bildirim kanallarıdır (SetSettings).
 	appSettings *settings.Service
 	channels    *settings.Channels
-	owners      *store.NotificationOwners
 	// maintenance, bakım pencereleridir (bkz. maintenance_handlers.go).
 	maintenance *store.MaintenanceWindows
 
@@ -165,7 +164,6 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 		alerts:        store.NewAlerts(pool),
 		refreshTokens: store.NewRefreshTokens(pool),
 		resets:        store.NewPasswordResets(pool),
-		owners:        store.NewNotificationOwners(pool),
 		maintenance:   store.NewMaintenanceWindows(pool),
 	}
 	d.SetAgentPolicy(AgentPolicy{})

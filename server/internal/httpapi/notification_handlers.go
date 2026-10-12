@@ -10,9 +10,10 @@ import (
 	"healthbeat-server/internal/store"
 )
 
-// Bildirim kuralları: bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceği. Kapsam bir organizasyon (altındaki
-// dal için de geçerli) ya da tek bir sunucudur. Bildirim her zaman sistem sahiplerine gider; kurallar ek alıcıdır ve
-// toplanır (bkz. store.Notifications.ResolveRecipients).
+// Bildirim kuralları: bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceği. Kapsam sistem (bütün sunucular),
+// bir organizasyon (altındaki dal için de geçerli) ya da tek bir sunucudur; alıcılar yalnızca kurallardan gelir ve
+// toplanır (bkz. store.Notifications.ResolveRecipients). Sistem kurallarını görmek settings.view, yazmak settings.manage
+// ister (varsayılan olarak yalnızca süper admin); organizasyon ve sunucu kuralları notification.view/edit ve kapsama erişim.
 
 type notificationRouteRequest struct {
 	OrganizationID *uuid.UUID `json:"organization_id"`
@@ -51,6 +52,25 @@ func (d *Deps) handleListHostRoutes(w http.ResponseWriter, r *http.Request) erro
 	return nil
 }
 
+func (d *Deps) handleListSystemRoutes(w http.ResponseWriter, r *http.Request) error {
+	routes, err := d.notifs.ListSystem(r.Context())
+	if err != nil {
+		return failWith("bildirim kuralları alınamadı")("list system routes", err)
+	}
+	writeJSON(w, http.StatusOK, routes)
+	return nil
+}
+
+// handleSystemRecipientCandidates, sistem kurallarına seçilebilecek alıcılardır: süper adminler ve sistem kişileri.
+func (d *Deps) handleSystemRecipientCandidates(w http.ResponseWriter, r *http.Request) error {
+	cands, err := d.notifs.SystemCandidates(r.Context())
+	if err != nil {
+		return failWith("alıcılar alınamadı")("system recipient candidates", err)
+	}
+	writeJSON(w, http.StatusOK, cands)
+	return nil
+}
+
 // handleOrganizationRecipientCandidates ve handleHostRecipientCandidates, o kapsam için seçilebilecek alıcıları listeler.
 func (d *Deps) handleOrganizationRecipientCandidates(w http.ResponseWriter, r *http.Request) error {
 	fail := failWith("alıcılar alınamadı")
@@ -84,7 +104,7 @@ func (d *Deps) handleHostRecipientCandidates(w http.ResponseWriter, r *http.Requ
 // gitmez. Alıcılar gerçek gönderimin kurallarıyla hesaplanır (alertengine.Engine.Preview); hiçbir şey yazılmaz.
 
 type previewSource struct {
-	Kind string `json:"kind"`           // owner, organization ya da host
+	Kind string `json:"kind"`           // system, organization ya da host
 	Name string `json:"name,omitempty"` // organizasyon kuralında organizasyonun adı
 }
 
@@ -94,11 +114,12 @@ type previewRecipient struct {
 	Address string          `json:"address"`
 	Source  previewSource   `json:"source"`
 	Also    []previewSource `json:"also,omitempty"`
-	Reason  string          `json:"reason,omitempty"` // yalnızca skipped'de: channel_off ya da channel_not_supported
+	Reason  string          `json:"reason,omitempty"` // yalnızca skipped'de: channel_off, channel_not_supported ya da no_access
 }
 
-// previewOwnerCount, sistem sahiplerini göremeyen (settings.view'sız) kullanıcıya sahiplerin kanal başına sayısıdır.
-type previewOwnerCount struct {
+// previewSystemCount, sistem kurallarını göremeyen (settings.view'sız) kullanıcıya sistem kurallarından gelen alıcıların
+// kanal başına sayısıdır.
+type previewSystemCount struct {
 	Channel string `json:"channel"`
 	Count   int    `json:"count"`
 	Reason  string `json:"reason,omitempty"` // boş = gider
@@ -110,8 +131,9 @@ type notificationPreviewResponse struct {
 	InMaintenance bool               `json:"in_maintenance"`
 	Recipients    []previewRecipient `json:"recipients"`
 	Skipped       []previewRecipient `json:"skipped"`
-	// OwnersSummary yalnızca sahipleri göremeyen kullanıcıda doludur; o zaman sahip satırları listelerde yoktur.
-	OwnersSummary []previewOwnerCount `json:"owners_summary"`
+	// SystemSummary yalnızca sistem kurallarını göremeyen kullanıcıda doludur; o zaman sistem kaynaklı satırlar
+	// listelerde yoktur.
+	SystemSummary []previewSystemCount `json:"system_summary"`
 }
 
 func (d *Deps) handleNotificationPreview(w http.ResponseWriter, r *http.Request) error {
@@ -127,7 +149,7 @@ func (d *Deps) handleNotificationPreview(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return err
 	}
-	showOwners, err := d.perms.HasPermission(r.Context(), d.scope(r).Role(), "settings.view")
+	showSystem, err := d.perms.HasPermission(r.Context(), d.scope(r).Role(), "settings.view")
 	if err != nil {
 		return fail("notification preview: check settings.view", err)
 	}
@@ -137,15 +159,15 @@ func (d *Deps) handleNotificationPreview(w http.ResponseWriter, r *http.Request)
 	}
 	resp := notificationPreviewResponse{HostID: host.ID, Level: level, InMaintenance: p.InMaintenance,
 		Recipients: []previewRecipient{}, Skipped: []previewRecipient{}}
-	if !showOwners {
-		resp.OwnersSummary = []previewOwnerCount{}
+	if !showSystem {
+		resp.SystemSummary = []previewSystemCount{}
 	}
-	// add, bir alıcıyı listeye ekler. Sahipler gizliyse sahip sayılır; sahip aynı zamanda bir kuraldaysa satır kalır ama
-	// kaynağı o kural olur (yoksa kuralı yazan "kuralım çalışmıyor" sanır).
+	// add, bir alıcıyı listeye ekler. Sistem kuralları gizliyse sayılır; alıcı aynı zamanda bir organizasyon ya da sunucu
+	// kuralındaysa satır kalır ama kaynağı o kural olur (yoksa kuralı yazan "kuralım çalışmıyor" sanır).
 	add := func(list *[]previewRecipient, rc store.Recipient, reason string) {
 		source, also := rc.Source, rc.Also
-		if !showOwners && source.Kind == store.RecipientSourceOwner {
-			resp.countOwner(rc.Channel, reason)
+		if !showSystem && source.Kind == store.RecipientSourceSystem {
+			resp.countSystem(rc.Channel, reason)
 			if len(also) == 0 {
 				return
 			}
@@ -167,14 +189,14 @@ func (d *Deps) handleNotificationPreview(w http.ResponseWriter, r *http.Request)
 	return nil
 }
 
-func (resp *notificationPreviewResponse) countOwner(channel, reason string) {
-	for i := range resp.OwnersSummary {
-		if c := &resp.OwnersSummary[i]; c.Channel == channel && c.Reason == reason {
+func (resp *notificationPreviewResponse) countSystem(channel, reason string) {
+	for i := range resp.SystemSummary {
+		if c := &resp.SystemSummary[i]; c.Channel == channel && c.Reason == reason {
 			c.Count++
 			return
 		}
 	}
-	resp.OwnersSummary = append(resp.OwnersSummary, previewOwnerCount{Channel: channel, Count: 1, Reason: reason})
+	resp.SystemSummary = append(resp.SystemSummary, previewSystemCount{Channel: channel, Count: 1, Reason: reason})
 }
 
 // validateRouteLevel, kuralın en düşük seviyesini denetler.
@@ -186,7 +208,7 @@ func validateRouteLevel(minLevel string) error {
 }
 
 // routeChannelError, kanalın bir kurala seçilebilir olup olmadığını söyler: tanımlı ve server'ca gönderilebilir, kişiye
-// giden (ortak kanallar yalnızca sistem sahiplerine gider) ve açık olmalı. Seçilemiyorsa alanı adlandıran bir 400 döner.
+// giden (kuralın alıcısı bir kişidir) ve açık olmalı. Seçilemiyorsa alanı adlandıran bir 400 döner.
 func (d *Deps) routeChannelError(channel string) error {
 	reject := func(message string) error {
 		e := newError(http.StatusBadRequest, message)
@@ -199,9 +221,9 @@ func (d *Deps) routeChannelError(channel string) error {
 	case !ok || !implemented:
 		return reject("bu bildirim kanalı desteklenmiyor")
 	case !personal:
-		return reject("bu kanal yalnızca sistem sahiplerine gönderir; kurallarda seçilemez")
+		return reject("bu kanal bir kişiye gönderilmiyor; kurallarda seçilemez")
 	case !ch.Enabled:
-		return reject("bu kanal kapalı; önce Ayarlar → Sistem Ayarları → Bildirim kanalları'ndan açılmalı")
+		return reject("bu kanal kapalı; önce Bildirim → Kanallar'dan açılmalı")
 	}
 	return nil
 }
@@ -217,8 +239,8 @@ func (req *notificationRouteRequest) Validate() error {
 	if err := validateRouteLevel(req.MinLevel); err != nil {
 		return err
 	}
-	if (req.OrganizationID == nil) == (req.HostID == nil) {
-		return errors.New("organization_id ve host_id'den tam olarak biri verilmeli")
+	if req.OrganizationID != nil && req.HostID != nil {
+		return errors.New("organization_id ve host_id birlikte verilemez (ikisi de boşsa kural sistem kapsamlıdır)")
 	}
 	if (req.UserID == nil) == (req.ContactID == nil) {
 		return errors.New("user_id ve contact_id'den tam olarak biri verilmeli")
@@ -236,50 +258,13 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 
-	// Kapsamın organizasyonu ve erişim.
-	var scopeOrg uuid.UUID
-	var scopeHost *uuid.UUID
-	if req.HostID != nil {
-		host, err := d.hosts.GetByID(r.Context(), *req.HostID)
-		if errors.Is(err, store.ErrNotFound) {
-			return notFound("sunucu bulunamadı")
-		}
-		if err != nil {
-			return fail("create route: host", err)
-		}
-		scopeOrg, scopeHost = host.OrganizationID, &host.ID
-	} else {
-		scopeOrg = *req.OrganizationID
-		_, err := d.organizations.GetByID(r.Context(), scopeOrg)
-		if errors.Is(err, store.ErrNotFound) {
-			return notFound("organizasyon bulunamadı")
-		}
-		if err != nil {
-			return fail("create route: organization", err)
-		}
-	}
-	allowed, err := d.scope(r).CanManageOrg(r.Context(), scopeOrg)
+	ok, err := d.routeRecipientAllowed(r, req, fail)
 	if err != nil {
-		return fail("create route: check access", err)
+		return err
 	}
-	if !allowed {
-		return forbidden()
-	}
-
-	// Alıcı bu kapsam için seçilebilir olmalı.
-	cands, err := d.notifs.Candidates(r.Context(), scopeOrg, scopeHost)
-	if err != nil {
-		return fail("create route: candidates", err)
-	}
-	okRecipient := false
-	for _, c := range cands {
-		if (req.UserID != nil && c.UserID != nil && *c.UserID == *req.UserID) || (req.ContactID != nil && c.ContactID != nil && *c.ContactID == *req.ContactID) {
-			okRecipient = true
-			break
-		}
-	}
-	if !okRecipient {
-		return badRequest("bu alıcı bu kapsam için seçilemez (yalnızca kapsamdaki yöneticiler, atanmış operatörler ve organizasyonun iletişim kişileri)")
+	if !ok {
+		return badRequest("bu alıcı bu kapsam için seçilemez (sistem: süper adminler ve sistem kişileri; organizasyon/sunucu: " +
+			"kapsamdaki yöneticiler, atanmış operatörler ve organizasyonun iletişim kişileri)")
 	}
 
 	route, err := d.notifs.Create(r.Context(), model.NotificationRoute{
@@ -295,6 +280,75 @@ func (d *Deps) handleCreateRoute(w http.ResponseWriter, r *http.Request) error {
 		"recipient": route.RecipientName,
 	})
 	writeJSON(w, http.StatusCreated, route)
+	return nil
+}
+
+// routeRecipientAllowed, yeni kuralın kapsamına erişimi denetler (yoksa 403/404 döner) ve alıcının o kapsamın
+// adaylarından olup olmadığını söyler. Sistem kapsamı settings.manage ister.
+func (d *Deps) routeRecipientAllowed(r *http.Request, req notificationRouteRequest, fail failFunc) (bool, error) {
+	var cands []store.Candidate
+	switch {
+	case req.OrganizationID == nil && req.HostID == nil:
+		if err := d.requireSystemRules(r, "create route", fail); err != nil {
+			return false, err
+		}
+		list, err := d.notifs.SystemCandidates(r.Context())
+		if err != nil {
+			return false, fail("create route: system candidates", err)
+		}
+		cands = list
+	default:
+		var scopeOrg uuid.UUID
+		var scopeHost *uuid.UUID
+		if req.HostID != nil {
+			host, err := d.hosts.GetByID(r.Context(), *req.HostID)
+			if errors.Is(err, store.ErrNotFound) {
+				return false, notFound("sunucu bulunamadı")
+			}
+			if err != nil {
+				return false, fail("create route: host", err)
+			}
+			scopeOrg, scopeHost = host.OrganizationID, &host.ID
+		} else {
+			scopeOrg = *req.OrganizationID
+			_, err := d.organizations.GetByID(r.Context(), scopeOrg)
+			if errors.Is(err, store.ErrNotFound) {
+				return false, notFound("organizasyon bulunamadı")
+			}
+			if err != nil {
+				return false, fail("create route: organization", err)
+			}
+		}
+		allowed, err := d.scope(r).CanManageOrg(r.Context(), scopeOrg)
+		if err != nil {
+			return false, fail("create route: check access", err)
+		}
+		if !allowed {
+			return false, forbidden()
+		}
+		list, err := d.notifs.Candidates(r.Context(), scopeOrg, scopeHost)
+		if err != nil {
+			return false, fail("create route: candidates", err)
+		}
+		cands = list
+	}
+	for _, c := range cands {
+		if (req.UserID != nil && c.UserID != nil && *c.UserID == *req.UserID) || (req.ContactID != nil && c.ContactID != nil && *c.ContactID == *req.ContactID) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// requireSystemRules, sistem kapsamlı kuralları yazma iznini (settings.manage) denetler.
+func (d *Deps) requireSystemRules(r *http.Request, op string, fail failFunc) error {
+	ok, err := d.perms.HasPermission(r.Context(), d.scope(r).Role(), "settings.manage")
+	if err != nil {
+		return fail(op+": check settings.manage", err)
+	}
+	if !ok {
+		return forbidden()
+	}
 	return nil
 }
 
@@ -354,7 +408,8 @@ func (d *Deps) handleDeleteRoute(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// managedRoute, yoldaki kuralı yükler ve kapsamına (organizasyon ya da sunucunun organizasyonu) erişimi denetler.
+// managedRoute, yoldaki kuralı yükler ve kapsamına erişimi denetler: sistem kuralı settings.manage, organizasyon ya da
+// sunucu kuralı o organizasyona (sunucunun organizasyonuna) TAM erişim ister.
 func (d *Deps) managedRoute(r *http.Request, op string, fail failFunc) (model.NotificationRoute, error) {
 	id, err := pathID(r, "geçersiz kimlik")
 	if err != nil {
@@ -366,6 +421,12 @@ func (d *Deps) managedRoute(r *http.Request, op string, fail failFunc) (model.No
 	}
 	if err != nil {
 		return model.NotificationRoute{}, fail(op+": lookup notification route", err)
+	}
+	if route.OrganizationID == nil && route.HostID == nil {
+		if err := d.requireSystemRules(r, op, fail); err != nil {
+			return model.NotificationRoute{}, err
+		}
+		return route, nil
 	}
 	orgID := uuid.Nil
 	if route.OrganizationID != nil {

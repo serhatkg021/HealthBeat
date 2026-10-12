@@ -135,20 +135,24 @@ func SecretBox(t *testing.T) *secretbox.Box {
 	return box
 }
 
-// EmailOwner, e-posta kanalını açar (ayarı sahte bir sunucudur; testler göndericiyi kendileri kurar) ve email'i sistem
-// sahibi olarak ekler: warning ve üzeri alert e-postaları ona gider.
-func EmailOwner(t *testing.T, pool *pgxpool.Pool, email string) uuid.UUID {
+// SystemEmailContact, e-posta kanalını açar (ayarı sahte bir sunucudur; testler göndericiyi kendileri kurar), email'i
+// sistem kişisi olarak ekler ve ona sistem kuralı yazar: bütün sunucuların warning ve üzeri alert e-postaları ona gider.
+// Kişinin kimliğini döndürür.
+func SystemEmailContact(t *testing.T, pool *pgxpool.Pool, email string) uuid.UUID {
 	t.Helper()
 	EnableEmailChannel(t, pool)
 	var id uuid.UUID
-	if err := pool.QueryRow(context.Background(), `INSERT INTO notification_owners (name, email) VALUES ($1, $1) RETURNING id`, email).Scan(&id); err != nil {
-		t.Fatalf("testdb: insert owner %q: %v", email, err)
+	if err := pool.QueryRow(context.Background(), `INSERT INTO contacts (name, email) VALUES ($1, $1) RETURNING id`, email).Scan(&id); err != nil {
+		t.Fatalf("testdb: insert system contact %q: %v", email, err)
+	}
+	if _, err := pool.Exec(context.Background(), `INSERT INTO notification_routes (contact_id, channel, min_level) VALUES ($1, 'email', 'warning')`, id); err != nil {
+		t.Fatalf("testdb: insert system rule for %q: %v", email, err)
 	}
 	return id
 }
 
 // EnableEmailChannel, e-posta kanalını sahte bir sunucu ayarıyla açar (testler göndericiyi kendileri kurar): kanala kural
-// yazılabilir ve sahiplere e-posta gider.
+// yazılabilir ve kurallardaki alıcılara e-posta gider.
 func EnableEmailChannel(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 	if _, err := pool.Exec(context.Background(), `UPDATE notification_channels SET enabled = true,

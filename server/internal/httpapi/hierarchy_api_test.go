@@ -297,7 +297,6 @@ func TestNotificationRoutesAPI(t *testing.T) {
 	}
 
 	bad := map[string]map[string]any{
-		"no scope":              {"user_id": adminID},
 		"two scopes":            {"organization_id": orgA, "host_id": host.ID, "user_id": adminID},
 		"no recipient":          {"organization_id": orgA},
 		"two recipients":        {"organization_id": orgA, "user_id": adminID, "contact_id": contact.ID},
@@ -328,6 +327,39 @@ func TestNotificationRoutesAPI(t *testing.T) {
 	a.expect(403, "DELETE", "/api/v1/notification-routes/"+r2.ID.String(), opTok, nil, nil)
 	a.expect(401, "GET", "/api/v1/hosts/"+host.ID.String()+"/notification-routes", "", nil, nil)
 
+	// Sistem kuralları (kapsamsız: bütün sunucular) yalnızca settings.manage ile yazılır; alıcı süper admin ya da sistem
+	// kişisi olabilir, kapsamı dar bir kullanıcı olamaz.
+	var sysContact struct {
+		ID uuid.UUID `json:"id"`
+	}
+	a.expect(201, "POST", "/api/v1/system-contacts", root, map[string]any{"name": "NOC", "email": "noc@x.test"}, &sysContact)
+	var sysCands []struct {
+		UserID    *uuid.UUID `json:"user_id"`
+		ContactID *uuid.UUID `json:"contact_id"`
+		Source    string     `json:"source"`
+	}
+	a.expect(200, "GET", "/api/v1/notification-recipients/system", root, nil, &sysCands)
+	if len(sysCands) != 2 || sysCands[0].Source == sysCands[1].Source {
+		t.Fatalf("system candidates = %+v, want root and the system contact", sysCands)
+	}
+	a.expect(403, "GET", "/api/v1/notification-recipients/system", adminTok, nil, nil)
+	a.expect(403, "POST", "/api/v1/notification-routes", adminTok, map[string]any{"user_id": adminID}, nil)
+	a.expect(400, "POST", "/api/v1/notification-routes", root, map[string]any{"user_id": adminID}, nil) // org admin sistem kuralına yazılamaz
+	a.expect(400, "POST", "/api/v1/notification-routes", root, map[string]any{"contact_id": contact.ID}, nil)
+	var sys1, sys2 routeView
+	a.expect(201, "POST", "/api/v1/notification-routes", root, map[string]any{"user_id": rootID}, &sys1)
+	a.expect(201, "POST", "/api/v1/notification-routes", root, map[string]any{"contact_id": sysContact.ID, "min_level": "critical"}, &sys2)
+	var sysRoutes []routeView
+	a.expect(200, "GET", "/api/v1/notification-routes/system", root, nil, &sysRoutes)
+	if len(sysRoutes) != 2 || sysRoutes[1].RecipientTarget != "noc@x.test" {
+		t.Fatalf("system routes = %+v", sysRoutes)
+	}
+	a.expect(403, "GET", "/api/v1/notification-routes/system", adminTok, nil, nil)
+	a.expect(403, "PUT", "/api/v1/notification-routes/"+sys1.ID.String(), adminTok, map[string]any{"min_level": "info"}, nil)
+	a.expect(403, "DELETE", "/api/v1/notification-routes/"+sys1.ID.String(), adminTok, nil, nil)
+	a.expect(200, "PUT", "/api/v1/notification-routes/"+sys1.ID.String(), root, map[string]any{"min_level": "info"}, nil)
+	a.expect(204, "DELETE", "/api/v1/notification-routes/"+sys1.ID.String(), root, nil, nil)
+
 	var orgRoutes, hostRoutes []routeView
 	a.expect(200, "GET", "/api/v1/organizations/"+orgA.String()+"/notification-routes", adminTok, nil, &orgRoutes)
 	a.expect(200, "GET", "/api/v1/hosts/"+host.ID.String()+"/notification-routes", adminTok, nil, &hostRoutes)
@@ -345,8 +377,9 @@ func TestNotificationRoutesAPI(t *testing.T) {
 	a.expect(404, "PUT", "/api/v1/notification-routes/"+uuid.NewString(), root, map[string]any{"min_level": "info"}, nil)
 	a.expect(204, "DELETE", "/api/v1/notification-routes/"+r1.ID.String(), adminTok, nil, nil)
 	a.expect(404, "DELETE", "/api/v1/notification-routes/"+r1.ID.String(), adminTok, nil, nil)
-	if a.auditCount("notification.create") != 4 || a.auditCount("notification.update") != 1 || a.auditCount("notification.delete") != 1 {
-		t.Fatalf("audit rows = %d/%d/%d, want 4/1/1", a.auditCount("notification.create"), a.auditCount("notification.update"), a.auditCount("notification.delete"))
+	// Organizasyon/sunucu kuralları 4 ekleme, 1 güncelleme, 1 silme; sistem kuralları 2 ekleme, 1 güncelleme, 1 silme.
+	if a.auditCount("notification.create") != 6 || a.auditCount("notification.update") != 2 || a.auditCount("notification.delete") != 2 {
+		t.Fatalf("audit rows = %d/%d/%d, want 6/2/2", a.auditCount("notification.create"), a.auditCount("notification.update"), a.auditCount("notification.delete"))
 	}
 
 	// Alıcı (kişi) silinince kuralı da gider.
@@ -444,8 +477,8 @@ func TestHostAPIShowsTitleReportedHostnameAndMachineDuplicates(t *testing.T) {
 	}
 }
 
-// "Bu alert kime gider?" önizlemesi: gidecekler ve gitmeyecekler kaynaklarıyla; sistem sahipleri yalnızca settings.view
-// olana görünür, öteki kullanıcıya kanal başına sayı olarak gelir.
+// "Bu alert kime gider?" önizlemesi: gidecekler ve gitmeyecekler kaynaklarıyla; sistem kurallarından gelenler yalnızca
+// settings.view olana görünür, öteki kullanıcıya kanal başına sayı olarak gelir.
 func TestNotificationPreviewAPI(t *testing.T) {
 	a := newAPI(t)
 	root, _ := a.login("root@x.test", "super_admin")
@@ -467,15 +500,19 @@ func TestNotificationPreviewAPI(t *testing.T) {
 	}
 	a.expect(201, "POST", "/api/v1/organizations/"+orgA.String()+"/contacts", adminTok,
 		map[string]any{"name": "Ayşe", "email": "ayse@musteri.test", "phone": "+905550000003"}, &ayse)
-	// Sahipler: biri aynı zamanda organizasyon kuralında (aynı adres, tek ileti).
-	exec(`INSERT INTO notification_owners (name, email) VALUES ('Sahip', 'owner@x.test'), ('Ayşe (sahip)', 'ayse@musteri.test')`)
+	// Sistem kuralları: biri aynı zamanda organizasyon kuralında (aynı adres, tek ileti).
+	exec(`INSERT INTO contacts (name, email) VALUES ('Sahip', 'owner@x.test'), ('Ayşe (sistem)', 'ayse@musteri.test')`)
+	exec(`INSERT INTO notification_routes (contact_id, channel, min_level) SELECT id, 'email', 'warning' FROM contacts WHERE organization_id IS NULL`)
 	a.expect(201, "POST", "/api/v1/notification-routes", adminTok,
 		map[string]any{"organization_id": orgA, "contact_id": ayse.ID, "channel": "email", "min_level": "critical"}, nil)
 	a.expect(201, "POST", "/api/v1/notification-routes", adminTok,
 		map[string]any{"host_id": host.ID, "user_id": adminID, "channel": "email", "min_level": "warning"}, nil)
 	// Kapalı kanaldaki kural: gitmez, nedeniyle döner.
-	exec(`INSERT INTO notification_channels (channel, provider, enabled, owner_min_level) VALUES ('sms', 'test', false, 'critical')`)
+	exec(`INSERT INTO notification_channels (channel, provider, enabled) VALUES ('sms', 'test', false)`)
 	exec(`INSERT INTO notification_routes (host_id, contact_id, channel, min_level) VALUES ($1, $2, 'sms', 'warning')`, host.ID, ayse.ID)
+	// Erişimini kaybetmiş kullanıcı (organizasyona atanmamış org admin): kuralı durur, ileti gitmez.
+	gone := testdb.User(t, a.pool, "gone@x.test", "org_admin", "pw")
+	exec(`INSERT INTO notification_routes (host_id, user_id, channel, min_level) VALUES ($1, $2, 'email', 'warning')`, host.ID, gone)
 
 	type source struct {
 		Kind string `json:"kind"`
@@ -494,10 +531,10 @@ func TestNotificationPreviewAPI(t *testing.T) {
 		InMaintenance bool      `json:"in_maintenance"`
 		Recipients    []item    `json:"recipients"`
 		Skipped       []item    `json:"skipped"`
-		OwnersSummary []struct {
+		SystemSummary []struct {
 			Channel string `json:"channel"`
 			Count   int    `json:"count"`
-		} `json:"owners_summary"`
+		} `json:"system_summary"`
 	}
 	str := func(items []item) string {
 		var out []string
@@ -521,35 +558,36 @@ func TestNotificationPreviewAPI(t *testing.T) {
 	// Süper admin her şeyi görür; seviye verilmezse kritik.
 	var p preview
 	a.expect(200, "GET", url, root, nil, &p)
-	if p.HostID != host.ID || p.Level != "critical" || p.InMaintenance || p.OwnersSummary != nil {
+	if p.HostID != host.ID || p.Level != "critical" || p.InMaintenance || p.SystemSummary != nil {
 		t.Fatalf("root preview = %+v", p)
 	}
-	if got, want := str(p.Recipients), "email:ayse@musteri.test owner +organization:A, email:owner@x.test owner, email:oa@x.test host"; got != want {
+	if got, want := str(p.Recipients), "email:ayse@musteri.test system +organization:A, email:owner@x.test system, email:oa@x.test host"; got != want {
 		t.Errorf("root recipients:\n got  %s\n want %s", got, want)
 	}
-	if got, want := str(p.Skipped), "sms:+905550000003 host (channel_off)"; got != want {
+	if got, want := str(p.Skipped), "sms:+905550000003 host (channel_off), email:gone@x.test host (no_access)"; got != want {
 		t.Errorf("root skipped:\n got  %s\n want %s", got, want)
 	}
 
-	// Organizasyon yöneticisi ve operatör sahipleri göremez: sayı gelir; sahip olan kural alıcısı kuralıyla görünür.
+	// Organizasyon yöneticisi ve operatör sistem kurallarını göremez: sayı gelir; sistem kuralındaki biri bir kuralda da
+	// varsa o kuralıyla görünür.
 	for name, tok := range map[string]string{"org admin": adminTok, "operator": opTok} {
 		p = preview{}
 		a.expect(200, "GET", url+"?level=critical", tok, nil, &p)
 		if got, want := str(p.Recipients), "email:ayse@musteri.test organization:A, email:oa@x.test host"; got != want {
 			t.Errorf("%s recipients:\n got  %s\n want %s", name, got, want)
 		}
-		if len(p.OwnersSummary) != 1 || p.OwnersSummary[0].Channel != "email" || p.OwnersSummary[0].Count != 2 {
-			t.Errorf("%s owners summary = %+v, want 2 by email", name, p.OwnersSummary)
+		if len(p.SystemSummary) != 1 || p.SystemSummary[0].Channel != "email" || p.SystemSummary[0].Count != 2 {
+			t.Errorf("%s system summary = %+v, want 2 by email", name, p.SystemSummary)
 		}
-		if str(p.Skipped) != "sms:+905550000003 host (channel_off)" {
+		if str(p.Skipped) != "sms:+905550000003 host (channel_off), email:gone@x.test host (no_access)" {
 			t.Errorf("%s skipped = %s", name, str(p.Skipped))
 		}
 	}
 
-	// Seviye kuralları süzer: uyarıda organizasyonun kritik kuralı yok (Ayşe yalnızca sahip olarak kalır).
+	// Seviye kuralları süzer: uyarıda organizasyonun kritik kuralı yok (Ayşe yalnızca sistem kuralıyla kalır).
 	p = preview{}
 	a.expect(200, "GET", url+"?level=warning", root, nil, &p)
-	if got, want := str(p.Recipients), "email:ayse@musteri.test owner, email:owner@x.test owner, email:oa@x.test host"; got != want {
+	if got, want := str(p.Recipients), "email:ayse@musteri.test system, email:owner@x.test system, email:oa@x.test host"; got != want {
 		t.Errorf("warning recipients:\n got  %s\n want %s", got, want)
 	}
 

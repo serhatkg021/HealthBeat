@@ -44,6 +44,7 @@ var storeReasons = []struct {
 	// İletişim kişisi kuralları istemcinin düzeltebileceği istek hatalarıdır.
 	{store.ErrContactManagerInvalid, http.StatusBadRequest, "yönetici aynı organizasyondan bir iletişim kişisi olmalı"},
 	{store.ErrContactInvalid, http.StatusBadRequest, "en az bir iletişim yolu (telefon ya da e-posta) gerekli ve kişi kendi yöneticisi olamaz"},
+	{store.ErrContactEmailTaken, http.StatusConflict, "bu e-postayla bir sistem kişisi zaten var"},
 }
 
 // storeError, bir store çağrısının hatasını yanıta çevirir: adlandırılmış bir neden (storeReasons) kendi durum kodu ve

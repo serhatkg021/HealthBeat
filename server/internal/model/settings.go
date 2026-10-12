@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 )
@@ -58,56 +57,9 @@ type NotificationChannel struct {
 	// SecretUnreadable, kayıtlı şifrenin bu server'ın anahtarıyla çözülemediğini söyler (SECRETS_ENCRYPTION_KEY değişmiş);
 	// şifre yeniden girilene ya da silinene kadar kanal gönderemez.
 	SecretUnreadable bool
-	OwnerMinLevel    string // sistem sahiplerine bu seviye ve üzeri gönderilir
 	VerifiedAt       *time.Time
 	UpdatedAt        time.Time
 	UpdatedBy        *uuid.UUID
-}
-
-// NotificationOwner, her alert'in bildirimini alan bir sistem sahibidir (panel kullanıcısı olması gerekmez). E-postası
-// e-posta kanalında, telefonu SMS kanalında kullanılır; EmailEnabled/SMSEnabled o kanaldan almak isteyip istemediğidir.
-type NotificationOwner struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Email        *string   `json:"email"`
-	Phone        *string   `json:"phone"`
-	EmailEnabled bool      `json:"email_enabled"`
-	SMSEnabled   bool      `json:"sms_enabled"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
-}
-
-// Normalize, sahibin alanlarını doğrular ve olağan biçime getirir: ad boş olamaz, e-posta sade ve küçük harfli, telefon
-// yalnızca rakam (başta isteğe bağlı +); en az biri dolu olmalı. Boş e-posta/telefon nil'e çevrilir.
-func (o *NotificationOwner) Normalize() error {
-	o.Name = strings.TrimSpace(o.Name)
-	if o.Name == "" || utf8.RuneCountInString(o.Name) > 200 {
-		return errors.New("ad boş olamaz ve en fazla 200 karakter olabilir")
-	}
-	if o.Email != nil && strings.TrimSpace(*o.Email) == "" {
-		o.Email = nil
-	}
-	if o.Email != nil {
-		email, err := NormalizeEmail(*o.Email)
-		if err != nil {
-			return err
-		}
-		o.Email = &email
-	}
-	if o.Phone != nil {
-		phone, err := NormalizePhone(*o.Phone)
-		if err != nil {
-			return err
-		}
-		o.Phone = &phone
-		if phone == "" {
-			o.Phone = nil
-		}
-	}
-	if o.Email == nil && o.Phone == nil {
-		return errors.New("e-posta ya da telefondan en az biri girilmeli")
-	}
-	return nil
 }
 
 var phonePattern = regexp.MustCompile(`^\+?[0-9]{7,15}$`)

@@ -30,7 +30,8 @@ type apiErrorBody struct {
 	Fields map[string]string `json:"fields"`
 }
 
-// Ayarlar, kanallar ve sahipler yalnızca settings.* izni olanlara (varsayılan olarak super_admin) açıktır.
+// Ayarlar, kanallar, sistem kişileri ve sistem kuralları yalnızca settings.* izni olanlara (varsayılan olarak
+// super_admin) açıktır.
 func TestSettingsEndpointsNeedSettingsPermissions(t *testing.T) {
 	a := newAPI(t)
 	orgAdmin, _ := a.login("oa@x.test", "org_admin")
@@ -40,8 +41,9 @@ func TestSettingsEndpointsNeedSettingsPermissions(t *testing.T) {
 			{"GET", "/api/v1/settings"}, {"PATCH", "/api/v1/settings"}, {"POST", "/api/v1/settings/reset"},
 			{"GET", "/api/v1/notification-channels"}, {"PATCH", "/api/v1/notification-channels/email"},
 			{"POST", "/api/v1/notification-channels/email/test"},
-			{"GET", "/api/v1/notification-owners"}, {"POST", "/api/v1/notification-owners"},
-			{"PUT", "/api/v1/notification-owners/" + uuid.NewString()}, {"DELETE", "/api/v1/notification-owners/" + uuid.NewString()},
+			{"GET", "/api/v1/system-contacts"}, {"POST", "/api/v1/system-contacts"},
+			{"PUT", "/api/v1/system-contacts/" + uuid.NewString()}, {"DELETE", "/api/v1/system-contacts/" + uuid.NewString()},
+			{"GET", "/api/v1/notification-routes/system"}, {"GET", "/api/v1/notification-recipients/system"},
 		} {
 			if code := a.call(c.method, c.path, tok, map[string]any{}, nil); code != 403 {
 				t.Errorf("%s %s = %d, want 403", c.method, c.path, code)
@@ -110,16 +112,15 @@ func TestSettingsAPI(t *testing.T) {
 }
 
 type channelView struct {
-	Channel       string         `json:"channel"`
-	Enabled       bool           `json:"enabled"`
-	Config        map[string]any `json:"config"`
-	SecretSet     bool           `json:"secret_set"`
-	OwnerMinLevel string         `json:"owner_min_level"`
-	VerifiedAt    *string        `json:"verified_at"`
-	Ready         bool           `json:"ready"`
-	Implemented   bool           `json:"implemented"`
-	Personal      bool           `json:"personal"`
-	RuleCount     int            `json:"rule_count"`
+	Channel     string         `json:"channel"`
+	Enabled     bool           `json:"enabled"`
+	Config      map[string]any `json:"config"`
+	SecretSet   bool           `json:"secret_set"`
+	VerifiedAt  *string        `json:"verified_at"`
+	Ready       bool           `json:"ready"`
+	Implemented bool           `json:"implemented"`
+	Personal    bool           `json:"personal"`
+	RuleCount   int            `json:"rule_count"`
 }
 
 func TestNotificationChannelsAPI(t *testing.T) {
@@ -131,18 +132,20 @@ func TestNotificationChannelsAPI(t *testing.T) {
 	var list []channelView
 	a.expect(200, "GET", "/api/v1/notification-channels", root, nil, &list)
 	if len(list) != 1 || list[0].Channel != "email" || !list[0].Enabled || !list[0].Ready || !list[0].Implemented ||
-		!list[0].Personal || list[0].SecretSet || list[0].OwnerMinLevel != "warning" || list[0].Config["username"] != "" {
+		!list[0].Personal || list[0].SecretSet || list[0].Config["username"] != "" {
 		t.Fatalf("channels = %+v", list)
 	}
 
 	srv := testsmtp.Start(t)
 	var ch channelView
 	a.expect(200, "PATCH", "/api/v1/notification-channels/email", root, map[string]any{
-		"config": map[string]any{"host": srv.Host, "port": json.Number(srv.Port), "username": "hb"}, "secret": secret, "owner_min_level": "critical",
+		"config": map[string]any{"host": srv.Host, "port": json.Number(srv.Port), "username": "hb"}, "secret": secret,
 	}, &ch)
-	if !ch.SecretSet || ch.OwnerMinLevel != "critical" || ch.Config["host"] != srv.Host || ch.Config["from"] != "hb@x.test" {
+	if !ch.SecretSet || ch.Config["host"] != srv.Host || ch.Config["from"] != "hb@x.test" {
 		t.Fatalf("after patch = %+v", ch)
 	}
+	// Seviye kanalda değil bildirim kurallarındadır: eski alan bilinmeyen alan olarak reddedilir.
+	a.expect(400, "PATCH", "/api/v1/notification-channels/email", root, map[string]any{"owner_min_level": "critical"}, nil)
 
 	// Ayarı eksik bırakan değişiklik reddedilir; kanal yoksa 404.
 	var e apiErrorBody
@@ -211,55 +214,79 @@ func TestNotificationChannelsAPI(t *testing.T) {
 	}
 }
 
-type ownerView struct {
-	ID           uuid.UUID `json:"id"`
-	Name         string    `json:"name"`
-	Email        *string   `json:"email"`
-	Phone        *string   `json:"phone"`
-	EmailEnabled bool      `json:"email_enabled"`
-	SMSEnabled   bool      `json:"sms_enabled"`
+type systemContactView struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	Email     *string   `json:"email"`
+	Phone     *string   `json:"phone"`
+	Scope     string    `json:"scope"`
+	RuleCount int       `json:"rule_count"`
 }
 
-func TestNotificationOwnersAPI(t *testing.T) {
+// Sistem kişileri organizasyonsuz kişilerdir: e-postaları kendi aralarında tekildir, yöneticileri olmaz, organizasyon
+// kişisi uçlarından görünmez ve değiştirilemez; silinince alıcı oldukları kurallar da gider.
+func TestSystemContactsAPI(t *testing.T) {
 	a := newAPI(t)
 	root, _ := a.login("root@x.test", "super_admin")
+	org := a.createOrg(root, "acme")
 
-	var ali ownerView
-	a.expect(201, "POST", "/api/v1/notification-owners", root, map[string]any{"name": "Ali", "email": "Ali@X.test", "phone": "+90 555 000 00 01"}, &ali)
-	if *ali.Email != "ali@x.test" || *ali.Phone != "+905550000001" || !ali.EmailEnabled || !ali.SMSEnabled {
+	var ali systemContactView
+	a.expect(201, "POST", "/api/v1/system-contacts", root, map[string]any{"name": "Ali", "email": "ali@x.test", "phone": "+905550000001"}, &ali)
+	if ali.Scope != "system" || *ali.Email != "ali@x.test" || ali.RuleCount != 0 {
 		t.Fatalf("created = %+v", ali)
 	}
-	a.expect(409, "POST", "/api/v1/notification-owners", root, map[string]any{"name": "Kopya", "email": "ali@x.test"}, nil)
+	a.expect(409, "POST", "/api/v1/system-contacts", root, map[string]any{"name": "Kopya", "email": "ALI@x.test"}, nil)
+	var orgContact struct {
+		ID uuid.UUID `json:"id"`
+	}
+	a.expect(201, "POST", "/api/v1/organizations/"+org.String()+"/contacts", root, map[string]any{"name": "Aynı adres", "email": "ali@x.test"}, &orgContact)
 	for name, body := range map[string]map[string]any{
 		"no address":   {"name": "Boş"},
 		"no name":      {"email": "x@x.test"},
 		"bad phone":    {"name": "X", "phone": "abc"},
 		"unknown key":  {"name": "X", "email": "x@x.test", "mail": "y"},
 		"display name": {"name": "X", "email": "X <x@x.test>"},
+		"manager":      {"name": "X", "email": "x@x.test", "manager_contact_id": orgContact.ID},
 	} {
-		if code := a.call("POST", "/api/v1/notification-owners", root, body, nil); code != 400 {
+		if code := a.call("POST", "/api/v1/system-contacts", root, body, nil); code != 400 {
 			t.Errorf("%s: %d, want 400", name, code)
 		}
 	}
 
-	// Güncellemede verilmeyen email_enabled/sms_enabled korunur.
-	var upd ownerView
-	a.expect(200, "PUT", "/api/v1/notification-owners/"+ali.ID.String(), root, map[string]any{"name": "Ali Veli", "email": "ali@x.test", "sms_enabled": false}, &upd)
-	if upd.Name != "Ali Veli" || upd.Phone != nil || upd.SMSEnabled || !upd.EmailEnabled {
+	a.expect(201, "POST", "/api/v1/notification-routes", root, map[string]any{"contact_id": ali.ID}, nil)
+	var upd systemContactView
+	a.expect(200, "PUT", "/api/v1/system-contacts/"+ali.ID.String(), root, map[string]any{"name": "Ali Veli", "email": "ali@x.test"}, &upd)
+	if upd.Name != "Ali Veli" || upd.Phone != nil || upd.RuleCount != 1 {
 		t.Fatalf("updated = %+v", upd)
 	}
-	a.expect(404, "PUT", "/api/v1/notification-owners/"+uuid.NewString(), root, map[string]any{"name": "X", "email": "x@x.test"}, nil)
-
-	var owners []ownerView
-	a.expect(200, "GET", "/api/v1/notification-owners", root, nil, &owners)
-	if len(owners) != 1 || owners[0].Name != "Ali Veli" {
-		t.Fatalf("owners = %+v", owners)
+	a.expect(404, "PUT", "/api/v1/system-contacts/"+uuid.NewString(), root, map[string]any{"name": "X", "email": "x@x.test"}, nil)
+	// Uçlar birbirinin kişisini görmez.
+	a.expect(404, "PUT", "/api/v1/system-contacts/"+orgContact.ID.String(), root, map[string]any{"name": "X", "email": "x@x.test"}, nil)
+	a.expect(404, "PUT", "/api/v1/contacts/"+ali.ID.String(), root, map[string]any{"name": "X", "email": "x@x.test"}, nil)
+	a.expect(404, "DELETE", "/api/v1/contacts/"+ali.ID.String(), root, nil, nil)
+	var orgList []struct {
+		ID uuid.UUID `json:"id"`
 	}
-	a.expect(204, "DELETE", "/api/v1/notification-owners/"+ali.ID.String(), root, nil, nil)
-	a.expect(404, "DELETE", "/api/v1/notification-owners/"+ali.ID.String(), root, nil, nil)
-	for _, action := range []string{"notification_owner.create", "notification_owner.update", "notification_owner.delete"} {
-		if n := a.auditCount(action); n != 1 {
-			t.Errorf("%s audit entries = %d, want 1", action, n)
+	a.expect(200, "GET", "/api/v1/organizations/"+org.String()+"/contacts", root, nil, &orgList)
+	if len(orgList) != 1 || orgList[0].ID != orgContact.ID {
+		t.Fatalf("organization contacts = %+v", orgList)
+	}
+
+	var list []systemContactView
+	a.expect(200, "GET", "/api/v1/system-contacts", root, nil, &list)
+	if len(list) != 1 || list[0].Name != "Ali Veli" || list[0].RuleCount != 1 {
+		t.Fatalf("system contacts = %+v", list)
+	}
+	a.expect(204, "DELETE", "/api/v1/system-contacts/"+ali.ID.String(), root, nil, nil)
+	a.expect(404, "DELETE", "/api/v1/system-contacts/"+ali.ID.String(), root, nil, nil)
+	var rules []routeView
+	a.expect(200, "GET", "/api/v1/notification-routes/system", root, nil, &rules)
+	if len(rules) != 0 {
+		t.Fatalf("system rules after deleting the contact = %+v", rules)
+	}
+	for action, want := range map[string]int{"contact.create": 2, "contact.update": 1, "contact.delete": 1} {
+		if n := a.auditCount(action); n != want {
+			t.Errorf("%s audit entries = %d, want %d", action, n, want)
 		}
 	}
 }
@@ -299,12 +326,14 @@ func TestNotificationRoutesFollowTheChannels(t *testing.T) {
 	a.expect(204, "DELETE", "/api/v1/notification-routes/"+r.ID.String(), root, nil, nil)
 }
 
-// Uçtan uca: API'den eklenen sistem sahibi, alert açılınca bildirim kuyruğuna alıcı olarak yazılır (gönderimin kendisi
-// alertengine ve cmd/server testlerinde).
-func TestOwnerAddedThroughTheAPIGetsTheAlert(t *testing.T) {
+// Uçtan uca: API'den eklenen sistem kişisi ve sistem kuralı, alert açılınca bildirim kuyruğuna alıcı olarak yazılır
+// (gönderimin kendisi alertengine ve cmd/server testlerinde).
+func TestSystemRuleAddedThroughTheAPIGetsTheAlert(t *testing.T) {
 	a := newAPI(t)
 	root, _ := a.login("root@x.test", "super_admin")
-	a.expect(201, "POST", "/api/v1/notification-owners", root, map[string]any{"name": "NOC", "email": "noc@x.test"}, nil)
+	var noc systemContactView
+	a.expect(201, "POST", "/api/v1/system-contacts", root, map[string]any{"name": "NOC", "email": "noc@x.test"}, &noc)
+	a.expect(201, "POST", "/api/v1/notification-routes", root, map[string]any{"contact_id": noc.ID}, nil)
 
 	org := a.createOrg(root, "acme")
 	host := a.createPushHost(root, org, "web-1")
@@ -327,7 +356,7 @@ func TestOwnerAddedThroughTheAPIGetsTheAlert(t *testing.T) {
 	}
 	r.Close()
 	if fmt.Sprint(rows) != "[email:noc@x.test]" {
-		t.Fatalf("queued alert notifications = %v, want one to the owner added through the API", rows)
+		t.Fatalf("queued alert notifications = %v, want one to the system contact added through the API", rows)
 	}
 }
 

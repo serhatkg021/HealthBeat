@@ -24,7 +24,7 @@ func NewNotificationChannels(pool *pgxpool.Pool, box *secretbox.Box) *Notificati
 	return &NotificationChannels{pool: pool, box: box}
 }
 
-const channelSelect = `SELECT channel, provider, enabled, config, secret_enc, owner_min_level, verified_at, updated_at, updated_by
+const channelSelect = `SELECT channel, provider, enabled, config, secret_enc, verified_at, updated_at, updated_by
 FROM notification_channels`
 
 func channelSecretAAD(channel string) string { return "notification_channels:" + channel }
@@ -35,7 +35,7 @@ func (s *NotificationChannels) scan(row interface{ Scan(...any) error }) (model.
 		config []byte
 		sealed *string
 	)
-	if err := row.Scan(&c.Channel, &c.Provider, &c.Enabled, &config, &sealed, &c.OwnerMinLevel, &c.VerifiedAt, &c.UpdatedAt, &c.UpdatedBy); err != nil {
+	if err := row.Scan(&c.Channel, &c.Provider, &c.Enabled, &config, &sealed, &c.VerifiedAt, &c.UpdatedAt, &c.UpdatedBy); err != nil {
 		return c, err
 	}
 	c.Config = json.RawMessage(config)
@@ -69,7 +69,7 @@ func (s *NotificationChannels) Get(ctx context.Context, channel string) (model.N
 	return c, err
 }
 
-// Save, kanalın açık/kapalı durumunu, ayarını ve sahip seviyesini yazar. secret nil ise şifreye dokunulmaz, "" ise
+// Save, kanalın açık/kapalı durumunu ve ayarını yazar. secret nil ise şifreye dokunulmaz, "" ise
 // silinir, başka bir değerse şifrelenip yazılır. Ayar ya da şifre değişirse önceki başarılı deneme (verified_at)
 // geçersiz sayılır.
 func (s *NotificationChannels) Save(ctx context.Context, actor *uuid.UUID, c model.NotificationChannel, secret *string) (model.NotificationChannel, error) {
@@ -83,13 +83,13 @@ func (s *NotificationChannels) Save(ctx context.Context, actor *uuid.UUID, c mod
 	}
 	updated, err := s.scan(s.pool.QueryRow(ctx,
 		`UPDATE notification_channels SET
-		   enabled = $2, config = $3::jsonb, owner_min_level = $4,
-		   secret_enc = CASE WHEN $5 THEN $6 ELSE secret_enc END,
-		   verified_at = CASE WHEN $5 OR config IS DISTINCT FROM $3::jsonb THEN NULL ELSE verified_at END,
-		   updated_at = now(), updated_by = $7
+		   enabled = $2, config = $3::jsonb,
+		   secret_enc = CASE WHEN $4 THEN $5 ELSE secret_enc END,
+		   verified_at = CASE WHEN $4 OR config IS DISTINCT FROM $3::jsonb THEN NULL ELSE verified_at END,
+		   updated_at = now(), updated_by = $6
 		 WHERE channel = $1
-		 RETURNING channel, provider, enabled, config, secret_enc, owner_min_level, verified_at, updated_at, updated_by`,
-		c.Channel, c.Enabled, string(c.Config), c.OwnerMinLevel, secret != nil, sealed, actor))
+		 RETURNING channel, provider, enabled, config, secret_enc, verified_at, updated_at, updated_by`,
+		c.Channel, c.Enabled, string(c.Config), secret != nil, sealed, actor))
 	switch {
 	case isNoRows(err):
 		return updated, ErrNotFound
@@ -103,7 +103,7 @@ func (s *NotificationChannels) Save(ctx context.Context, actor *uuid.UUID, c mod
 func (s *NotificationChannels) MarkVerified(ctx context.Context, channel string) (model.NotificationChannel, error) {
 	c, err := s.scan(s.pool.QueryRow(ctx,
 		`UPDATE notification_channels SET verified_at = now() WHERE channel = $1
-		 RETURNING channel, provider, enabled, config, secret_enc, owner_min_level, verified_at, updated_at, updated_by`, channel))
+		 RETURNING channel, provider, enabled, config, secret_enc, verified_at, updated_at, updated_by`, channel))
 	if isNoRows(err) {
 		return c, ErrNotFound
 	}

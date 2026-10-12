@@ -51,6 +51,8 @@ func (e *Engine) prepare(ctx context.Context, hostID, orgID uuid.UUID, level str
 		switch r.Reason {
 		case SkipChannelOff:
 			slog.WarnContext(ctx, "alert engine: notification channel is off, skipping rule", "channel", r.Channel, "recipient", r.Name, "host_id", hostID.String())
+		case SkipNoAccess:
+			slog.WarnContext(ctx, "alert engine: recipient can no longer see this host, skipping rule", "channel", r.Channel, "recipient", r.Name, "host_id", hostID.String())
 		default:
 			slog.WarnContext(ctx, "alert engine: channel is not implemented, skipping recipient", "channel", r.Channel, "recipient", r.Name, "host_id", hostID.String())
 		}
@@ -61,10 +63,12 @@ func (e *Engine) prepare(ctx context.Context, hostID, orgID uuid.UUID, level str
 	return p
 }
 
-// Bir alıcının atlanma nedenleri: kuralın kanalı kapalı ya da server o kanaldan gönderemiyor.
+// Bir alıcının atlanma nedenleri: kuralın kanalı kapalı, server o kanaldan gönderemiyor ya da alıcı kullanıcı bu sunucuyu
+// artık göremiyor (bkz. store.Recipient.NoAccess).
 const (
 	SkipChannelOff          = "channel_off"
 	SkipChannelNotSupported = "channel_not_supported"
+	SkipNoAccess            = "no_access"
 )
 
 // SkippedRecipient, bildirimi gitmeyecek bir alıcıdır ve nedenidir.
@@ -78,6 +82,8 @@ type SkippedRecipient struct {
 func (e *Engine) deliverable(recipients []store.Recipient) (send []store.Recipient, skipped []SkippedRecipient) {
 	for _, r := range recipients {
 		switch _, implemented := e.notifiers[r.Channel]; {
+		case r.NoAccess:
+			skipped = append(skipped, SkippedRecipient{Recipient: r, Reason: SkipNoAccess})
 		case r.ChannelOff:
 			skipped = append(skipped, SkippedRecipient{Recipient: r, Reason: SkipChannelOff})
 		case !implemented:
