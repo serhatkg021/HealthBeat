@@ -5,6 +5,7 @@ import { contactsApi, organizationsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import { ComingSoon } from '../components/ComingSoon'
 import { EmptyState } from '../components/EmptyState'
+import { InfoTip } from '../components/InfoTip'
 import { PageHeader } from '../components/PageHeader'
 import { HostPicker, OrgPicker } from '../components/ScopePickers'
 import { useScopeData } from '../components/useScopeData'
@@ -177,16 +178,14 @@ function ContactsTab() {
 
   return (
     <div>
-      <div className="toolbar">
-        <SearchInput value={q} onChange={setQ} placeholder="Kişi ya da organizasyon ara…" debounceMs={0} />
-        <span className="muted" style={{ fontSize: 13 }}>
-          Salt okunur; kişiler organizasyon sayfasında düzenlenir.
-        </span>
-      </div>
       {error && <div className="error-banner">{error}</div>}
       <div className="card table-card">
         <div className="card-head">
-          <h2 className="card-title">Organizasyon kişileri</h2>
+          <h2 className="card-title">
+            Organizasyon kişileri
+            <InfoTip label="Organizasyon kişileri">Burada salt okunur listelenir; kişiler organizasyon sayfasında düzenlenir.</InfoTip>
+          </h2>
+          <SearchInput value={q} onChange={setQ} placeholder="Kişi ya da organizasyon ara…" debounceMs={0} />
         </div>
         <table className="stack">
           <thead>
