@@ -482,21 +482,16 @@ func TestRuntimeSettingsSchema(t *testing.T) {
 
 	// E-posta kanalı "ayar gerekli" durumunda gelir; kurallar yalnızca tanımlı kanallara bağlanabilir.
 	var enabled bool
-	var provider, config, ownerLevel string
-	if err := pool.QueryRow(ctx, `SELECT provider, enabled, config::text, owner_min_level FROM notification_channels WHERE channel = 'email'`).
-		Scan(&provider, &enabled, &config, &ownerLevel); err != nil {
+	var provider, config string
+	if err := pool.QueryRow(ctx, `SELECT provider, enabled, config::text FROM notification_channels WHERE channel = 'email'`).
+		Scan(&provider, &enabled, &config); err != nil {
 		t.Fatal(err)
 	}
-	if provider != "smtp" || enabled || config != `{"port": 587}` || ownerLevel != "warning" {
-		t.Fatalf("email channel = %s enabled=%v config=%s owner_min_level=%s", provider, enabled, config, ownerLevel)
+	if provider != "smtp" || enabled || config != `{"port": 587}` {
+		t.Fatalf("email channel = %s enabled=%v config=%s", provider, enabled, config)
 	}
-	for _, bad := range []string{
-		`UPDATE notification_channels SET owner_min_level = 'debug'`,
-		`UPDATE notification_channels SET config = '[]'`,
-	} {
-		if _, err := pool.Exec(ctx, bad); err == nil {
-			t.Errorf("accepted: %s", bad)
-		}
+	if _, err := pool.Exec(ctx, `UPDATE notification_channels SET config = '[]'`); err == nil {
+		t.Error("a non-object channel config was accepted")
 	}
 	org := testdb.Org(t, pool, "o")
 	user := testdb.User(t, pool, "u@example.com", "org_admin", "Passw0rd!long")
@@ -505,20 +500,6 @@ func TestRuntimeSettingsSchema(t *testing.T) {
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO notification_routes (organization_id, user_id, channel) VALUES ($1, $2, 'email')`, org, user); err != nil {
 		t.Errorf("an email rule was rejected: %v", err)
-	}
-
-	// Sistem sahipleri: ulaşılabilir olmalı, e-posta küçük harf ve benzersiz.
-	if _, err := pool.Exec(ctx, `INSERT INTO notification_owners (name, email, phone) VALUES ('Ali', 'ali@example.com', '+905550000000'), ('NOC', 'noc@example.com', NULL), ('Veli', NULL, '+905551111111')`); err != nil {
-		t.Fatalf("valid owners were rejected: %v", err)
-	}
-	for _, bad := range []string{
-		`INSERT INTO notification_owners (name) VALUES ('Adressiz')`,
-		`INSERT INTO notification_owners (name, email) VALUES ('Büyük', 'Ayse@example.com')`,
-		`INSERT INTO notification_owners (name, email) VALUES ('Kopya', 'ali@example.com')`,
-	} {
-		if _, err := pool.Exec(ctx, bad); err == nil {
-			t.Errorf("accepted: %s", bad)
-		}
 	}
 
 	// Yeni izinler yalnızca super_admin'de.
@@ -855,5 +836,142 @@ func TestMaintenanceWindowsMigrationAndRollback(t *testing.T) {
 	}
 	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 {
 		t.Fatalf("upgrading again: applied=%d err=%v, want 000008 re-applied", len(applied), err)
+	}
+}
+
+// 000009: sistem sahipleri sistem kişisi (contacts, organizasyonsuz) ve sistem kapsamlı bildirim kuralı olur; kanalın
+// sahip seviyesi kurala taşınır. Down sahipleri ve seviyeyi kurallardan geri türetir.
+func TestSystemNotificationRulesMigrationAndRollback(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.NewEmpty(t)
+	runner := func(fsys fs.FS) *migrate.Runner {
+		t.Helper()
+		r, err := migrate.New(pool, fsys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	latest, old := runner(upTo(t, "000009")), runner(upTo(t, "000008"))
+	if _, err := old.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	org := testdb.Org(t, pool, "o")
+	var orgContact uuid.UUID
+	if err := pool.QueryRow(ctx, `INSERT INTO organization_contacts (organization_id, name, email) VALUES ($1, 'Nöbetçi', 'nobet@x.test') RETURNING id`,
+		org).Scan(&orgContact); err != nil {
+		t.Fatal(err)
+	}
+	ayse, off, phoneOnly := uuid.New(), uuid.New(), uuid.New()
+	if _, err := pool.Exec(ctx, `INSERT INTO notification_owners (id, name, email, phone, email_enabled) VALUES
+		($1, 'Ayşe', 'ayse@x.test', NULL, true), ($2, 'Kapalı', 'kapali@x.test', '+905551112233', false), ($3, 'Telefon', NULL, '+905551112244', true)`,
+		ayse, off, phoneOnly); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE notification_channels SET owner_min_level = 'critical' WHERE channel = 'email'`); err != nil {
+		t.Fatal(err)
+	}
+
+	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 {
+		t.Fatalf("000009: applied=%d err=%v", len(applied), err)
+	}
+
+	// Sahipler aynı kimliklerle sistem kişisi; organizasyon kişisi yerinde.
+	var people string
+	if err := pool.QueryRow(ctx, `SELECT string_agg(name || ':' || (organization_id IS NULL)::text, ',' ORDER BY name) FROM contacts`).Scan(&people); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Ayşe:true,Kapalı:true,Nöbetçi:false,Telefon:true"; people != want {
+		t.Fatalf("contacts = %q, want %q", people, want)
+	}
+	var sameIDs int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM contacts WHERE id IN ($1, $2, $3) AND organization_id IS NULL`, ayse, off, phoneOnly).Scan(&sameIDs); err != nil {
+		t.Fatal(err)
+	}
+	if sameIDs != 3 {
+		t.Fatalf("system contacts keeping the owner ids = %d, want 3", sameIDs)
+	}
+
+	// Yalnızca e-posta almak isteyen ve adresi olan sahip, kanalın seviyesiyle sistem kuralı olur.
+	var rules string
+	if err := pool.QueryRow(ctx, `SELECT string_agg(contact_id::text || ':' || channel || ':' || min_level, ',')
+		FROM notification_routes WHERE organization_id IS NULL AND host_id IS NULL`).Scan(&rules); err != nil {
+		t.Fatal(err)
+	}
+	if want := ayse.String() + ":email:critical"; rules != want {
+		t.Fatalf("system rules = %q, want %q", rules, want)
+	}
+
+	var leftovers int
+	if err := pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM pg_tables WHERE schemaname = current_schema() AND tablename IN ('notification_owners', 'organization_contacts')) +
+		(SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema()
+		    AND table_name = 'notification_channels' AND column_name = 'owner_min_level')`).Scan(&leftovers); err != nil {
+		t.Fatal(err)
+	}
+	if leftovers != 0 {
+		t.Fatalf("old tables/columns left after 000009: %d", leftovers)
+	}
+
+	if _, err := pool.Exec(ctx, `INSERT INTO contacts (organization_id, name, email) VALUES ($1, 'Aynı adres', 'ayse@x.test')`, org); err != nil {
+		t.Fatalf("an organization contact sharing a system contact's address was rejected: %v", err)
+	}
+	for _, bad := range []string{
+		`INSERT INTO contacts (name, email) VALUES ('Tekrar', 'AYSE@x.test')`,
+		`INSERT INTO contacts (name, email, manager_contact_id) VALUES ('Yönetici', 'y@x.test', '` + orgContact.String() + `')`,
+		`INSERT INTO contacts (name) VALUES ('Ulaşılamaz')`,
+		`INSERT INTO notification_routes (contact_id) VALUES ('` + ayse.String() + `')`,
+		`INSERT INTO notification_routes (organization_id, contact_id) VALUES ('` + org.String() + `', NULL)`,
+		`INSERT INTO notification_routes (organization_id, host_id, contact_id) VALUES ('` + org.String() + `', '` +
+			testdb.PushHost(t, pool, org, "h", "hash").String() + `', '` + orgContact.String() + `')`,
+	} {
+		if _, err := pool.Exec(ctx, bad); err == nil {
+			t.Errorf("accepted: %s", bad)
+		}
+	}
+	// Sahip başına farklı seviye: down kanal başına tek seviyeye (en düşüğe) iner.
+	if _, err := pool.Exec(ctx, `INSERT INTO notification_routes (contact_id, min_level) VALUES ($1, 'warning')`, off); err != nil {
+		t.Fatalf("a second system rule was rejected: %v", err)
+	}
+	if err := old.RequireUpToDate(ctx); !errors.Is(err, migrate.ErrDatabaseNewer) {
+		t.Fatalf("old binary on the new schema: err=%v, want ErrDatabaseNewer", err)
+	}
+
+	down, err := fs.ReadFile(migrations.FS, "000009_system_notification_rules.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM healthbeat_migrations WHERE version = 9`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.RequireUpToDate(ctx); err != nil {
+		t.Fatalf("old binary after the down migration: %v, want it to start", err)
+	}
+
+	// Sahipler geri döner: e-posta kuralı olan e-posta alır; seviye sistem e-posta kurallarının en düşüğüdür.
+	var owners, level string
+	var orgRows, routes int
+	if err := pool.QueryRow(ctx, `SELECT
+		(SELECT string_agg(name || ':' || email_enabled::text, ',' ORDER BY name) FROM notification_owners),
+		(SELECT owner_min_level FROM notification_channels WHERE channel = 'email'),
+		(SELECT count(*) FROM organization_contacts),
+		(SELECT count(*) FROM notification_routes)`).Scan(&owners, &level, &orgRows, &routes); err != nil {
+		t.Fatal(err)
+	}
+	if want := "Ayşe:true,Kapalı:true,Telefon:false"; owners != want {
+		t.Fatalf("owners after down = %q, want %q", owners, want)
+	}
+	if level != "warning" {
+		t.Fatalf("owner_min_level after down = %q, want warning (the lowest system e-mail rule)", level)
+	}
+	if orgRows != 2 || routes != 0 {
+		t.Fatalf("after down: organization contacts=%d routes=%d, want 2 and 0", orgRows, routes)
+	}
+	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 {
+		t.Fatalf("upgrading again: applied=%d err=%v, want 000009 re-applied", len(applied), err)
 	}
 }

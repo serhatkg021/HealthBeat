@@ -29,7 +29,8 @@ Deploy sırası önerisi: **önce server, sonra agent'lar** (zorunlu değil, aş
 6. **Migration'lar güncelleme anında çalışan eski server'ı bozmaz.** Varsayılan olarak yalnızca nullable/varsayılanlı
    sütun (ya da yeni tablo) eklenir: yeni server migration'ı uyguladığında hâlâ çalışan eski bir süreç yeni sütunları görmez
    ama çalışır. Bir index/kısıt değişikliği ya da veri düzeltmesi kaçınılmazsa eski kodun yeni şemayla ne yapacağı migration
-   dosyasında ve §4'te yazılır (ör. `000002`). **Eski bir binary ise bilmediği bir migration uygulanmış veritabanıyla
+   dosyasında ve §4'te yazılır (ör. `000002`). Bu kuraldan bilerek sapılan tek migration `000009`'dur (tablo adı
+   değişir, bir tablo ve bir sütun silinir); gerekçesi ve eski sürecin etkisi §4'te. **Eski bir binary ise bilmediği bir migration uygulanmış veritabanıyla
    açılmaz** (`migrate`: "the database has migrations this binary does not know"): migration içeren bir sürümden geri dönüş,
    o migration'ın `.down.sql`'i elle uygulanarak ya da yedekten yapılır (`docs/DISTRIBUTION.md` §8.3). `down` migration'lar
    otomatik çalışmaz.
@@ -90,6 +91,7 @@ eski sürümü göstermeye devam etmez.
 | eski server süreci hâlâ çalışıyor | `000003` uygulandı (bildirim kuyruğu) | Çalışır: eski kod tabloyu bilmez, bildirimleri kendi bellek içi kuyruğuyla göndermeye devam eder |
 | eski server süreci hâlâ çalışıyor | `000004` uygulandı (çözülmüş alert indeksi) | Çalışır: yalnızca indeks eklendi |
 | eski server süreci hâlâ çalışıyor | `000007` uygulandı (protokol 4) | Çalışır: yeni sütunlar boş bırakılabilir, yeni tabloları bilmez; `alerts.alert_type` ve eşiklerin `metric_type` / `subject` CHECK'leri yalnızca **genişler** (eski türler geçerli kalır). Yeni server'ın açtığı yeni türdeki alert'leri eski kod çözmez; yeni server devralınca değerlendirilir |
+| eski server süreci hâlâ çalışıyor | `000009` uygulandı (sistem bildirim kuralları) | **Bildirim gitmez:** `organization_contacts` → `contacts` oldu, `notification_owners` ve `notification_channels.owner_min_level` silindi; eski sürecin alıcı, kişi ve sistem sahibi sorguları hata verir, o arada açılan alert kaydedilir ama bildirimi gitmez. Belgelenen kurulumda (Docker Compose, tek server kopyası, sabit port) yeni server migration'ı uygularken eski süreç durmuş olduğu için bu aralık oluşmaz; birden çok kopya ya da elle değiştirme gibi çakışmalı kurulumlarda önce eski süreç durdurulur |
 | protokol 4 agent | protokol 3 server (yayımlanmış 1.x / 2.0.0) | **Çalışır.** Server bilinmeyen alanları yok sayar ve adlarını kaydeder (panel "Server güncellenmeli" der); CPU, RAM, disk, Docker ve envanter yazılır |
 | server geri alındı (eski binary yeniden başlatıldı) | DB'de bilmediği migration var | **Açılmaz.** Önce o migration'ların `.down.sql`'i (en yeniden başlayarak) uygulanıp geçmiş satırı silinir ya da güncelleme öncesi yedek geri yüklenir (`docs/DISTRIBUTION.md` §8.3) |
 
