@@ -135,6 +135,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
+- Panel: Bildirim → Kanallar 2 sütunlu kart ızgarası (telefonda tek sütun): **E-posta** kartı durumu, sunucu ve gönderen
+  adresi, son başarılı denemeyi ve kanalı kullanan kural sayısını iki satırda özetliyor; ayar "Düzenle" penceresinde,
+  deneme gönderimi "Deneme gönder" penceresinde. **Slack**, **SMS** ve **Özel webhook** aynı biçimde "Yakında" kartları;
+  Telegram kartı kalktı.
 - **Bildirim modeli sadeleşti: kanal "nasıl", bildirim kuralı "kime" gider.** "Sistem sahipleri" yerine bildirim
   kurallarında **Sistem** kapsamı var (bütün sunucular; Bildirim → Bildirim kuralları → Sistem). Bir alert'in alıcıları
   sistem, organizasyon zinciri ve sunucu kurallarının toplamıdır. Sistem kurallarını yalnızca `settings.manage` yazar;
@@ -196,8 +200,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
     açılan pencerede; silme pencerenin içinde ikinci bir onay ister.
   - **Denetim Kaydı** Sistem Araçları'na taşındı; **Ayarlar** yalnızca kurulum yapılandırmasıdır (agent sürümleri, saklama,
     oturum, panel adresi, saat dilimi, loglama).
-  - Henüz gelmemiş özelliklerin yerleri (Telegram/Webhook, "bu alert kime gider?") "Yakında · örnek veri"
-    olarak gösterilir; örnek veri gerçek sayaçlara ve özetlere karışmaz.
+  - Henüz gelmemiş özelliklerin yerleri (Slack, SMS ve özel webhook kanalları) "Yakında · örnek veri" olarak
+    gösterilir; örnek veri gerçek sayaçlara ve özetlere karışmaz.
   - Eski adresler (`/thresholds`, `/audit`, `/settings/system`, `/my-hosts` ve eski sekme/bölüm adresleri) yeni yerlerine
     yönlenir.
 - Proje MIT lisansıyla yayınlanıyor (`LICENSE`); Docker imajları `org.opencontainers.image.licenses=MIT` etiketini taşıyor.

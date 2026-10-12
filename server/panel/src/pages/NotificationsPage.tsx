@@ -3,7 +3,6 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { BellRing, Building2, Contact, Server, Webhook, type LucideIcon } from 'lucide-react'
 import { contactsApi, organizationsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
-import { ComingSoon } from '../components/ComingSoon'
 import { EmptyState } from '../components/EmptyState'
 import { InfoTip } from '../components/InfoTip'
 import { PageHeader } from '../components/PageHeader'
@@ -42,32 +41,6 @@ export function NotificationsPage() {
       <Tabs items={tabs.map((t) => ({ ...t, icon: ICONS[t.id] }))} active={active} onChange={setActive} label="Bildirim bölümleri" />
       <TabPanel id="kanallar" active={active}>
         <ChannelsSection canEdit={can('settings.manage')} />
-        <div className="grid-2" style={{ marginTop: 16 }}>
-          <ComingSoon title="Telegram" description="Bir bot üzerinden sohbete ya da gruba alert iletisi.">
-            <dl className="info-list single">
-              <div className="info-row">
-                <dt>Bot</dt>
-                <dd className="mono">@healthbeat_alert_bot</dd>
-              </div>
-              <div className="info-row">
-                <dt>Sohbet</dt>
-                <dd>NOC grubu</dd>
-              </div>
-            </dl>
-          </ComingSoon>
-          <ComingSoon title="Webhook" description="Slack, Teams ya da kendi sisteminize JSON gövdeli POST isteği.">
-            <dl className="info-list single">
-              <div className="info-row">
-                <dt>Adres</dt>
-                <dd className="mono">https://hooks.example.com/…</dd>
-              </div>
-              <div className="info-row">
-                <dt>Son gönderim</dt>
-                <dd>başarılı · 2 dk önce</dd>
-              </div>
-            </dl>
-          </ComingSoon>
-        </div>
       </TabPanel>
       <TabPanel id="kurallar" active={active}>
         <RoutesTab />

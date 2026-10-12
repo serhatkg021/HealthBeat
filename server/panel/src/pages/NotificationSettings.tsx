@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Mail, Pencil, Plus, Save, Send, Trash2, Users } from 'lucide-react'
+import { useCallback, useEffect, useState, type ComponentProps, type FormEvent, type ReactNode } from 'react'
+import { Braces, Mail, Pencil, Plus, Save, Send, Smartphone, Trash2, Users } from 'lucide-react'
 import { ApiError } from '../api/client'
 import { channelsApi, systemContactsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
+import { SlackLogo } from '../components/BrandIcons'
 import { EmptyState } from '../components/EmptyState'
 import { FieldLabel } from '../components/FieldLabel'
 import { InfoTip } from '../components/InfoTip'
@@ -21,6 +22,9 @@ const announce = () => window.dispatchEvent(new Event(SETTINGS_CHANGED))
 
 // ---------------------------------------------------------------- bildirim kanalları
 
+// Kanallar 2 sütunlu kart ızgarasıdır; her kart aynı iskelettedir (ChannelCard): simge, ad ve açıklama, durum; iki satırlık
+// özet; altta işlemler. Gerçek kanallar (şimdilik e-posta) ayarını bir pencerede düzenler; henüz gelmemiş kanallar
+// "Yakında" kartıdır (soluk, örnek satırla, işlemsiz).
 export function ChannelsSection({ canEdit }: { canEdit: boolean }) {
   const [channels, setChannels] = useState<ChannelInfo[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -33,14 +37,14 @@ export function ChannelsSection({ canEdit }: { canEdit: boolean }) {
   }, [])
   useEffect(load, [load])
 
+  const email = channels?.find((c) => c.provider === 'smtp')
   return (
-    <div className="stack-col">
+    <div>
       {error && <div className="error-banner">{error}</div>}
-      {channels?.map((ch) =>
-        ch.provider === 'smtp' ? (
+      <div className="channel-grid">
+        {email && (
           <EmailChannelCard
-            key={ch.channel}
-            channel={ch}
+            channel={email}
             canEdit={canEdit}
             onChanged={(updated) => {
               setChannels((all) => all?.map((c) => (c.channel === updated.channel ? updated : c)) ?? null)
@@ -48,12 +52,89 @@ export function ChannelsSection({ canEdit }: { canEdit: boolean }) {
             }}
             reload={load}
           />
-        ) : null,
-      )}
+        )}
+        <ChannelCard
+          soon
+          icon={<SlackLogo />}
+          brand
+          title="Slack"
+          description="Kanal webhook’u ile alert iletisi; Mattermost ve Rocket.Chat de aynı biçimle çalışır."
+          lines={['Örnek: #ops · #geliştirici', 'Bir kanala birden çok hedef eklenebilecek']}
+        />
+        <ChannelCard
+          soon
+          icon={<Smartphone size={19} strokeWidth={1.75} />}
+          title="SMS"
+          description="Telefonu olan kişilere kısa ileti."
+          lines={['Bir SMS sağlayıcısı seçilince açılır', 'Örnek: Netgsm · gönderen HEALTHBEAT']}
+        />
+        <ChannelCard
+          soon
+          icon={<Braces size={19} strokeWidth={1.75} />}
+          title="Özel webhook"
+          description="Kendi sisteminize (ticket, n8n…) JSON gövdeli POST isteği."
+          lines={['HMAC ile imzalı (X-HealthBeat-Signature)', 'Örnek: https://hooks.example.com/…']}
+        />
+      </div>
     </div>
   )
 }
 
+// ChannelCard, bir kanal kartının iskeletidir. soon: henüz gelmemiş kanal ("Yakında" rozeti, soluk, işlemsiz; içerik
+// yalnızca anlatım ve örnektir, gerçek veri değildir). brand: simge hizmetin kendi renkli logosudur (nötr zeminde).
+function ChannelCard({
+  icon,
+  brand,
+  title,
+  info,
+  description,
+  status,
+  soon,
+  lines,
+  children,
+  actions,
+}: {
+  icon: ReactNode
+  brand?: boolean
+  title: string
+  info?: ReactNode
+  description: string
+  status?: { label: string; tone: ComponentProps<typeof StatusBadge>['tone'] }
+  soon?: boolean
+  lines: ReactNode[]
+  children?: ReactNode
+  actions?: ReactNode
+}) {
+  return (
+    <section className={`card channel-card${soon ? ' channel-card-soon' : ''}`} aria-label={soon ? `${title} (yakında)` : title}>
+      <div className="channel-card-head">
+        <span className={`channel-icon${brand ? ' channel-icon-brand' : ''}`} aria-hidden="true">
+          {icon}
+        </span>
+        <div className="channel-card-heading">
+          <h2 className="channel-card-title">
+            {title}
+            {info}
+          </h2>
+          <p className="channel-card-desc">{description}</p>
+        </div>
+        {soon ? <span className="coming-soon-badge">Yakında</span> : status && <StatusBadge tone={status.tone}>{status.label}</StatusBadge>}
+      </div>
+      <div className="channel-card-body">
+        {children}
+        {lines.map((line, i) => (
+          <p key={i} className={i === 0 ? 'channel-line' : 'channel-line channel-line-meta'}>
+            {line}
+          </p>
+        ))}
+      </div>
+      <div className="channel-card-foot">{soon ? <span className="muted">Henüz kullanılamıyor</span> : actions}</div>
+    </section>
+  )
+}
+
+// EmailChannelCard, e-posta kanalının kartıdır: sunucu ve gönderen, son başarılı deneme ve kanalı kullanan kural sayısı.
+// Ayar "Düzenle" penceresinde değişir, deneme gönderimi kendi penceresindedir.
 function EmailChannelCard({
   channel,
   canEdit,
@@ -65,7 +146,93 @@ function EmailChannelCard({
   onChanged: (c: ChannelInfo) => void
   reload: () => void
 }) {
-  const { user } = useAuth()
+  const [editing, setEditing] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const { host, port, from } = channel.config
+  const rules = channel.rule_count > 0 ? `${channel.rule_count} kural kullanıyor` : 'kullanan kural yok'
+
+  return (
+    <ChannelCard
+      icon={<Mail size={19} strokeWidth={1.75} />}
+      title="E-posta (SMTP)"
+      info={
+        <InfoTip label="E-posta (SMTP)">
+          Alert bildirimleri ve “Şifremi unuttum” e-postaları bu sunucu üzerinden gönderilir. Kimin hangi seviyeden alacağı bildirim
+          kurallarındadır. Ayarı kaydettikten sonra “Deneme gönder” ile doğrulayın.
+        </InfoTip>
+      }
+      description="Alert bildirimleri ve hesap e-postaları."
+      status={channelStatus(channel)}
+      lines={[
+        <>
+          <span className="mono">{host ? `${host}:${port}` : 'SMTP sunucusu girilmedi'}</span>
+          {from && <> · {from}</>}
+        </>,
+        `${channel.verified_at ? `Son deneme başarılı · ${when(channel.verified_at)}` : 'Henüz deneme gönderilmedi'} · ${rules}`,
+      ]}
+      actions={
+        canEdit && (
+          <>
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={!channel.ready}
+              title={channel.ready ? undefined : 'Önce sunucu ve gönderen adresi girilmeli'}
+              onClick={() => { setNote(null); setTesting(true) }}
+            >
+              <Send size={14} strokeWidth={1.9} />
+              Deneme gönder
+            </button>
+            <button className="btn btn-sm btn-primary" type="button" onClick={() => { setNote(null); setEditing(true) }}>
+              <Pencil size={14} strokeWidth={1.9} />
+              Düzenle
+            </button>
+          </>
+        )
+      }
+    >
+      {channel.secret_unreadable && (
+        <div className="notice">Kayıtlı şifre çözülemiyor (şifreleme anahtarı değişmiş); yeniden girilene kadar e-posta gönderilemez.</div>
+      )}
+      {channel.rule_count > 0 && !channel.enabled && (
+        <div className="notice">Bu kanalı kullanan {channel.rule_count} kural var; kanal kapalıyken çalışmıyorlar.</div>
+      )}
+      {note && <div className="notice notice-info">{note}</div>}
+
+      <Modal open={editing} title="E-posta (SMTP) ayarı" onClose={() => setEditing(false)}>
+        {editing && (
+          <EmailChannelForm
+            channel={channel}
+            onCancel={() => setEditing(false)}
+            onSaved={(updated) => {
+              onChanged(updated)
+              setEditing(false)
+              setNote('Kaydedildi. Ayarı “Deneme gönder” ile doğrulayın.')
+            }}
+          />
+        )}
+      </Modal>
+      <Modal open={testing} size="sm" title="Deneme e-postası gönder" onClose={() => setTesting(false)}>
+        {testing && (
+          <EmailTestForm
+            channel={channel}
+            onCancel={() => setTesting(false)}
+            onSent={(to) => {
+              setTesting(false)
+              setNote(`Deneme e-postası ${to} adresine gönderildi.`)
+              reload()
+            }}
+          />
+        )}
+      </Modal>
+    </ChannelCard>
+  )
+}
+
+// EmailChannelForm, e-posta kanalının ayar formudur (pencerede): açık/kapalı, SMTP sunucusu, port, gönderen, kullanıcı
+// adı ve şifre. Server'ın doğrulama hataları alanın altında gösterilir.
+function EmailChannelForm({ channel, onSaved, onCancel }: { channel: ChannelInfo; onSaved: (c: ChannelInfo) => void; onCancel: () => void }) {
   const [host, setHost] = useState(channel.config.host)
   const [port, setPort] = useState(String(channel.config.port))
   const [username, setUsername] = useState(channel.config.username)
@@ -73,40 +240,21 @@ function EmailChannelCard({
   const [secret, setSecret] = useState('')
   const [clearSecret, setClearSecret] = useState(false)
   const [enabled, setEnabled] = useState(channel.enabled)
-  const [testTo, setTestTo] = useState(user?.email ?? '')
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
-  const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const status = channelStatus(channel)
-
-  // Kaydedilen (server'ın normalleştirdiği) ayar gelince form onu gösterir; bildirim mesajı korunur.
-  const [shown, setShown] = useState(channel.updated_at)
-  if (shown !== channel.updated_at) {
-    setShown(channel.updated_at)
-    setHost(channel.config.host)
-    setPort(String(channel.config.port))
-    setUsername(channel.config.username)
-    setFrom(channel.config.from)
-    setSecret('')
-    setClearSecret(false)
-    setEnabled(channel.enabled)
-  }
 
   async function handleSave(e: FormEvent) {
     e.preventDefault()
     setBusy(true)
     setError(null)
-    setNote(null)
     try {
       const updated = await channelsApi.update(channel.channel, {
         enabled,
         config: { host: host.trim(), port: Number(port), username: username.trim(), from: from.trim() },
         ...(clearSecret ? { secret: '' } : secret !== '' ? { secret } : {}),
       })
-      setErrors({})
-      setNote('Kaydedildi.')
-      onChanged(updated)
+      onSaved(updated)
     } catch (err) {
       if (err instanceof ApiError && err.fields) setErrors(err.fields)
       setError(message(err, 'kanal kaydedilemedi'))
@@ -115,35 +263,10 @@ function EmailChannelCard({
     }
   }
 
-  async function handleTest() {
-    setBusy(true)
-    setError(null)
-    setNote(null)
-    try {
-      await channelsApi.test(channel.channel, testTo)
-      setNote(`Deneme e-postası ${testTo} adresine gönderildi.`)
-      reload()
-    } catch (err) {
-      if (err instanceof ApiError && err.fields) setErrors(err.fields)
-      setError(message(err, 'deneme gönderilemedi'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const field = (key: string) => errors[key] && <p className="field-error flush">{errors[key]}</p>
 
   return (
-    <form className="card form-card settings-card" onSubmit={handleSave}>
-      <h2 className="card-title">
-        <Mail size={16} strokeWidth={1.75} />
-        E-posta (SMTP)
-        <InfoTip label="E-posta (SMTP)">
-          Alert bildirimleri ve “Şifremi unuttum” e-postaları bu sunucu üzerinden gönderilir. Kimin hangi seviyeden alacağı bildirim
-          kurallarındadır. Kaydettikten sonra “Deneme gönder” ile ayarı doğrulayın.
-        </InfoTip>
-        <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
-      </h2>
+    <form onSubmit={handleSave}>
       {channel.secret_unreadable && (
         <div className="notice">
           Kayıtlı şifre çözülemiyor: server’ın şifreleme anahtarı (SECRETS_ENCRYPTION_KEY) şifre kaydedildikten sonra değişmiş. Şifre yeniden
@@ -151,84 +274,101 @@ function EmailChannelCard({
           “Kayıtlı şifreyi sil”i işaretleyin).
         </div>
       )}
-      {channel.rule_count > 0 && !channel.enabled && (
-        <div className="notice">Bu kanalı kullanan {channel.rule_count} bildirim kuralı var; kanal kapalıyken çalışmıyorlar.</div>
-      )}
       {error && <div className="error-banner">{error}</div>}
-      {note && <div className="notice notice-info">{note}</div>}
-
       <label className="check-row">
-        <input type="checkbox" checked={enabled} disabled={!canEdit} onChange={(e) => setEnabled(e.target.checked)} />
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
         Kanal açık
       </label>
       {field('enabled')}
       <div className="form-row">
         <label htmlFor="smtp-host">SMTP sunucusu</label>
-        <input id="smtp-host" value={host} disabled={!canEdit} placeholder="smtp.example.com" onChange={(e) => setHost(e.target.value)} />
+        <input id="smtp-host" value={host} placeholder="smtp.example.com" onChange={(e) => setHost(e.target.value)} />
         {field('config.host')}
       </div>
       <div className="form-row">
         <FieldLabel htmlFor="smtp-port" label="Port" hint="465 örtük TLS; diğer portlarda sunucu sunuyorsa STARTTLS kullanılır." />
-        <input id="smtp-port" value={port} disabled={!canEdit} inputMode="numeric" onChange={(e) => setPort(e.target.value)} />
+        <input id="smtp-port" value={port} inputMode="numeric" onChange={(e) => setPort(e.target.value)} />
         {field('config.port')}
       </div>
       <div className="form-row">
         <label htmlFor="smtp-from">Gönderen adres</label>
-        <input id="smtp-from" value={from} disabled={!canEdit} placeholder="healthbeat@example.com" onChange={(e) => setFrom(e.target.value)} />
+        <input id="smtp-from" value={from} placeholder="healthbeat@example.com" onChange={(e) => setFrom(e.target.value)} />
         {field('config.from')}
       </div>
       <div className="form-row">
         <FieldLabel htmlFor="smtp-user" label="Kullanıcı adı" hint="Boşsa kimlik doğrulama yapılmaz." />
-        <input id="smtp-user" value={username} disabled={!canEdit} autoComplete="off" onChange={(e) => setUsername(e.target.value)} />
+        <input id="smtp-user" value={username} autoComplete="off" onChange={(e) => setUsername(e.target.value)} />
         {field('config.username')}
       </div>
-      {canEdit && (
-        <div className="form-row">
-          <label htmlFor="smtp-secret">Şifre</label>
-          <input
-            id="smtp-secret"
-            type="password"
-            value={secret}
-            autoComplete="new-password"
-            disabled={clearSecret}
-            placeholder={channel.secret_set ? '•••• kayıtlı (değiştirmek için yazın)' : channel.secret_unreadable ? 'çözülemiyor — yeniden girin' : ''}
-            onChange={(e) => setSecret(e.target.value)}
-          />
-          {(channel.secret_set || channel.secret_unreadable) && (
-            <label className="check-row">
-              <input type="checkbox" checked={clearSecret} onChange={(e) => setClearSecret(e.target.checked)} />
-              Kayıtlı şifreyi sil
-            </label>
-          )}
-          {field('secret')}
-        </div>
-      )}
-      {canEdit && (
-        <div className="form-actions">
-          <button className="btn btn-primary" type="submit" disabled={busy}>
-            <Save size={15} strokeWidth={1.9} />
-            Kaydet
-          </button>
-        </div>
-      )}
-
-      <hr className="divider" />
       <div className="form-row">
-        <label htmlFor="smtp-test-to">Deneme gönder</label>
-        <div className="input-with-unit">
-          <input id="smtp-test-to" type="email" value={testTo} disabled={!canEdit} onChange={(e) => setTestTo(e.target.value)} />
-          {canEdit && (
-            <button className="btn" type="button" disabled={busy || testTo === '' || !channel.ready} onClick={handleTest}>
-              <Send size={15} strokeWidth={1.9} />
-              Gönder
-            </button>
-          )}
-        </div>
-        {field('to')}
-        <p className="form-hint">
-          Kayıtlı ayarla, kanal kapalıyken de gönderilir. Son başarılı deneme: {when(channel.verified_at)}
-          {channel.rule_count > 0 && ` · ${channel.rule_count} kural bu kanalı kullanıyor`}
-        </p>
+        <label htmlFor="smtp-secret">Şifre</label>
+        <input
+          id="smtp-secret"
+          type="password"
+          value={secret}
+          autoComplete="new-password"
+          disabled={clearSecret}
+          placeholder={channel.secret_set ? '•••• kayıtlı (değiştirmek için yazın)' : channel.secret_unreadable ? 'çözülemiyor — yeniden girin' : ''}
+          onChange={(e) => setSecret(e.target.value)}
+        />
+        {(channel.secret_set || channel.secret_unreadable) && (
+          <label className="check-row">
+            <input type="checkbox" checked={clearSecret} onChange={(e) => setClearSecret(e.target.checked)} />
+            Kayıtlı şifreyi sil
+          </label>
+        )}
+        {field('secret')}
+      </div>
+      <div className="form-actions">
+        <button className="btn btn-primary" type="submit" disabled={busy}>
+          <Save size={15} strokeWidth={1.9} />
+          Kaydet
+        </button>
+        <button className="btn" type="button" onClick={onCancel}>
+          Vazgeç
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// EmailTestForm, kayıtlı ayarla bir deneme e-postası gönderir (kanal kapalıyken de); varsayılan alıcı oturumdaki kullanıcı.
+function EmailTestForm({ channel, onSent, onCancel }: { channel: ChannelInfo; onSent: (to: string) => void; onCancel: () => void }) {
+  const { user } = useAuth()
+  const [to, setTo] = useState(user?.email ?? '')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  async function handleSend(e: FormEvent) {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await channelsApi.test(channel.channel, to.trim())
+      onSent(to.trim())
+    } catch (err) {
+      setError(err instanceof ApiError && err.fields?.to ? err.fields.to : message(err, 'deneme gönderilemedi'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSend}>
+      {error && <div className="error-banner">{error}</div>}
+      <div className="form-row">
+        <label htmlFor="smtp-test-to">Alıcı</label>
+        <input id="smtp-test-to" type="email" value={to} required onChange={(e) => setTo(e.target.value)} />
+        <p className="form-hint">Kayıtlı ayarla, kanal kapalıyken de gönderilir.</p>
+      </div>
+      <div className="form-actions">
+        <button className="btn btn-primary" type="submit" disabled={busy || to.trim() === ''}>
+          <Send size={15} strokeWidth={1.9} />
+          Gönder
+        </button>
+        <button className="btn" type="button" onClick={onCancel}>
+          Vazgeç
+        </button>
       </div>
     </form>
   )
