@@ -9,10 +9,10 @@ import { StatusBadge } from '../components/StatusBadge'
 import { useAuth } from '../auth/AuthContext'
 import { alertLevelLabel } from '../labels'
 import { LEVEL_CHOICES, channelLabel } from './notificationRules'
-import { alsoLabel, nobodyNotified, ownerCounts, skipReasonLabel, sourceLabel } from './notificationPreview'
+import { alsoLabel, nobodyNotified, systemCounts, skipReasonLabel, sourceLabel } from './notificationPreview'
 
 // "Bu alert kime gider?": bir sunucu ve seviye seçilince bildirimin şu an kime gideceği, kime neden gitmeyeceği. Alıcıları
-// server gerçek gönderimin kurallarıyla hesaplar (sahipler + organizasyon zinciri + sunucu kuralları).
+// server gerçek gönderimin kurallarıyla hesaplar (sistem + organizasyon zinciri + sunucu kuralları).
 
 // NotificationPreviewCard, Bildirim kuralları sekmesindeki önizlemedir: sunucu seçilir. Sekmede bir sunucu seçiliyse
 // önizleme onunla başlar ve onu izler; kullanıcı başka bir sunucu da seçebilir.
@@ -71,8 +71,8 @@ function PreviewCard({ hostId, hostTitle, picker, footer }: { hostId: string; ho
         Bu alert kime gider?
         <InfoTip label="Bu alert kime gider?">
           {picker ? 'Seçilen sunucuda' : 'Bu sunucuda'} bu seviyede bir alert açılsa bildirimin şu an kime gideceği: sistem
-          sahipleri, sunucunun organizasyonu ile üst organizasyonların kuralları ve sunucunun kendi kuralları birleştirilir.
-          Aynı adres tek ileti alır.
+          kuralları, sunucunun organizasyonu ile üst organizasyonların kuralları ve sunucunun kendi kuralları birleştirilir.
+          Aynı adres tek ileti alır; sunucuyu artık göremeyen kullanıcıya ileti gitmez.
         </InfoTip>
       </h2>
       <div className="toolbar" style={{ justifyContent: 'flex-start' }}>
@@ -93,15 +93,15 @@ function PreviewCard({ hostId, hostTitle, picker, footer }: { hostId: string; ho
       ) : !current?.preview ? (
         <p className="muted">Yükleniyor…</p>
       ) : (
-        <PreviewResult preview={current.preview} hostTitle={hostTitle} canManageOwners={can('settings.view')} />
+        <PreviewResult preview={current.preview} hostTitle={hostTitle} canSeeSystem={can('settings.view')} />
       )}
       {footer && <div className="preview-footer">{footer}</div>}
     </section>
   )
 }
 
-function PreviewResult({ preview, hostTitle, canManageOwners }: { preview: NotificationPreview; hostTitle?: string; canManageOwners: boolean }) {
-  const owners = ownerCounts(preview.owners_summary)
+function PreviewResult({ preview, hostTitle, canSeeSystem }: { preview: NotificationPreview; hostTitle?: string; canSeeSystem: boolean }) {
+  const system = systemCounts(preview.system_summary)
   return (
     <>
       {preview.in_maintenance && (
@@ -116,9 +116,9 @@ function PreviewResult({ preview, hostTitle, canManageOwners }: { preview: Notif
         <EmptyState icon={BellOff}>
           Bu alert kimseye gitmez.
           <div className="muted">
-            {canManageOwners
-              ? 'Bildirim → Sistem sahipleri’nden bir sahip ya da yukarıdan bu kapsama bir kural ekleyin.'
-              : 'Bu seviyede sistem sahibi ya da kural yok; yöneticiniz bir kural ekleyebilir.'}
+            {canSeeSystem
+              ? 'Yukarıdan bu kapsama ya da Sistem kapsamına (bütün sunucular) bir kural ekleyin.'
+              : 'Bu seviyede kural yok; yöneticiniz bir kural ekleyebilir.'}
           </div>
         </EmptyState>
       ) : (
@@ -131,16 +131,16 @@ function PreviewResult({ preview, hostTitle, canManageOwners }: { preview: Notif
             </tr>
           </thead>
           <tbody>
-            {owners.sent && (
+            {system.sent && (
               <tr>
                 <td className="primary">
-                  Sistem sahipleri
+                  Sistem kuralı alıcıları
                   <div className="muted preview-owners-note">Adları yalnızca sistem ayarlarını görebilenlere gösterilir.</div>
                 </td>
                 <td className="muted" data-label="Nereden">
-                  Sistem sahibi
+                  Sistem kuralı
                 </td>
-                <td data-label="Kanal">{owners.sent}</td>
+                <td data-label="Kanal">{system.sent}</td>
               </tr>
             )}
             {preview.recipients.map((r) => (
@@ -150,7 +150,7 @@ function PreviewResult({ preview, hostTitle, canManageOwners }: { preview: Notif
         </table>
       )}
 
-      {(preview.skipped.length > 0 || owners.skipped.length > 0) && (
+      {(preview.skipped.length > 0 || system.skipped.length > 0) && (
         <>
           <h3 className="section-title preview-skipped-title">
             <BellOff size={15} strokeWidth={1.75} />
@@ -166,11 +166,11 @@ function PreviewResult({ preview, hostTitle, canManageOwners }: { preview: Notif
               </tr>
             </thead>
             <tbody>
-              {owners.skipped.map((text) => (
+              {system.skipped.map((text) => (
                 <tr key={text}>
-                  <td className="primary">Sistem sahipleri</td>
+                  <td className="primary">Sistem kuralı alıcıları</td>
                   <td className="muted" data-label="Nereden">
-                    Sistem sahibi
+                    Sistem kuralı
                   </td>
                   <td colSpan={2} data-label="Kanal">
                     {text}

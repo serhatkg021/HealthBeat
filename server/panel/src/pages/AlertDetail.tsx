@@ -79,7 +79,7 @@ export function AlertDetail({ alert, hostTitle, onClose }: { alert: Alert | null
           {error && <div className="error-banner">{error}</div>}
           {!error && items === null && <p className="muted">Yükleniyor…</p>}
           {items?.length === 0 && (
-            <p className="muted">Bu alert için bildirim yazılmadı (sistem sahibi ya da uygun ek alıcı yoktu, ya da kanal kapalıydı).</p>
+            <p className="muted">Bu alert için bildirim yazılmadı (uygun bir bildirim kuralı yoktu, alıcı sunucuyu göremiyordu ya da kanal kapalıydı).</p>
           )}
           {items && items.length > 0 && (
             <ol className="notification-timeline">

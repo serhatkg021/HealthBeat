@@ -14,7 +14,8 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: 'threshold.', label: 'Eşik' },
   { value: 'alert.', label: 'Alert' },
   { value: 'maintenance.', label: 'Bakım' },
-  { value: 'notification', label: 'Bildirim' }, // kurallar, kanallar ve sistem sahipleri
+  { value: 'notification', label: 'Bildirim' }, // kurallar ve kanallar (eski kayıtlarda sistem sahipleri de)
+  { value: 'contact.', label: 'Kişi' }, // sistem kişileri ve organizasyonların iletişim kişileri
   { value: 'settings.', label: 'Ayarlar' },
   { value: 'system.', label: 'Sistem araçları' }, // log görüntüleme ve indirme
 ]

@@ -73,16 +73,20 @@ test('channelStatus', () => {
   assert.deepEqual(channelStatus({ enabled: true, ready: false, secret_unreadable: true }), { label: 'Şifre yeniden girilmeli', tone: 'warning' })
 })
 
-test('notificationGap: nobody is notified without an open e-mail channel and an owner who takes e-mail', () => {
+test('notificationGap: warns without an open e-mail channel or a system rule that sends e-mail, and says where to fix it', () => {
   const on = [{ channel: 'email' as const, enabled: true, secret_unreadable: false }]
-  const owner = { email: 'noc@x.test', email_enabled: true }
-  assert.match(notificationGap([{ channel: 'email', enabled: false, secret_unreadable: false }], [owner]) ?? '', /kanalı kapalı/)
-  assert.match(notificationGap([{ channel: 'email', enabled: true, secret_unreadable: true }], [owner]) ?? '', /şifresi çözülemiyor/)
+  const rule = { channel: 'email' as const, recipient_target: 'noc@x.test' }
+  const gap = (...args: Parameters<typeof notificationGap>) => notificationGap(...args)
+  assert.deepEqual(gap([{ channel: 'email', enabled: false, secret_unreadable: false }], [rule])?.fix, 'channel')
+  assert.match(gap([{ channel: 'email', enabled: false, secret_unreadable: false }], [rule])?.text ?? '', /kanalı kapalı/)
+  assert.match(gap([{ channel: 'email', enabled: true, secret_unreadable: true }], [rule])?.text ?? '', /şifresi çözülemiyor/)
   // Kapalı kanalda çözülemeyen şifre ayrıca uyarılmaz: zaten kimseye gitmiyor.
-  assert.match(notificationGap([{ channel: 'email', enabled: false, secret_unreadable: true }], [owner]) ?? '', /kanalı kapalı/)
-  assert.match(notificationGap(on, []) ?? '', /sistem sahibi yok/)
-  assert.match(notificationGap(on, [{ email: 'noc@x.test', email_enabled: false }, { email: null, email_enabled: true }]) ?? '', /sistem sahibi yok/)
-  assert.equal(notificationGap(on, [owner]), null)
+  assert.match(gap([{ channel: 'email', enabled: false, secret_unreadable: true }], [rule])?.text ?? '', /kanalı kapalı/)
+  assert.deepEqual(gap(on, [])?.fix, 'system-rules')
+  assert.match(gap(on, [])?.text ?? '', /sistem kuralı yok/)
+  // SMS kuralı ya da adresi olmayan alıcı e-posta göndermez.
+  assert.match(gap(on, [{ channel: 'sms', recipient_target: '+905550000001' }, { channel: 'email', recipient_target: '' }])?.text ?? '', /sistem kuralı yok/)
+  assert.equal(gap(on, [rule]), null)
 })
 
 test('server range errors are shown in the unit of the form field', () => {

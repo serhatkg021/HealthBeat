@@ -33,7 +33,7 @@ export type SettingsTab = PageTab
 export type ToolTab = PageTab
 
 export type NotificationTab = PageTab & { id: NotificationTabId }
-export type NotificationTabId = 'kanallar' | 'sahipler' | 'kurallar' | 'kisiler'
+export type NotificationTabId = 'kanallar' | 'kurallar' | 'kisiler'
 
 export interface Navigation {
   groups: NavGroup[]
@@ -52,13 +52,13 @@ export const NOTIFICATIONS_PATH = '/notifications'
 export function navigation(can: Can): Navigation {
   const item = (show: boolean, def: NavItem): NavItem[] => (show ? [def] : [])
   const tab = (show: boolean, def: SettingsTab): SettingsTab[] => (show ? [def] : [])
-  // Bildirim sayfasının sekmeleri: kanallar ve sistem sahipleri kurulum genelidir (settings.view), kurallar ve iletişim
-  // kişileri organizasyon/sunucu kapsamındadır. Hiç sekmesi kalmayan kullanıcı menüde Bildirim'i görmez.
+  // Bildirim sayfasının sekmeleri: kanallar kurulum genelidir (settings.view); kurallar sistem, organizasyon ya da sunucu
+  // kapsamındadır; kişiler sistem kişileri (settings.view) ve organizasyonların iletişim kişileridir (contact.view). Hiç
+  // sekmesi kalmayan kullanıcı menüde Bildirim'i görmez.
   const notifications: NotificationTab[] = [
     ...(can('settings.view') ? [{ id: 'kanallar' as const, label: 'Kanallar' }] : []),
-    ...(can('settings.view') ? [{ id: 'sahipler' as const, label: 'Sistem sahipleri' }] : []),
     ...(can('notification.view') ? [{ id: 'kurallar' as const, label: 'Bildirim kuralları' }] : []),
-    ...(can('contact.view') ? [{ id: 'kisiler' as const, label: 'İletişim kişileri' }] : []),
+    ...(can('contact.view') || can('settings.view') ? [{ id: 'kisiler' as const, label: 'Kişiler' }] : []),
   ]
   // Sunucular herkese tek sayfadır; liste yetkiye göre süzülü gelir (operatöre yalnızca atanmış sunucular).
   const groups = [
@@ -146,7 +146,7 @@ export function groupHasActive(group: NavGroup, pathname: string): boolean {
 
 // notificationsPath, Bildirim sayfasının bir sekmesinin (ve kurallar için kapsamın, kişiler için organizasyonun)
 // adresidir; eski sekmelerden ve uyarı şeridinden gelen bağlantılar için.
-export function notificationsPath(tab: NotificationTabId, scope?: { kind: 'org' | 'sunucu'; id?: string }): string {
+export function notificationsPath(tab: NotificationTabId, scope?: { kind: 'sistem' | 'org' | 'sunucu'; id?: string }): string {
   const params = new URLSearchParams({ sekme: tab })
   if (scope) {
     if (tab === 'kurallar') params.set('kapsam', scope.kind)

@@ -2,7 +2,7 @@
 // ile formdaki gösterim arasındaki dönüşüm (süreler dakika/saat olarak gösterilir), yalnızca değişen alanlardan
 // değişiklik üretme ve bildirimlerin kimseye gitmediği durumu tanıma.
 
-import type { ChannelInfo, NotificationOwner, SettingsField, SettingsValues } from '../types/api.ts'
+import type { ChannelInfo, NotificationRoute, SettingsField, SettingsValues } from '../types/api.ts'
 
 export interface FieldDef {
   field: SettingsField
@@ -182,18 +182,27 @@ export function channelStatus(ch: Pick<ChannelInfo, 'enabled' | 'ready' | 'secre
   return { label: 'Açık', tone: 'good' }
 }
 
-// notificationGap, alert bildirimlerinin sistem sahiplerine hiç gitmediği durumu anlatır (alt çubuktaki uyarı şeridi); sorun yoksa null.
-// Şimdilik tek kanal e-postadır: kanal kapalıysa, şifresi çözülemiyorsa ya da e-posta alan bir sahip yoksa kimse bilgilendirilmez.
+// NotificationGap, alert bildirimlerinin gitmediği durumdur: metni ve nerede giderileceği (kanal mı, sistem kuralı mı).
+export interface NotificationGap {
+  text: string
+  fix: 'channel' | 'system-rules'
+}
+
+// notificationGap, alt çubuktaki uyarı şeridinin bildirim boşluğudur; sorun yoksa null. Şimdilik tek kanal e-postadır:
+// kanal kapalıysa ya da şifresi çözülemiyorsa kimse bilgilendirilmez; e-posta alan bir sistem kuralı yoksa kendine kural
+// yazılmamış sunucuların alert'leri kimseye gitmez.
 export function notificationGap(
   channels: Pick<ChannelInfo, 'channel' | 'enabled' | 'secret_unreadable'>[],
-  owners: Pick<NotificationOwner, 'email' | 'email_enabled'>[],
-): string | null {
+  systemRules: Pick<NotificationRoute, 'channel' | 'recipient_target'>[],
+): NotificationGap | null {
   const email = channels.find((c) => c.channel === 'email')
-  if (!email?.enabled) return 'E-posta kanalı kapalı: alert bildirimleri kimseye gitmiyor.'
-  if (email.secret_unreadable) return 'E-posta kanalının kayıtlı şifresi çözülemiyor: e-posta gönderilemiyor. Ayarlar’dan şifreyi yeniden girin.'
-  if (!owners.some((o) => o.email && o.email_enabled)) return 'E-posta alan bir sistem sahibi yok: alert bildirimleri kimseye gitmiyor.'
+  if (!email?.enabled) return { text: 'E-posta kanalı kapalı: alert bildirimleri kimseye gitmiyor.', fix: 'channel' }
+  if (email.secret_unreadable)
+    return { text: 'E-posta kanalının kayıtlı şifresi çözülemiyor: e-posta gönderilemiyor. Bildirim → Kanallar’dan şifreyi yeniden girin.', fix: 'channel' }
+  if (!systemRules.some((r) => r.channel === 'email' && r.recipient_target))
+    return { text: 'E-posta alan bir sistem kuralı yok: kendine kural yazılmamış sunucuların alert’leri kimseye gitmiyor.', fix: 'system-rules' }
   return null
 }
 
-// SETTINGS_CHANGED, Ayarlar sayfasında kanal ya da sahip değiştiğinde yayılan olaydır; uyarı şeridi kendini yeniler.
+// SETTINGS_CHANGED, kanal, sistem kişisi ya da sistem kuralı değiştiğinde yayılan olaydır; uyarı şeridi kendini yeniler.
 export const SETTINGS_CHANGED = 'healthbeat:settings-changed'

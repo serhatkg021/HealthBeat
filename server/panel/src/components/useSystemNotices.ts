@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { channelsApi, ownersApi } from '../api/endpoints'
+import { channelsApi, notificationsApi } from '../api/endpoints'
 import { notificationsPath } from '../navigation'
-import { SETTINGS_CHANGED, notificationGap } from '../pages/settingsForm'
+import { SETTINGS_CHANGED, notificationGap, type NotificationGap } from '../pages/settingsForm'
 
 export interface SystemNotice {
   id: string
@@ -12,18 +12,18 @@ export interface SystemNotice {
 }
 
 // Alt çubuktaki şeritte gösterilen kurulum geneli uyarılar. Bildirim boşluğu (e-posta kanalı kapalı ya da e-posta alan
-// sistem sahibi yok) yalnızca ayarları görebilenlere sorulur; sayfa değişince ve Ayarlar'da kanal ya da sahip değişince
-// yeniden bakılır. Sürüm uyumsuzluğu herkese gösterilir.
+// sistem kuralı yok) yalnızca ayarları görebilenlere sorulur; sayfa değişince ve kanal, sistem kişisi ya da sistem kuralı
+// değişince yeniden bakılır. Sürüm uyumsuzluğu herkese gösterilir.
 export function useSystemNotices(canViewSettings: boolean, versionMismatch: string | null): SystemNotice[] {
-  const [gap, setGap] = useState<string | null>(null)
+  const [gap, setGap] = useState<NotificationGap | null>(null)
   const { pathname } = useLocation()
 
   useEffect(() => {
     if (!canViewSettings) return
     let alive = true
     const check = () =>
-      Promise.all([channelsApi.list(), ownersApi.list()])
-        .then(([channels, owners]) => alive && setGap(notificationGap(channels, owners)))
+      Promise.all([channelsApi.list(), notificationsApi.list({ system: true })])
+        .then(([channels, rules]) => alive && setGap(notificationGap(channels, rules)))
         .catch(() => undefined) // uyarı en iyi çabadır; asıl sayfa kendi hatasını gösterir
     void check()
     window.addEventListener(SETTINGS_CHANGED, check)
@@ -34,7 +34,10 @@ export function useSystemNotices(canViewSettings: boolean, versionMismatch: stri
   }, [canViewSettings, pathname])
 
   const notices: SystemNotice[] = []
-  if (canViewSettings && gap) notices.push({ id: 'bildirim', text: gap, to: notificationsPath('kanallar') })
+  if (canViewSettings && gap) {
+    const to = gap.fix === 'system-rules' ? notificationsPath('kurallar', { kind: 'sistem' }) : notificationsPath('kanallar')
+    notices.push({ id: 'bildirim', text: gap.text, to })
+  }
   if (versionMismatch) notices.push({ id: 'surum', text: versionMismatch })
   return notices
 }

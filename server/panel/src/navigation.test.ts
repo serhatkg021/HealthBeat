@@ -111,9 +111,11 @@ test('the alert rules address carries the scope and topic; the system scope is t
 })
 
 test('notification tabs follow permissions; the menu entry disappears with none', () => {
-  assert.deepEqual(ids(navigation(() => true).notifications), ['kanallar', 'sahipler', 'kurallar', 'kisiler'])
-  // Org admin: kanallar ve sahipler kurulum genelidir.
+  assert.deepEqual(ids(navigation(() => true).notifications), ['kanallar', 'kurallar', 'kisiler'])
+  // Org admin: kanallar kurulum genelidir; Kişiler sekmesini iletişim kişileri için görür.
   assert.deepEqual(ids(navigation(canOnly('notification.view', 'notification.edit', 'contact.view')).notifications), ['kurallar', 'kisiler'])
+  // Yalnızca ayarları gören: Kişiler sekmesini sistem kişileri için görür.
+  assert.deepEqual(ids(navigation(canOnly('settings.view')).notifications), ['kanallar', 'kisiler'])
   // Operatör: yalnızca kurallar (salt okunur).
   assert.deepEqual(ids(navigation(canOnly('notification.view')).notifications), ['kurallar'])
   assert.ok(!ids(group(navigation(canOnly('host.view')), 'alert-yonetimi')?.items ?? []).includes('bildirim'))
@@ -123,6 +125,7 @@ test('the notifications address carries the tab and, for rules, the scope', () =
   assert.equal(notificationsPath('kanallar'), '/notifications?sekme=kanallar')
   assert.equal(notificationsPath('kurallar', { kind: 'sunucu', id: 'h1' }), '/notifications?sekme=kurallar&kapsam=sunucu&id=h1')
   assert.equal(notificationsPath('kisiler', { kind: 'org', id: 'o1' }), '/notifications?sekme=kisiler&id=o1')
+  assert.equal(notificationsPath('kurallar', { kind: 'sistem' }), '/notifications?sekme=kurallar&kapsam=sistem')
 })
 
 test('the audit log lives under system tools', () => {

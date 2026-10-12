@@ -42,12 +42,28 @@ export type OrgAccess = 'full' | 'context'
 export interface OrganizationContact {
   id: string
   organization_id: string
+  scope: 'organization'
   department?: string
   title?: string
   name: string
   manager_contact_id?: string
   phone?: string
   email?: string
+  created_at: string
+  updated_at: string
+}
+
+// Organizasyonsuz kişi: bütün kurulumun bildirimlerini alabilen kişi ya da ortak adres (sistem kurallarının alıcısı).
+// rule_count, alıcı olduğu bildirim kuralı sayısıdır; kişi silinince bu kurallar da silinir.
+export interface SystemContact {
+  id: string
+  name: string
+  department?: string
+  title?: string
+  phone?: string
+  email?: string
+  scope: 'system'
+  rule_count: number
   created_at: string
   updated_at: string
 }
@@ -64,8 +80,9 @@ export interface ContactInput {
 // Bildirim kanallarının adları. Hangilerinin tanımlı ve açık olduğunu server söyler (GET /notification-channels/options).
 export type NotificationChannel = 'email' | 'sms' | 'slack' | 'discord' | 'telegram'
 
-// Bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceği. Kapsam bir organizasyon (altındaki dal için de
-// geçerli) ya da tek bir sunucudur; alıcı bir panel kullanıcısı ya da bir iletişim kişisidir.
+// Bir alert'in kime, hangi kanaldan ve en az hangi seviyeden gideceği. Kapsam sistem (organizasyon ve sunucu boş: bütün
+// sunucular), bir organizasyon (altındaki dal için de geçerli) ya da tek bir sunucudur; alıcı bir panel kullanıcısı ya da
+// bir kişidir (sistem kişisi ya da iletişim kişisi).
 export interface NotificationRoute {
   id: string
   organization_id?: string
@@ -88,12 +105,12 @@ export interface RecipientCandidate {
   name: string
   email?: string
   phone?: string
-  source: 'super_admin' | 'org_admin' | 'operator' | 'contact'
+  source: 'super_admin' | 'org_admin' | 'operator' | 'contact' | 'system_contact'
 }
 
 // "Bu alert kime gider?" önizlemesi (GET /api/v1/hosts/:id/notification-preview).
 export interface PreviewSource {
-  kind: 'owner' | 'organization' | 'host'
+  kind: 'system' | 'organization' | 'host'
   name?: string // organizasyon kuralında organizasyonun adı
 }
 
@@ -106,7 +123,9 @@ export interface PreviewRecipient {
   reason?: PreviewSkipReason
 }
 
-export type PreviewSkipReason = 'channel_off' | 'channel_not_supported'
+// no_access: alıcı bir panel kullanıcısı ve bu sunucuyu artık göremiyor (organizasyondan çıkarılmış, rolü düşmüş ya da
+// sunucu ataması kaldırılmış); kural durur ama ileti gitmez.
+export type PreviewSkipReason = 'channel_off' | 'channel_not_supported' | 'no_access'
 
 export interface NotificationPreview {
   host_id: string
@@ -114,8 +133,9 @@ export interface NotificationPreview {
   in_maintenance: boolean
   recipients: PreviewRecipient[]
   skipped: PreviewRecipient[]
-  // Yalnızca sistem sahiplerini göremeyen kullanıcıda dolu (kanal başına sayı); o zaman sahip satırları listelerde yok.
-  owners_summary: { channel: string; count: number; reason?: PreviewSkipReason }[] | null
+  // Yalnızca sistem kurallarını göremeyen kullanıcıda dolu (kanal başına sayı); o zaman sistem kaynaklı satırlar listelerde
+  // yok.
+  system_summary: { channel: string; count: number; reason?: PreviewSkipReason }[] | null
 }
 
 export type HostMode = 'push' | 'pull'
@@ -776,7 +796,6 @@ export interface ChannelInfo {
   secret_set: boolean
   // Kayıtlı şifre server'ın anahtarıyla çözülemiyor (SECRETS_ENCRYPTION_KEY değişmiş): yeniden girilene kadar kanal gönderemez.
   secret_unreadable: boolean
-  owner_min_level: AlertLevel
   verified_at: string | null
   updated_at: string
   updated_by: UserRef | null
@@ -793,18 +812,6 @@ export interface ChannelOption {
   ready: boolean
   personal: boolean
   implemented: boolean
-}
-
-// Her alert'in bildirimini alan bir sistem sahibi (panel kullanıcısı olması gerekmez).
-export interface NotificationOwner {
-  id: string
-  name: string
-  email: string | null
-  phone: string | null
-  email_enabled: boolean
-  sms_enabled: boolean
-  created_at: string
-  updated_at: string
 }
 
 // ---------------------------------------------------------------- Sistem Araçları

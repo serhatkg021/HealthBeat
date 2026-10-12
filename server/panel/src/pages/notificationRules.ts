@@ -20,8 +20,7 @@ export interface ChannelChoice {
 }
 
 // channelChoices, kural eklerken gösterilecek kanallardır: yalnızca server'ın gönderebildiği ve kişiye giden kanallar
-// (ortak kanallar yalnızca sistem sahiplerine gider, kurallarda yer almaz). Kapalı ya da ayarı eksik olan listede kalır
-// ama seçilemez; neden yanında yazar.
+// (kuralın alıcısı bir kişidir). Kapalı ya da ayarı eksik olan listede kalır ama seçilemez; neden yanında yazar.
 export function channelChoices(options: ChannelOption[]): ChannelChoice[] {
   return options
     .filter((o) => o.implemented && o.personal)
@@ -39,6 +38,7 @@ const SOURCE_LABEL: Record<RecipientCandidate['source'], string> = {
   org_admin: 'Organizasyon Admin',
   operator: 'Operatör',
   contact: 'İletişim kişisi',
+  system_contact: 'Sistem kişisi',
 }
 
 // Aday listesindeki bir alıcının benzersiz anahtarı (kullanıcı ve kişi kimlikleri ayrı tablolardan gelir).
@@ -60,11 +60,14 @@ export function candidatesForNewRoute(candidates: RecipientCandidate[], routes: 
   return candidates.filter((c) => !taken.has(candidateKey(c)))
 }
 
-// Kapsamın bildirimlerinin kime gittiğini anlatan tek paragraf: sistem sahipleri her zaman alır, kurallar ek alıcıdır ve
-// sunucu, organizasyon ve üst organizasyon kuralları toplanır (hiçbiri diğerini ezmez). Sistem sahipleri sekmesine
-// yalnızca onu görebilene yön gösterilir.
-export function describeCoverage(scope: 'organization' | 'host', ownersVisible: boolean): string {
-  const base = `Alert bildirimleri her zaman sistem sahiplerine gider${ownersVisible ? ' (Bildirim → Sistem sahipleri)' : ''}; buradaki kişiler ek alıcıdır.`
+// Kapsamın bildirimlerinin kime gittiğini anlatan tek paragraf: alıcılar kurallardan gelir ve sistem, organizasyon zinciri
+// ve sunucu kuralları toplanır (hiçbiri diğerini ezmez). Sistem kurallarına yalnızca onları görebilene yön gösterilir.
+export function describeCoverage(scope: 'system' | 'organization' | 'host', systemVisible: boolean): string {
+  if (scope === 'system') {
+    return 'Bu kurallar bütün sunucuların alert’leri için geçerlidir ve organizasyon ve sunucu kurallarıyla birlikte uygulanır. ' +
+      'Alıcı olarak yalnızca süper adminler ve sistem kişileri seçilebilir: bildirim sunucu adı, IP ve organizasyon içerir.'
+  }
+  const base = `Alert bildirimleri sistem kurallarındaki alıcılara da gider${systemVisible ? ' (Bildirim kuralları → Sistem)' : ''}; buradaki kurallar onlara eklenir.`
   if (scope === 'host') {
     return `${base} Bu sunucunun alert’lerinde sunucu kuralları, organizasyonunun ve üst organizasyonlarının kurallarıyla birlikte uygulanır.`
   }
