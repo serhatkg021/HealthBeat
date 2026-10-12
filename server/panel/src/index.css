@@ -3686,14 +3686,7 @@ textarea {
   }
 }
 
-/* ---------- Yakında (henüz gelmemiş özelliklerin örnek veriyle yeri) ---------- */
-.coming-soon {
-  border-style: dashed;
-  border-color: var(--border-strong);
-  background: color-mix(in srgb, var(--surface-1) 70%, var(--bg));
-  box-shadow: none;
-}
-
+/* ---------- Yakında rozeti (henüz gelmemiş özellikler) ---------- */
 .coming-soon-badge {
   display: inline-flex;
   align-items: center;
@@ -3706,12 +3699,133 @@ textarea {
   background: var(--surface-3);
 }
 
-.coming-soon-body {
-  overflow-x: auto;
-  opacity: 0.55;
-  pointer-events: none;
-  user-select: none;
-  filter: grayscale(0.35);
+/* ---------- Bildirim kanalları: 2 sütunlu kart ızgarası ---------- */
+.channel-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+
+/* .card + .card'ın üst boşluğu ızgarada kartları kaydırır; ızgara aralığı gap'tir. */
+.channel-grid > .card.channel-card {
+  margin: 0;
+}
+
+.channel-card {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.channel-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px 0;
+}
+
+.channel-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Hizmet logosu kendi renkleriyle, nötr zeminde (Yakında kartında da soluklaşmaz). */
+.channel-card .channel-icon-brand {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+}
+
+.channel-card-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.channel-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.channel-card-desc {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Gövde, başlığın metniyle hizalı başlar (simge 40 + boşluk 14 + kenar 20). */
+.channel-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 20px 16px 74px;
+  min-width: 0;
+}
+
+.channel-card-body .notice {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.channel-line {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.channel-line-meta {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.channel-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: auto;
+  padding: 10px 20px;
+  min-height: 48px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+/* Yakında: aynı iskelet, soluk; içerik anlatım ve örnektir. */
+.channel-card-soon {
+  background: color-mix(in srgb, var(--surface-1) 70%, var(--bg));
+  box-shadow: none;
+}
+
+.channel-card-soon .channel-icon {
+  background: var(--surface-3);
+  color: var(--text-muted);
+}
+
+.channel-card-soon .channel-line {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 760px) {
+  .channel-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .channel-card-body {
+    padding-left: 20px;
+  }
 }
 
 .issue-list {
