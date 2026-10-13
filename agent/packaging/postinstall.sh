@@ -5,9 +5,9 @@ set -e
 # Eski bir tarball/install.sh kurulumundan kalanlar paketle çakışır: /etc/systemd/system'daki unit,
 # paketin unit'ini gölgeler ve /usr/local/bin'deki eski binary'yi çalıştırmaya devam eder.
 if [ -e /usr/local/bin/healthbeat-agent ] || [ -e /etc/systemd/system/healthbeat-agent.service ]; then
-  echo "healthbeat-agent: WARNING: a tarball (install.sh) installation is still present" >&2
-  echo "  (/usr/local/bin/healthbeat-agent and/or /etc/systemd/system/healthbeat-agent.service)." >&2
-  echo "  It shadows this package. Remove it once the packaged agent works:" >&2
+  echo "healthbeat-agent: UYARI: eski bir tarball (install.sh) kurulumu hâlâ duruyor" >&2
+  echo "  (/usr/local/bin/healthbeat-agent ve/veya /etc/systemd/system/healthbeat-agent.service)." >&2
+  echo "  Bu paketi gölgeler. Paketle kurulan agent çalışınca kaldırın:" >&2
   echo "    sudo systemctl stop healthbeat-agent; sudo rm -f /usr/local/bin/healthbeat-agent* /etc/systemd/system/healthbeat-agent.service; sudo systemctl daemon-reload" >&2
 fi
 
@@ -17,7 +17,7 @@ if [ -d /run/systemd/system ]; then
   # Zaten yapılandırılmış ve etkin bir agent'ın yükseltmesinde yeni binary'yi kullanmak için yeniden başlat.
   if [ -f /etc/healthbeat/agent.json ] && systemctl is-enabled --quiet healthbeat-agent.service 2>/dev/null; then
     systemctl restart healthbeat-agent.service || \
-      echo "healthbeat-agent: WARNING: could not restart the service after the upgrade; check: journalctl -u healthbeat-agent" >&2
+      echo "healthbeat-agent: UYARI: yükseltmeden sonra servis yeniden başlatılamadı; bkz. journalctl -u healthbeat-agent" >&2
   fi
 fi
 
@@ -26,15 +26,15 @@ fi
 if [ -f /etc/healthbeat/agent.json ]; then
   field="$(/usr/bin/healthbeat-agent -config /etc/healthbeat/agent.json -check-config 2>&1 | sed -n 's/.*warning: \([a-z_]*\) is stored in plain text.*/\1/p' | head -n1)"
   if [ -n "$field" ]; then
-    echo "healthbeat-agent: WARNING: the $field in /etc/healthbeat/agent.json is stored in plain text." >&2
-    echo "  Encrypt it for this machine (the value stays the same; the service restarts):" >&2
+    echo "healthbeat-agent: UYARI: /etc/healthbeat/agent.json içindeki $field düz metin olarak duruyor." >&2
+    echo "  Bu makine için şifreleyin (değer aynı kalır; servis yeniden başlar):" >&2
     echo "    sudo healthbeat-agent-setup encrypt" >&2
   fi
 fi
 
 if [ ! -f /etc/healthbeat/agent.json ]; then
-  echo "healthbeat-agent: installed but NOT configured yet. Configure and start it with:" >&2
+  echo "healthbeat-agent: kuruldu ama HENÜZ yapılandırılmadı. Yapılandırıp başlatmak için:" >&2
   echo "    sudo healthbeat-agent-setup" >&2
-  echo "  (asks step by step; or pass options, see: healthbeat-agent-setup --help)" >&2
+  echo "  (adım adım sorar; seçeneklerle de verilebilir: healthbeat-agent-setup --help)" >&2
 fi
 exit 0

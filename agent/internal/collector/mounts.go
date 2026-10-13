@@ -41,6 +41,35 @@ func DiscoverMounts() ([]string, error) {
 	return parseMountinfo(f), nil
 }
 
+// FilesystemTypes, mount noktası → dosya sistemi türü eşlemesidir (agent -list-mounts; kurulum sihirbazının disk
+// listesi). Okunamazsa boş döner.
+func FilesystemTypes() map[string]string {
+	f, err := os.Open("/proc/self/mountinfo")
+	if err != nil {
+		return map[string]string{}
+	}
+	defer f.Close()
+	return parseFilesystemTypes(f)
+}
+
+func parseFilesystemTypes(r io.Reader) map[string]string {
+	out := map[string]string{}
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	for sc.Scan() {
+		fields := strings.Fields(sc.Text())
+		for i, f := range fields {
+			if f == "-" && i >= 6 && i+1 < len(fields) {
+				if point := unescapeMountinfo(fields[4]); out[point] == "" {
+					out[point] = fields[i+1]
+				}
+				break
+			}
+		}
+	}
+	return out
+}
+
 // parseMountinfo, mountinfo biçimindeki girdiden gerçek dosya sistemlerinin mount
 // noktalarını çıkarır (bkz. proc(5)). Bir satır şöyle görünür:
 //

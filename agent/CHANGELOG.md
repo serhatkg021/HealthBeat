@@ -51,6 +51,16 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   (`install.sh encrypt`) config'te düz duranı aynen şifreler (hiçbir şey sormaz, zaten şifreliyse bir şey yapmaz); `-encrypt-token` bayrağı sırrı stdin'den okuyup şifreli hâlini yazar. Paket ve tarball
   yükseltmesi düz token'ı algılayınca config'e dokunmadan `encrypt` komutunu gösteren bir uyarı yazar. Bu özellikten önceki bir sürüme geri dönülürse token düz
   yazılmalı (`docs/DISTRIBUTION.md` §5.3).
+- **Kurulum sihirbazı yenilendi** (`install.sh wizard`, seçeneksiz `healthbeat-agent-setup`): 6 adım (mod, server
+  bağlantısı, bağlantı denemesi, izlenecekler, gelişmiş ayarlar, özet). Kaydetmeden önce girilen değerlerle server'a bir
+  rapor gönderilir; adres çözülemez, porta ulaşılamaz, sertifikaya güvenilmez, sertifika adı uymaz ya da token reddedilirse
+  ne yapılacağı sorulur (CA dosyası ver, adresi ya da token'ı yeniden gir, yine de kaydet). Diskler gerçek boyut ve
+  dolulukla listelenip ok tuşları ve Boşluk ile seçiliyor; Docker yalnızca kuruluysa soruluyor. Geçersiz girişte aynı soru
+  yeniden soruluyor. Var olan yapılandırmada mevcut değerler varsayılan; Enter token dahil değeri koruyor. Kurulumdan
+  sonra ilk raporun gönderildiği journal'dan bekleniyor (~40 sn).
+- `-check-connection`: push yapılandırmasıyla adres çözme, port, TLS ve tek rapor gönderimini sırayla dener, ilk sorunu
+  açıklar; çıkış kodu sorunun sınıfıdır. `-list-mounts`: raporlanabilecek diskleri (yol, dosya sistemi, boyut, doluluk)
+  listeler.
 
 ### Değişti
 - **Yavaş kaynaklar arka planda toplanıyor:** Docker ve envanterin komut gerektiren alanları (saat senkronu, başarısız
@@ -63,7 +73,15 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   Container inspect bilgisi durumu değişmedikçe önbellekten geliyor. Docker toplama hatası her döngüde değil, yalnızca
   durum değiştiğinde loglanıyor.
 
+- **Kurulum betiği ve agent'ın kullanıcıya yazdıkları Türkçe:** `install.sh` (`--help`, hata, uyarı ve bilgi mesajları),
+  paket kurulumunun uyarıları, `healthbeat-agent-setup`, agent `-help`, yapılandırma hataları ve `-check-config` çıktısı.
+  Çalışma logları İngilizce kaldı. Bu mesajları metin olarak arayan betikler güncellenmeli.
+
 ### Düzeltildi
+- Kurulum servisi `enable` + `restart` ile başlatıyor: servis zaten çalışıyorsa yeni yapılandırma ancak yeniden
+  başlatmayla okunuyordu (`enable --now` çalışan servisi yeniden başlatmaz).
+- `--ca-cert` ile kurulumda `agent.json`'da `ca_cert_file` ile sonraki alan aynı satıra yazılıyordu (JSON geçerliydi,
+  yalnızca okunuşu bozuktu).
 - Pull modunda aynı anda gelen iki istek CPU ölçümünün önceki örneğini birlikte değiştirebiliyordu; CPU toplayıcısı artık
   eşzamanlı çağrılara karşı korumalı.
 - Proje MIT lisansıyla yayınlanıyor: `.deb`/`.rpm` paketlerinin lisans alanı `MIT` oldu, `LICENSE` dosyası paketlere
@@ -74,6 +92,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ### İç değişiklikler (davranış değişmedi)
 - CI agent kodunu da staticcheck ve govulncheck ile denetliyor (önceden yalnızca server).
+- `install_test.sh`: sihirbaz senaryoları `script` ile sahte terminalde çalışıyor (push ve pull, hatalı girişte yeniden
+  sorma, yeniden yapılandırmada Enter, vazgeçme).
 - `install_test.sh`: senaryoların kök dizinleri `mktemp` ile açılıyor; `$RANDOM` adları arada çakışıp testi dengesizleştiriyordu.
 
 ## [1.0.0] - 2026-09-22

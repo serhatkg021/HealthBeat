@@ -17,6 +17,7 @@ import (
 
 	"healthbeat-agent/internal/collector"
 	"healthbeat-agent/internal/config"
+	"healthbeat-agent/internal/conncheck"
 	"healthbeat-agent/internal/pullserver"
 	"healthbeat-agent/internal/pusher"
 	"healthbeat-agent/internal/report"
@@ -26,13 +27,35 @@ import (
 // sendTimeout, bir raporun gönderiminin süresidir. Toplama ayrıdır ve yavaş kaynakları beklemez (bkz. report).
 const sendTimeout = 10 * time.Second
 
+// usageText, -help çıktısıdır. Bayrak adları İngilizce kalır (betikler ve belgeler onları kullanır).
+const usageText = `Kullanım: healthbeat-agent [seçenekler]
+
+  -config DOSYA        Yapılandırma dosyası (varsayılan config.json)
+  -check-config        Yapılandırmayı doğrula ve çık (0 = geçerli)
+  -check-connection    Server'a bir rapor gönderip bağlantıyı dene ve çık
+                       (yalnızca push modu)
+  -list-mounts         Raporlanabilecek diskleri listele ve çık
+  -print-inventory     Raporlanacak makine bilgisini JSON olarak yaz
+                       ve çık (yapılandırma gerekmez)
+  -print-report        Gönderilecek tam raporu JSON olarak yaz ve çık
+                       (oranlar için ~4 sn ölçer)
+  -encrypt-token       stdin'deki sırrı bu makineye bağlı şifreleyip
+                       yaz ve çık
+  -version             Sürümü yaz ve çık
+
+Kurulum ve yapılandırma: healthbeat-agent-setup (bkz. docs/AGENT.md).
+`
+
 func main() {
-	configPath := flag.String("config", "config.json", "path to agent config file")
-	showVersion := flag.Bool("version", false, "print the agent version and exit")
-	printInventory := flag.Bool("print-inventory", false, "print the machine inventory this agent would report (JSON) and exit; needs no config")
-	printReport := flag.Bool("print-report", false, "print a full report as this agent would send it (JSON; takes a few seconds to measure rates) and exit; reads -config if it exists for disk_mounts")
-	checkConfig := flag.Bool("check-config", false, "validate the config file and exit (0 = valid); install.sh upgrade uses it to test an existing config against a new binary")
-	encryptToken := flag.Bool("encrypt-token", false, "read a secret (API token or pull secret) from stdin, print it encrypted for this machine's config and exit; install.sh uses it")
+	flag.Usage = func() { fmt.Fprint(flag.CommandLine.Output(), usageText) }
+	configPath := flag.String("config", "config.json", "yapılandırma dosyası")
+	showVersion := flag.Bool("version", false, "sürümü yaz ve çık")
+	printInventory := flag.Bool("print-inventory", false, "makine bilgisini JSON olarak yaz ve çık; yapılandırma gerekmez")
+	printReport := flag.Bool("print-report", false, "gönderilecek tam raporu JSON olarak yaz ve çık; disk_mounts için -config'i okur")
+	checkConfig := flag.Bool("check-config", false, "yapılandırmayı doğrula ve çık (0 = geçerli); install.sh upgrade yeni binary'yi mevcut yapılandırmayla dener")
+	checkConnection := flag.Bool("check-connection", false, "server'a bir rapor gönderip bağlantıyı aşama aşama dene ve çık; çıkış kodu hatanın sınıfıdır (kurulum sihirbazı kullanır)")
+	listMounts := flag.Bool("list-mounts", false, "raporlanabilecek diskleri (\"auto\"nun kapsadıkları) sekmeyle ayrılmış listele ve çık: yol, tür, bayt, doluluk %")
+	encryptToken := flag.Bool("encrypt-token", false, "stdin'deki sırrı (API token ya da pull secret) bu makineye bağlı şifreleyip yaz ve çık; install.sh kullanır")
 	flag.Parse()
 
 	if *encryptToken {
@@ -42,6 +65,11 @@ func main() {
 
 	if *showVersion {
 		fmt.Println(version.String())
+		return
+	}
+
+	if *listMounts {
+		printMounts()
 		return
 	}
 
@@ -67,14 +95,17 @@ func main() {
 
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		log.Fatalf("yapılandırma hatası: %v", err)
 	}
 	if cfg.PlaintextSecret != "" {
 		log.Printf("warning: %s is stored in plain text in %s; encrypt it with: %s", cfg.PlaintextSecret, *configPath, config.EncryptHint)
 	}
 	if *checkConfig {
-		fmt.Printf("config OK (mode: %s)\n", cfg.Mode)
+		fmt.Printf("yapılandırma geçerli (mod: %s)\n", cfg.Mode)
 		return
+	}
+	if *checkConnection {
+		os.Exit(int(checkServerConnection(cfg)))
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -92,13 +123,52 @@ func main() {
 func printEncryptedSecret() {
 	data, err := io.ReadAll(io.LimitReader(os.Stdin, 4096))
 	if err != nil {
-		log.Fatalf("encrypt-token: read stdin: %v", err)
+		log.Fatalf("encrypt-token: stdin okunamadı: %v", err)
 	}
 	enc, err := config.EncryptSecret(strings.TrimSpace(string(data)))
 	if err != nil {
 		log.Fatalf("encrypt-token: %v", err)
 	}
 	fmt.Println(enc)
+}
+
+// printMounts, "auto"nun raporlayacağı diskleri yazdırır (kurulum sihirbazının disk listesi): yol, dosya sistemi
+// türü, toplam bayt ve doluluk yüzdesi, sekmeyle ayrılmış.
+func printMounts() {
+	types := collector.FilesystemTypes()
+	for _, d := range collector.SampleDisk([]string{collector.AutoMounts}) {
+		fmt.Printf("%s\t%s\t%d\t%.0f\n", d.Mount, types[d.Mount], d.Total, d.UsedPct)
+	}
+}
+
+// checkServerConnection, push yapılandırmasıyla server'a ulaşmayı aşama aşama dener ve sonucu döndürür (çıkış kodu).
+// Toplayıcıların ve geri dönüşün logları susturulur: çıktı yalnızca denemenin ✓/✗ satırlarıdır.
+func checkServerConnection(cfg *config.Config) conncheck.Result {
+	if cfg.Mode != config.ModePush {
+		fmt.Println("Bağlantı denemesi yalnızca push modunda yapılır (pull modunda bağlantıyı server başlatır).")
+		os.Exit(2)
+	}
+	log.SetOutput(io.Discard)
+	roots, err := cfg.RootCAs()
+	if err != nil {
+		fmt.Printf("  ✗ %v\n", err)
+		os.Exit(1)
+	}
+	tlsOpts := pusher.TLSOptions{RootCAs: roots, InsecureSkipVerify: cfg.InsecureSkipVerify}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	send := func(ctx context.Context) (pusher.ServerInfo, error) {
+		p := pusher.New(cfg.ServerURL, cfg.HostID, cfg.APIToken, tlsOpts)
+		interval := time.Duration(cfg.IntervalSeconds) * time.Second
+		builder := report.New(cfg.DiskMounts, func() time.Duration { return interval })
+		builder.Start(ctx)
+		builder.WaitReady(ctx, report.FirstReportWait)
+		sendCtx, cancelSend := context.WithTimeout(ctx, sendTimeout)
+		defer cancelSend()
+		err := pusher.NewCompat(p).Push(sendCtx, builder.Build(ctx))
+		return p.ServerInfo(), err
+	}
+	return conncheck.Run(ctx, cfg.ServerURL, tlsOpts, send, os.Stdout)
 }
 
 // printFullReport, gönderilecek raporu yazdırır. Oranlar (disk G/Ç, ağ, swap, süreç CPU'su) iki ölçüm arasındaki farktır:

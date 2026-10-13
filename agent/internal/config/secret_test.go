@@ -90,7 +90,7 @@ func TestEncryptedTokenFromAnotherMachine(t *testing.T) {
 
 	setMachineID(t, "22222222222222222222222222222222") // kopyalanan dosya ya da klonlanan VM
 	_, err := load(t, pushConfig(enc))
-	if err == nil || !strings.Contains(err.Error(), "api_token could not be decrypted on this machine") || !strings.Contains(err.Error(), RepairHint) {
+	if err == nil || !strings.Contains(err.Error(), "api_token bu makinede çözülemedi") || !strings.Contains(err.Error(), RepairHint) {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -146,11 +146,11 @@ func TestEncryptSecretErrors(t *testing.T) {
 	}
 
 	setMachineID(t, "")
-	if _, err := EncryptSecret("tok"); err == nil || !strings.Contains(err.Error(), "no machine id") {
+	if _, err := EncryptSecret("tok"); err == nil || !strings.Contains(err.Error(), "makine kimliği bulunamadı") {
 		t.Errorf("without machine id: err = %v", err)
 	}
 	_, err := load(t, pushConfig("enc:v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"))
-	if err == nil || !strings.Contains(err.Error(), "no machine id") {
+	if err == nil || !strings.Contains(err.Error(), "makine kimliği bulunamadı") {
 		t.Errorf("decrypt without machine id: err = %v", err)
 	}
 }

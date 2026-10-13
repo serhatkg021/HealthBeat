@@ -34,7 +34,7 @@ sed 's#^ExecStart=/usr/local/bin/healthbeat-agent #ExecStart=/usr/bin/healthbeat
   "$ROOT/agent/deploy/healthbeat-agent.service" >"$STAGE/healthbeat-agent.service"
 grep -q '^ExecStart=/usr/bin/healthbeat-agent ' "$STAGE/healthbeat-agent.service" \
   || die "could not rewrite ExecStart in the unit (did its format change?)"
-printf 'This agent was installed from a package (.deb/.rpm); the package manager owns its files.\n' >"$STAGE/installed-from-package"
+printf 'Bu agent paketle (.deb/.rpm) kuruldu; dosyaları paket yöneticisine aittir.\n' >"$STAGE/installed-from-package"
 
 export GOARCH="$ARCH" VERSION PKG_BINARY="$BINARY" PKG_STAGE="$STAGE"
 export MAINTAINER="${MAINTAINER:-HealthBeat Maintainers <maintainers@healthbeat.invalid>}"

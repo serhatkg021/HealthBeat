@@ -72,7 +72,7 @@ python3 -c "import json;c=json.load(open('$ROOT/etc/healthbeat/agent.json'));ass
 
 new_root; run_install --mode push --server-url https://h.example.com --host-id "$UUID" --docker <<<"" 2>/dev/null
 HEALTHBEAT_API_TOKEN="$TOKEN" run_install --mode push --server-url https://h.example.com --host-id "$UUID" --docker
-[[ $RC -ne 0 && "$OUT" == *"no 'docker' group"* || -f "$ROOT/etc/systemd/system/healthbeat-agent.service.d/docker.conf" ]] && pass || fail "--docker: $OUT"
+[[ $RC -ne 0 && "$OUT" == *"'docker' grubu yok"* || -f "$ROOT/etc/systemd/system/healthbeat-agent.service.d/docker.conf" ]] && pass || fail "--docker: $OUT"
 
 # disk_mounts: "auto" (her gerçek dosya sistemi) tek başına ve açık yollarla karışık; gerçek agent bunları kabul eder
 for mounts in auto /,auto; do
@@ -85,32 +85,32 @@ done
 
 # ------------------------------------------------------------------ reddedilenler
 export HEALTHBEAT_API_TOKEN="$TOKEN"
-expect_rejected "plain http server url"      "invalid --server-url"  --mode push --server-url http://api.example.com --host-id "$UUID"
-expect_rejected "url with a path"            "invalid --server-url"  --mode push --server-url https://api.example.com/v1 --host-id "$UUID"
-expect_rejected "url injecting JSON"         "invalid --server-url"  --mode push --server-url 'https://a.com","x":"' --host-id "$UUID"
-expect_rejected "malformed host id"        "invalid --host-id"   --mode push --server-url https://a.example.com --host-id not-a-uuid
+expect_rejected "plain http server url"      "geçersiz --server-url"  --mode push --server-url http://api.example.com --host-id "$UUID"
+expect_rejected "url with a path"            "geçersiz --server-url"  --mode push --server-url https://api.example.com/v1 --host-id "$UUID"
+expect_rejected "url injecting JSON"         "geçersiz --server-url"  --mode push --server-url 'https://a.com","x":"' --host-id "$UUID"
+expect_rejected "malformed host id"        "geçersiz --host-id"    --mode push --server-url https://a.example.com --host-id not-a-uuid
 expect_rejected "interval 0"                 "--interval"            --mode push --server-url https://a.example.com --host-id "$UUID" --interval 0
 expect_rejected "interval text"              "--interval"            --mode push --server-url https://a.example.com --host-id "$UUID" --interval fast
-expect_rejected "mount with a quote"         "invalid disk mount"    --mode push --server-url https://a.example.com --host-id "$UUID" --disk-mounts '/data"x'
-expect_rejected "relative mount"             "invalid disk mount"    --mode push --server-url https://a.example.com --host-id "$UUID" --disk-mounts data
-expect_rejected "AUTO in capitals is not auto" "invalid disk mount"    --mode push --server-url https://a.example.com --host-id "$UUID" --disk-mounts AUTO
-expect_rejected "invalid mode"               "--mode must be"        --mode carrier-pigeon
-expect_rejected "unknown option"             "unknown option"        --mode push --frobnicate
-expect_rejected "option without value"       "needs a value"         --mode push --server-url
-HEALTHBEAT_API_TOKEN='short' expect_rejected "short token"   "invalid API token"  --mode push --server-url https://a.example.com --host-id "$UUID"
-HEALTHBEAT_API_TOKEN='aaaaaaaaaaaaaaaaaaaaaaaa"; rm -rf /; "' expect_rejected "token with shell/JSON metacharacters" "invalid API token" --mode push --server-url https://a.example.com --host-id "$UUID"
-( unset HEALTHBEAT_API_TOKEN; expect_rejected "no token, not interactive" "API token missing" --mode push --server-url https://a.example.com --host-id "$UUID" )
+expect_rejected "mount with a quote"         "geçersiz disk"    --mode push --server-url https://a.example.com --host-id "$UUID" --disk-mounts '/data"x'
+expect_rejected "relative mount"             "geçersiz disk"    --mode push --server-url https://a.example.com --host-id "$UUID" --disk-mounts data
+expect_rejected "AUTO in capitals is not auto" "geçersiz disk"    --mode push --server-url https://a.example.com --host-id "$UUID" --disk-mounts AUTO
+expect_rejected "invalid mode"               "push ya da pull olmalı" --mode carrier-pigeon
+expect_rejected "unknown option"             "bilinmeyen seçenek"    --mode push --frobnicate
+expect_rejected "option without value"       "bir değer ister"       --mode push --server-url
+HEALTHBEAT_API_TOKEN='short' expect_rejected "short token"   "geçersiz API token"  --mode push --server-url https://a.example.com --host-id "$UUID"
+HEALTHBEAT_API_TOKEN='aaaaaaaaaaaaaaaaaaaaaaaa"; rm -rf /; "' expect_rejected "token with shell/JSON metacharacters" "geçersiz API token" --mode push --server-url https://a.example.com --host-id "$UUID"
+( unset HEALTHBEAT_API_TOKEN; expect_rejected "no token, not interactive" "API token eksik" --mode push --server-url https://a.example.com --host-id "$UUID" )
 new_root; OUT="$(./install.sh install --root "$ROOT" --binary "$WORK/nope" --mode push --server-url https://a.example.com --host-id "$UUID" </dev/null 2>&1)"; RC=$?
-[[ $RC -ne 0 && "$OUT" == *"binary not found"* ]] && pass || fail "missing binary: $OUT"
-OUT="$(./install.sh install --root "$WORK" 2>&1 </dev/null)"; [[ "$OUT" == *"Mode"* || "$OUT" == *"missing"* ]] && pass || fail "no mode, non-interactive: $OUT"
-OUT="$(./install.sh explode 2>&1)"; [[ "$OUT" == *"unknown action"* ]] && pass || fail "unknown action: $OUT"
-[[ "$(id -u)" -eq 0 ]] || { OUT="$(./install.sh install --mode push 2>&1 </dev/null)"; [[ "$OUT" == *"must run as root"* ]] && pass || fail "non-root without --root should refuse: $OUT"; }
+[[ $RC -ne 0 && "$OUT" == *"binary'si bulunamadı"* ]] && pass || fail "missing binary: $OUT"
+OUT="$(./install.sh install --root "$WORK" 2>&1 </dev/null)"; [[ "$OUT" == *"Mod"* || "$OUT" == *"eksik"* ]] && pass || fail "no mode, non-interactive: $OUT"
+OUT="$(./install.sh explode 2>&1)"; [[ "$OUT" == *"bilinmeyen eylem"* ]] && pass || fail "unknown action: $OUT"
+[[ "$(id -u)" -eq 0 ]] || { OUT="$(./install.sh install --mode push 2>&1 </dev/null)"; [[ "$OUT" == *"root olarak çalıştırın"* ]] && pass || fail "non-root without --root should refuse: $OUT"; }
 
 # mevcut yapılandırma: reddet, sonra --force ile yedekle
 new_root; run_install --mode push --server-url https://a.example.com --host-id "$UUID"
 first_ok=$RC
 run_install --mode push --server-url https://b.example.com --host-id "$UUID"
-[[ $first_ok -eq 0 && $RC -ne 0 && "$OUT" == *"already exists"* ]] && grep -q a.example.com "$ROOT/etc/healthbeat/agent.json" && pass || fail "existing config must not be overwritten silently: $OUT"
+[[ $first_ok -eq 0 && $RC -ne 0 && "$OUT" == *"zaten var"* ]] && grep -q a.example.com "$ROOT/etc/healthbeat/agent.json" && pass || fail "existing config must not be overwritten silently: $OUT"
 run_install --mode push --server-url https://b.example.com --host-id "$UUID" --force
 [[ $RC -eq 0 ]] && grep -q b.example.com "$ROOT/etc/healthbeat/agent.json" && ls "$ROOT"/etc/healthbeat/agent.json.bak.* >/dev/null 2>&1 && pass || fail "--force should replace the config and keep a backup: $OUT"
 
@@ -148,13 +148,13 @@ kill "$AGENT" 2>/dev/null; wait "$AGENT" 2>/dev/null
 
 # pull ret durumları ve özel sertifika
 unset HEALTHBEAT_API_TOKEN; export HEALTHBEAT_PULL_SECRET="$SECRET"
-expect_rejected "pull without allowed ips"   "missing"          --mode pull --listen 127.0.0.1:9443
+expect_rejected "pull without allowed ips"   "eksik"            --mode pull --listen 127.0.0.1:9443
 expect_rejected "privileged port"            "1024"             --mode pull --allowed-ips 10.0.0.1 --listen 0.0.0.0:443
-expect_rejected "garbage allowed ip"         "allowed IP"       --mode pull --allowed-ips '10.0.0.1"x'
-expect_rejected "bad listen"                 "host:port"        --mode pull --allowed-ips 10.0.0.1 --listen 9443
-expect_rejected "bad endpoint"               "invalid --endpoint" --mode pull --allowed-ips 10.0.0.1 --endpoint 'status?x'
-expect_rejected "cert without key"           "readable files"   --mode pull --allowed-ips 10.0.0.1 --tls-cert "$WORK/none.pem"
-HEALTHBEAT_PULL_SECRET="tooshort" expect_rejected "short pull secret" "invalid pull secret" --mode pull --allowed-ips 10.0.0.1
+expect_rejected "garbage allowed ip"         "izin verilen IP"  --mode pull --allowed-ips '10.0.0.1"x'
+expect_rejected "bad listen"                 "adres:port"       --mode pull --allowed-ips 10.0.0.1 --listen 9443
+expect_rejected "bad endpoint"               "geçersiz --endpoint" --mode pull --allowed-ips 10.0.0.1 --endpoint 'status?x'
+expect_rejected "cert without key"           "okunabilir dosya" --mode pull --allowed-ips 10.0.0.1 --tls-cert "$WORK/none.pem"
+HEALTHBEAT_PULL_SECRET="tooshort" expect_rejected "short pull secret" "geçersiz pull secret" --mode pull --allowed-ips 10.0.0.1
 
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 -subj /CN=mine -keyout "$WORK/my.key" -out "$WORK/my.crt" 2>/dev/null
 new_root; run_install --mode pull --allowed-ips 10.0.0.1 --tls-cert "$WORK/my.crt" --tls-key "$WORK/my.key"
@@ -192,6 +192,7 @@ run_install --mode push --server-url "https://127.0.0.1:$CAPORT" --host-id "$UUI
 [[ $RC -eq 0 ]] && pass || fail "--ca-cert install failed: $OUT"
 CACONF="$ROOT/etc/healthbeat/agent.json"
 python3 -c "import json;c=json.load(open('$CACONF'));assert c['ca_cert_file']=='/etc/healthbeat/ca.pem' and c['insecure_skip_verify'] is False" && pass || fail "config does not reference the CA file"
+grep -q '^  "insecure_skip_verify": false,$' "$CACONF" && pass || fail "ca_cert_file and insecure_skip_verify share a line: $(cat "$CACONF")"
 cmp -s "$WORK/ca.crt" "$ROOT/etc/healthbeat/ca.pem" && [[ "$(mode_of "$ROOT/etc/healthbeat/ca.pem")" == 644 ]] && pass || fail "CA certificate not installed as-is (mode $(mode_of "$ROOT/etc/healthbeat/ca.pem" 2>/dev/null))"
 
 # Kurucunun yapılandırdığı gerçek agent, CA imzalı server'a doğrulama AÇIKKEN push eder.
@@ -208,11 +209,11 @@ rm -f "$WORK/pushes.log"; timeout 3 "$BIN" -config "$WORK/noca-test.json" >"$WOR
 [[ ! -s "$WORK/pushes.log" ]] && grep -qi "certificate\|x509" "$WORK/noca-agent.log" && pass || fail "without the CA the agent should refuse the server (pushes: $(cat "$WORK/pushes.log" 2>/dev/null); log: $(head -2 "$WORK/noca-agent.log"))"
 kill "$TLSSRV" 2>/dev/null
 
-expect_rejected "ca-cert with insecure-skip-verify" "contradict"   --mode push --server-url https://a.example.com --host-id "$UUID" --ca-cert "$WORK/ca.crt" --insecure-skip-verify
-expect_rejected "ca-cert in pull mode"              "only applies to push" --mode pull --allowed-ips 10.0.0.1 --ca-cert "$WORK/ca.crt"
-expect_rejected "unreadable ca-cert"                "cannot read --ca-cert" --mode push --server-url https://a.example.com --host-id "$UUID" --ca-cert "$WORK/none.crt"
+expect_rejected "ca-cert with insecure-skip-verify" "çelişiyor"    --mode push --server-url https://a.example.com --host-id "$UUID" --ca-cert "$WORK/ca.crt" --insecure-skip-verify
+expect_rejected "ca-cert in pull mode"              "yalnızca push modunda" --mode pull --allowed-ips 10.0.0.1 --ca-cert "$WORK/ca.crt"
+expect_rejected "unreadable ca-cert"                "--ca-cert okunamıyor" --mode push --server-url https://a.example.com --host-id "$UUID" --ca-cert "$WORK/none.crt"
 printf 'not a certificate\n' >"$WORK/junk.crt"
-expect_rejected "ca-cert that is not a certificate" "does not contain a PEM certificate" --mode push --server-url https://a.example.com --host-id "$UUID" --ca-cert "$WORK/junk.crt"
+expect_rejected "ca-cert that is not a certificate" "PEM sertifika içermiyor" --mode push --server-url https://a.example.com --host-id "$UUID" --ca-cert "$WORK/junk.crt"
 unset HEALTHBEAT_API_TOKEN
 export HEALTHBEAT_PULL_SECRET="$SECRET" # aşağıdaki bölümlerin ona yeniden ihtiyacı var
 
@@ -270,7 +271,7 @@ snapshot_conf() { sha_of "$ROOT/etc/healthbeat/agent.json"; }
 
 # --- kurulum yokken
 new_root; run_upgrade "$BIN"
-[[ $RC -ne 0 && "$OUT" == *"no installation found"* ]] && pass || fail "upgrade without an install should be refused (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"kurulum bulunamadı"* ]] && pass || fail "upgrade without an install should be refused (rc=$RC): $OUT"
 
 # --- mutlu yol: 0.9.0 -> güncel; yapılandırma ve unit'e dokunulmaz, eski binary .prev olur
 fresh_install "$BIN_OLD"
@@ -283,39 +284,39 @@ run_upgrade "$BIN"
 [[ "$(sha_of "$ROOT/etc/systemd/system/healthbeat-agent.service")" == "$unit_before" ]] && pass || fail "upgrade touched the unit"
 [[ "$(mode_of "$(INSTALLED)")" == 755 && "$(mode_of "$(INSTALLED).prev")" == 755 ]] && pass || fail "binary modes"
 [[ -z "$(ls "$ROOT"/usr/local/bin | grep -E '\.(new|swap)$')" ]] && pass || fail "temporary files left behind: $(ls "$ROOT"/usr/local/bin)"
-[[ "$OUT" == *"0.9.0 -> $(ver_of "$BIN")"* && "$OUT" == *"rollback"* && "$OUT" != *"$TOKEN"* && "$OUT" != *"plain text"* ]] && pass || fail "unexpected upgrade output: $OUT"
+[[ "$OUT" == *"0.9.0 -> $(ver_of "$BIN")"* && "$OUT" == *"rollback"* && "$OUT" != *"$TOKEN"* && "$OUT" != *"düz metin"* ]] && pass || fail "unexpected upgrade output: $OUT"
 
 # --- düz token'lı eski kurulum: yükseltme config'e dokunmaz, nasıl şifreleneceğini söyler
 fresh_install "$BIN_OLD"
 sed -i "s|\"api_token\": \"[^\"]*\"|\"api_token\": \"$TOKEN\"|" "$ROOT/etc/healthbeat/agent.json"; conf_before="$(snapshot_conf)"
 run_upgrade "$BIN"
-[[ $RC -eq 0 && "$OUT" == *"api_token in /etc/healthbeat/agent.json is stored in plain text"* && "$OUT" == *"sudo ./install.sh encrypt"* && "$OUT" != *"$TOKEN"* && "$(snapshot_conf)" == "$conf_before" ]] && pass || fail "upgrade of a plain-text install should keep the config and say how to encrypt it (rc=$RC): $OUT"
+[[ $RC -eq 0 && "$OUT" == *"/etc/healthbeat/agent.json içindeki api_token düz metin olarak duruyor"* && "$OUT" == *"sudo ./install.sh encrypt"* && "$OUT" != *"$TOKEN"* && "$(snapshot_conf)" == "$conf_before" ]] && pass || fail "upgrade of a plain-text install should keep the config and say how to encrypt it (rc=$RC): $OUT"
 
 # --- aynı sürüm: bir şey yapma, .prev'i koru
 run_upgrade "$BIN"
-[[ $RC -eq 0 && "$OUT" == *"already up to date"* && "$(ver_of "$(INSTALLED).prev")" == 0.9.0 ]] && pass || fail "same-version upgrade should be a no-op (rc=$RC): $OUT"
+[[ $RC -eq 0 && "$OUT" == *"Zaten güncel"* && "$(ver_of "$(INSTALLED).prev")" == 0.9.0 ]] && pass || fail "same-version upgrade should be a no-op (rc=$RC): $OUT"
 
 # --- düşürme reddedilir; --allow-downgrade ile olur
 run_upgrade "$BIN_OLD"
-[[ $RC -ne 0 && "$OUT" == *"refusing to downgrade"* && "$(ver_of "$(INSTALLED)")" == "$(ver_of "$BIN")" ]] && pass || fail "downgrade should be refused and change nothing (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"sürüm düşürülmedi"* && "$(ver_of "$(INSTALLED)")" == "$(ver_of "$BIN")" ]] && pass || fail "downgrade should be refused and change nothing (rc=$RC): $OUT"
 run_upgrade "$BIN_OLD" --allow-downgrade
 [[ $RC -eq 0 && "$(ver_of "$(INSTALLED)")" == 0.9.0 ]] && pass || fail "--allow-downgrade should downgrade (rc=$RC): $OUT"
 
 # --- dry-run hiçbir şeyi değiştirmez
 fresh_install "$BIN_OLD"; bin_before="$(sha_of "$(INSTALLED)")"
 run_upgrade "$BIN" --dry-run
-[[ $RC -eq 0 && "$OUT" == *"dry run"* && "$(sha_of "$(INSTALLED)")" == "$bin_before" && ! -e "$(INSTALLED).prev" ]] && pass || fail "--dry-run must not change anything (rc=$RC): $OUT"
+[[ $RC -eq 0 && "$OUT" == *"--dry-run"* && "$(sha_of "$(INSTALLED)")" == "$bin_before" && ! -e "$(INSTALLED).prev" ]] && pass || fail "--dry-run must not change anything (rc=$RC): $OUT"
 
 # --- yeni binary doğrulanamıyorsa hiçbir şey değişmez
 fresh_install "$BIN_OLD"; bin_before="$(sha_of "$(INSTALLED)")"
 run_upgrade "$BIN_BROKEN"
-[[ $RC -ne 0 && "$OUT" == *"does not report a version"* && "$(sha_of "$(INSTALLED)")" == "$bin_before" && ! -e "$(INSTALLED).prev" ]] && pass || fail "a binary that cannot report its version must be refused (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"sürüm bildirmiyor"* && "$(sha_of "$(INSTALLED)")" == "$bin_before" && ! -e "$(INSTALLED).prev" ]] && pass || fail "a binary that cannot report its version must be refused (rc=$RC): $OUT"
 
 # --- yeni binary MEVCUT yapılandırmayı kabul etmiyorsa hiçbir şey değişmez
 fresh_install "$BIN_OLD"; bin_before="$(sha_of "$(INSTALLED)")"
 sed -i 's/"mode": "push"/"mode": "bogus"/' "$ROOT/etc/healthbeat/agent.json"; conf_before="$(snapshot_conf)"
 run_upgrade "$BIN"
-[[ $RC -ne 0 && "$OUT" == *"EXISTING config"* && "$(sha_of "$(INSTALLED)")" == "$bin_before" && ! -e "$(INSTALLED).prev" && "$(snapshot_conf)" == "$conf_before" ]] && pass || fail "a config the new binary rejects must block the upgrade (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"MEVCUT yapılandırmayı"* && "$(sha_of "$(INSTALLED)")" == "$bin_before" && ! -e "$(INSTALLED).prev" && "$(snapshot_conf)" == "$conf_before" ]] && pass || fail "a config the new binary rejects must block the upgrade (rc=$RC): $OUT"
 
 # --- geri alma ve geri almanın geri alınması
 fresh_install "$BIN_OLD"; run_upgrade "$BIN" >/dev/null
@@ -324,12 +325,12 @@ run_rollback
 run_rollback
 [[ $RC -eq 0 && "$(ver_of "$(INSTALLED)")" == "$(ver_of "$BIN")" ]] && pass || fail "a second rollback should swap back (rc=$RC): $OUT"
 fresh_install "$BIN_OLD"; run_rollback
-[[ $RC -ne 0 && "$OUT" == *"nothing to roll back to"* ]] && pass || fail "rollback without a previous binary should be refused (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"geri dönülecek bir şey yok"* ]] && pass || fail "rollback without a previous binary should be refused (rc=$RC): $OUT"
 
 # --- unit: farklıysa yalnızca haber verilir; --update-unit ile değiştirilir (ve yedeklenir)
 fresh_install "$BIN_OLD"; printf '\n# local edit\n' >>"$ROOT/etc/systemd/system/healthbeat-agent.service"; unit_before="$(sha_of "$ROOT/etc/systemd/system/healthbeat-agent.service")"
 run_upgrade "$BIN"
-[[ $RC -eq 0 && "$OUT" == *"differs"* && "$(sha_of "$ROOT/etc/systemd/system/healthbeat-agent.service")" == "$unit_before" ]] && pass || fail "a locally edited unit must be left alone (rc=$RC): $OUT"
+[[ $RC -eq 0 && "$OUT" == *"farklı"* && "$(sha_of "$ROOT/etc/systemd/system/healthbeat-agent.service")" == "$unit_before" ]] && pass || fail "a locally edited unit must be left alone (rc=$RC): $OUT"
 fresh_install "$BIN_OLD"; printf '\n# local edit\n' >>"$ROOT/etc/systemd/system/healthbeat-agent.service"
 run_upgrade "$BIN" --update-unit
 [[ $RC -eq 0 ]] && cmp -s healthbeat-agent.service "$ROOT/etc/systemd/system/healthbeat-agent.service" && [[ -f "$ROOT/etc/systemd/system/healthbeat-agent.service.prev" ]] && pass || fail "--update-unit should replace the unit and keep a backup (rc=$RC): $OUT"
@@ -366,22 +367,22 @@ svc_setup yes "$BIN_OLD"; svc_upgrade "$BIN"
 # yeni sürüm çöküyor: otomatik geri alma, yapılandırmaya dokunulmaz, çıkış kodu != 0
 svc_setup yes "$BIN_OLD"; echo "$(ver_of "$BIN")" >"$FS/crash_version"; conf_before="$(snapshot_conf)"
 svc_upgrade "$BIN"
-[[ $RC -ne 0 && "$OUT" == *"rolled back automatically"* ]] && pass || fail "a crashing new version must fail the upgrade (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"kendiliğinden geri alındı"* ]] && pass || fail "a crashing new version must fail the upgrade (rc=$RC): $OUT"
 [[ "$(ver_of "$(INSTALLED)")" == 0.9.0 && "$(snapshot_conf)" == "$conf_before" ]] && pass || fail "the old binary was not restored / config touched (installed=$(ver_of "$(INSTALLED)"))"
 [[ "$(restarts)" == 2 && "$(cat "$FS/active")" == yes ]] && pass || fail "after the automatic rollback the service should be restarted on the old binary (restarts=$(restarts), active=$(cat "$FS/active"))"
 
 # çökme döngüsü (ayakta görünüyor ama NRestarts artıyor)
 svc_setup yes "$BIN_OLD"; echo "$(ver_of "$BIN")" >"$FS/loop_version"
 svc_upgrade "$BIN"
-[[ $RC -ne 0 && "$OUT" == *"rolled back automatically"* && "$(ver_of "$(INSTALLED)")" == 0.9.0 ]] && pass || fail "a crash loop must trigger the rollback (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"kendiliğinden geri alındı"* && "$(ver_of "$(INSTALLED)")" == 0.9.0 ]] && pass || fail "a crash loop must trigger the rollback (rc=$RC): $OUT"
 
 # durmuş servis başlatılmaz
 svc_setup no "$BIN_OLD"; svc_upgrade "$BIN"
-[[ $RC -eq 0 && "$(restarts)" == 0 && "$OUT" == *"was not running"* && "$(ver_of "$(INSTALLED)")" == "$(ver_of "$BIN")" ]] && pass || fail "a stopped service must not be started (rc=$RC, restarts=$(restarts)): $OUT"
+[[ $RC -eq 0 && "$(restarts)" == 0 && "$OUT" == *"çalışmıyordu"* && "$(ver_of "$(INSTALLED)")" == "$(ver_of "$BIN")" ]] && pass || fail "a stopped service must not be started (rc=$RC, restarts=$(restarts)): $OUT"
 
 # --no-restart yeniden başlatmaz
 svc_setup yes "$BIN_OLD"; svc_upgrade "$BIN" --no-restart
-[[ $RC -eq 0 && "$(restarts)" == 0 && "$OUT" == *"restart the service"* ]] && pass || fail "--no-restart must not restart (rc=$RC, restarts=$(restarts)): $OUT"
+[[ $RC -eq 0 && "$(restarts)" == 0 && "$OUT" == *"servisi yeniden başlatın"* ]] && pass || fail "--no-restart must not restart (rc=$RC, restarts=$(restarts)): $OUT"
 
 # geri alma: sağlıklı ise bir yeniden başlatma; geri alınan sürüm çöküyorsa eski durum geri gelir
 svc_setup yes "$BIN_OLD"; svc_upgrade "$BIN" >/dev/null; : >"$FS/calls"
@@ -389,7 +390,7 @@ run_rollback --verify-seconds 1
 [[ $RC -eq 0 && "$(restarts)" == 1 && "$(ver_of "$(INSTALLED)")" == 0.9.0 ]] && pass || fail "rollback of a healthy service (rc=$RC, restarts=$(restarts)): $OUT"
 svc_setup yes "$BIN_OLD"; svc_upgrade "$BIN" >/dev/null; echo 0.9.0 >"$FS/crash_version"
 run_rollback --verify-seconds 1
-[[ $RC -ne 0 && "$OUT" == *"did not stay healthy after the rollback"* && "$(ver_of "$(INSTALLED)")" == "$(ver_of "$BIN")" ]] && pass || fail "a rollback target that crashes must restore the previous state (rc=$RC, installed=$(ver_of "$(INSTALLED)")): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"geri almadan sonra sağlıklı kalmadı"* && "$(ver_of "$(INSTALLED)")" == "$(ver_of "$BIN")" ]] && pass || fail "a rollback target that crashes must restore the previous state (rc=$RC, installed=$(ver_of "$(INSTALLED)")): $OUT"
 unset HB_SYSTEMCTL FAKE_SYS_STATE FAKE_SYS_BIN
 
 # ------------------------------------------------------------------ configure (paketle kurulu agent) ve paket koruması
@@ -429,16 +430,16 @@ HEALTHBEAT_PULL_SECRET="$SECRET" run_configure --force --mode pull --allowed-ips
 # binary kurulu değilse ya da --binary verilirse reddedilir
 new_root
 HEALTHBEAT_API_TOKEN="$TOKEN" run_configure --mode push --server-url https://a.example.com --host-id "$UUID"
-[[ $RC -ne 0 && "$OUT" == *"no agent binary is installed"* && ! -e "$ROOT/etc/healthbeat/agent.json" ]] && pass || fail "configure without an installed binary must be refused (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"kurulu agent binary'si yok"* && ! -e "$ROOT/etc/healthbeat/agent.json" ]] && pass || fail "configure without an installed binary must be refused (rc=$RC): $OUT"
 pkg_root
 HEALTHBEAT_API_TOKEN="$TOKEN" run_configure --binary "$BIN" --mode push --server-url https://a.example.com --host-id "$UUID"
-[[ $RC -ne 0 && "$OUT" == *"--binary does not apply"* ]] && pass || fail "configure --binary must be refused (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"--binary configure'da kullanılmaz"* ]] && pass || fail "configure --binary must be refused (rc=$RC): $OUT"
 
 # paket işaretçisi: install/upgrade/rollback/uninstall reddedilir, configure çalışır
 pkg_root; : >"$ROOT/usr/share/healthbeat/installed-from-package"
 for action in install upgrade rollback uninstall; do
   OUT="$(./install.sh $action --root "$ROOT" --binary "$BIN" </dev/null 2>&1)"; RC=$?
-  [[ $RC -ne 0 && "$OUT" == *"installed from a package"* ]] && pass || fail "'$action' on a package-managed host must be refused (rc=$RC): $OUT"
+  [[ $RC -ne 0 && "$OUT" == *"paketle (.deb/.rpm) kurulmuş"* ]] && pass || fail "'$action' on a package-managed host must be refused (rc=$RC): $OUT"
 done
 [[ -x "$ROOT/usr/bin/healthbeat-agent" ]] && pass || fail "a refused action removed the packaged binary"
 HEALTHBEAT_API_TOKEN="$TOKEN" run_configure --mode push --server-url https://a.example.com --host-id "$UUID"
@@ -472,20 +473,20 @@ printf '%s\n' "$TOKEN" >"$WORK/token"; run_token --token-file "$WORK/token"
 # geçersiz token reddedilir, dosya değişmez; token verilmezse (etkileşimsiz) reddedilir
 conf_before="$(sha_of "$CONF")"
 HEALTHBEAT_API_TOKEN='short' run_token
-[[ $RC -ne 0 && "$OUT" == *"invalid API token"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "token must reject an invalid token and keep the config (rc=$RC): $OUT"
-( unset HEALTHBEAT_API_TOKEN; run_token; [[ $RC -ne 0 && "$OUT" == *"API token missing"* ]] ) && pass || fail "token without a value, not interactive, must be refused"
+[[ $RC -ne 0 && "$OUT" == *"geçersiz API token"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "token must reject an invalid token and keep the config (rc=$RC): $OUT"
+( unset HEALTHBEAT_API_TOKEN; run_token; [[ $RC -ne 0 && "$OUT" == *"API token eksik"* ]] ) && pass || fail "token without a value, not interactive, must be refused"
 
 # pull modunda pull secret'ı değiştirir
 pkg_root
 HEALTHBEAT_PULL_SECRET="$SECRET" run_configure --mode pull --allowed-ips 10.0.0.1
 CONF="$ROOT/etc/healthbeat/agent.json"; old_value="$(field_of "$CONF" pull_secret)"
 HEALTHBEAT_PULL_SECRET="$NEW_TOKEN" run_token
-[[ $RC -eq 0 && "$(field_of "$CONF" pull_secret)" == enc:v1:* && "$(field_of "$CONF" pull_secret)" != "$old_value" && "$OUT" == *"pull_secret updated"* ]] && pass || fail "token in pull mode (rc=$RC): $OUT"
+[[ $RC -eq 0 && "$(field_of "$CONF" pull_secret)" == enc:v1:* && "$(field_of "$CONF" pull_secret)" != "$old_value" && "$OUT" == *"pull_secret güncellendi"* ]] && pass || fail "token in pull mode (rc=$RC): $OUT"
 
 # yapılandırma yoksa reddedilir
 pkg_root
 HEALTHBEAT_API_TOKEN="$TOKEN" run_token
-[[ $RC -ne 0 && "$OUT" == *"no configuration"* ]] && pass || fail "token without a config must be refused (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"yapılandırma yok"* ]] && pass || fail "token without a config must be refused (rc=$RC): $OUT"
 
 # ------------------------------------------------------------------ encrypt: düz duranı aynen şifreler (healthbeat-agent-setup encrypt)
 run_encrypt() { OUT="$(./install.sh encrypt --root "$ROOT" "$@" </dev/null 2>&1)"; RC=$?; }
@@ -496,19 +497,19 @@ pkg_root; : >"$ROOT/usr/share/healthbeat/installed-from-package"
 HEALTHBEAT_API_TOKEN="$TOKEN" run_configure --mode push --server-url https://api.example.com --host-id "$UUID" --interval 20
 CONF="$ROOT/etc/healthbeat/agent.json"; make_plain api_token "$TOKEN"; others_before="$(grep -v '"api_token"' "$CONF")"
 run_encrypt
-[[ $RC -eq 0 && "$(field_of "$CONF" api_token)" == enc:v1:* && "$OUT" == *"api_token encrypted"* ]] && pass || fail "encrypt did not encrypt a plain-text token (rc=$RC): $OUT"
+[[ $RC -eq 0 && "$(field_of "$CONF" api_token)" == enc:v1:* && "$OUT" == *"api_token şifrelendi"* ]] && pass || fail "encrypt did not encrypt a plain-text token (rc=$RC): $OUT"
 [[ "$(grep -v '"api_token"' "$CONF")" == "$others_before" ]] && pass || fail "encrypt changed other settings"
 ! grep -q "$TOKEN" "$CONF" && [[ "$OUT" != *"$TOKEN"* ]] && pass || fail "encrypt left or printed the token in plain text"
 [[ "$(mode_of "$CONF")" == 640 && -z "$(ls -A "$ROOT"/etc/healthbeat | grep -v '^agent.json$')" ]] && pass || fail "encrypt must keep mode 640 and leave no backup or temp file: $(ls -A "$ROOT/etc/healthbeat")"
 ! "$ROOT/usr/bin/healthbeat-agent" -config "$CONF" -check-config 2>&1 | grep -q "plain text" && pass || fail "the agent still warns after encrypt"
 conf_before="$(sha_of "$CONF")"
 run_encrypt
-[[ $RC -eq 0 && "$OUT" == *"already encrypted"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "encrypt of an encrypted token must change nothing (rc=$RC): $OUT"
+[[ $RC -eq 0 && "$OUT" == *"zaten şifreli"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "encrypt of an encrypted token must change nothing (rc=$RC): $OUT"
 
 # geçersiz değer reddedilir, dosya değişmez
 make_plain api_token "not-a-token"; conf_before="$(sha_of "$CONF")"
 run_encrypt
-[[ $RC -ne 0 && "$OUT" == *"not a valid API token"* && "$OUT" == *"healthbeat-agent-setup token"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "encrypt must reject an invalid value and keep the config (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"geçerli bir API token değil"* && "$OUT" == *"healthbeat-agent-setup token"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "encrypt must reject an invalid value and keep the config (rc=$RC): $OUT"
 
 # pull modu: şifrelenen secret, gerçek agent'ta aynı secret olarak çalışır
 PORT=$((20000 + RANDOM % 20000))
@@ -516,7 +517,7 @@ pkg_root
 HEALTHBEAT_PULL_SECRET="$SECRET" run_configure --mode pull --listen "127.0.0.1:$PORT" --allowed-ips 127.0.0.1
 CONF="$ROOT/etc/healthbeat/agent.json"; make_plain pull_secret "$SECRET"
 run_encrypt
-[[ $RC -eq 0 && "$(field_of "$CONF" pull_secret)" == enc:v1:* && "$OUT" == *"pull_secret encrypted"* ]] && pass || fail "encrypt in pull mode (rc=$RC): $OUT"
+[[ $RC -eq 0 && "$(field_of "$CONF" pull_secret)" == enc:v1:* && "$OUT" == *"pull_secret şifrelendi"* ]] && pass || fail "encrypt in pull mode (rc=$RC): $OUT"
 sed "s#/etc/healthbeat#$ROOT/etc/healthbeat#g" "$CONF" >"$WORK/enc-pull.json"
 "$BIN" -config "$WORK/enc-pull.json" >"$WORK/enc-pull.log" 2>&1 &
 AGENT=$!
@@ -528,7 +529,86 @@ kill "$AGENT" 2>/dev/null; wait "$AGENT" 2>/dev/null
 # yapılandırma yoksa reddedilir
 pkg_root
 run_encrypt
-[[ $RC -ne 0 && "$OUT" == *"no configuration"* ]] && pass || fail "encrypt without a config must be refused (rc=$RC): $OUT"
+[[ $RC -ne 0 && "$OUT" == *"yapılandırma yok"* ]] && pass || fail "encrypt without a config must be refused (rc=$RC): $OUT"
+
+# ------------------------------------------------------------------ sihirbaz (script ile sahte terminal)
+# Girdiler satır satır önceden yazılır; TERM=dumb disk listesini numaralı yapar, HB_DOCKER_SOCK Docker sorusunu kapatır.
+# stty -echo: önceden yazılan girdi terminalde yankılanmaz (çıktıda yalnızca betiğin yazdıkları kalır); girdi stty'den
+# sonra gelsin diye kısa bir bekleme var.
+run_wizard() { # run_wizard "girdi satırları" ARGS...
+  local input="$1"; shift
+  OUT="$({ sleep 0.5; printf '%b' "$input"; } | TERM=dumb NO_COLOR=1 HB_DOCKER_SOCK=/nonexistent timeout 60 \
+    script -qec "stty -echo; $(printf '%q ' ./install.sh wizard --root "$ROOT" --binary "$BIN" --no-start "$@")" /dev/null 2>&1)"
+  RC=$?
+}
+OUT="$(./install.sh wizard --root "$WORK/nowiz" --binary "$BIN" </dev/null 2>&1)"
+[[ $? -ne 0 && "$OUT" == *"terminal gerektirir"* && ! -e "$WORK/nowiz/etc/healthbeat/agent.json" ]] && pass || fail "wizard without a terminal must be refused: $OUT"
+
+if command -v script >/dev/null; then
+  unset HEALTHBEAT_API_TOKEN HEALTHBEAT_PULL_SECRET
+  python3 "$WORK/tls_server.py" >/dev/null 2>&1 &
+  TLSSRV=$!
+  for _ in $(seq 1 50); do (exec 3<>/dev/tcp/127.0.0.1/$CAPORT) 2>/dev/null && break; sleep 0.1; done
+
+  # push, sıfırdan: hatalı host id ve token yeniden sorulur; CA verilmeden sertifikaya güvenilmez, menüden CA verilir.
+  new_root
+  run_wizard "\n127.0.0.1:$CAPORT\nnot-a-uuid\n$UUID\nshort\n$TOKEN\n1\n$WORK/ca.crt\n\n\n15\ne\n"
+  CONF="$ROOT/etc/healthbeat/agent.json"
+  [[ $RC -eq 0 && -f "$CONF" ]] && pass || fail "push wizard failed (rc=$RC): $OUT"
+  python3 - <<PY && pass || fail "push wizard wrote a wrong config: $(cat "$CONF" 2>/dev/null)"
+import json
+c = json.load(open("$CONF"))
+assert c["mode"] == "push" and c["server_url"] == "https://127.0.0.1:$CAPORT" and c["host_id"] == "$UUID"
+assert c["api_token"].startswith("enc:v1:") and c["interval_seconds"] == 15 and c["insecure_skip_verify"] is False
+assert c["ca_cert_file"] == "/etc/healthbeat/ca.pem"
+PY
+  [[ "$OUT" == *"https://127.0.0.1:$CAPORT olarak kullanılacak"* && "$OUT" == *"Host ID bir UUID olmalı"* && "$OUT" == *"Geçersiz değer"* ]] && pass || fail "push wizard did not ask again after invalid input: $OUT"
+  [[ "$OUT" == *"Sertifikaya güvenilmiyor"* && "$OUT" == *"Rapor kabul edildi"* ]] && pass || fail "push wizard connection check: $OUT"
+  [[ "$OUT" != *"$TOKEN"* ]] && ! grep -q "$TOKEN" "$CONF" && pass || fail "push wizard printed or wrote the token in plain text"
+  cmp -s "$WORK/ca.crt" "$ROOT/etc/healthbeat/ca.pem" && pass || fail "push wizard did not install the CA certificate"
+  tail_ok=1
+  while IFS= read -r line; do [[ $(printf '%s' "$line" | LC_ALL=C.UTF-8 wc -m) -le 72 ]] || { tail_ok=0; fail "wizard line longer than 72 characters: $line"; }; done < <(printf '%s\n' "$OUT" | tr -d '\r' | sed "s/basın\.── /basın.\n── /" | grep -v 'Agent kuruldu\|yazıldı\|kuruldu:')
+  [[ $tail_ok -eq 1 ]] && pass
+
+  # yeniden yapılandırma: her soruda Enter mevcut değeri korur (token dahil); eski dosya yedeklenir.
+  token_before="$(python3 -c "import json;print(json.load(open('$CONF'))['api_token'])")"
+  run_wizard "\n\n\n\n\n\n\ne\n"
+  python3 - <<PY && pass || fail "reconfiguring with Enter changed the config (rc=$RC): $OUT"
+import json
+c = json.load(open("$CONF"))
+assert c["api_token"] == "$token_before" and c["interval_seconds"] == 15 and c["ca_cert_file"] == "/etc/healthbeat/ca.pem"
+assert c["server_url"] == "https://127.0.0.1:$CAPORT" and c["host_id"] == "$UUID"
+PY
+  [[ "$OUT" == *"mevcut değer korunuyor"* && -n "$(ls "$ROOT"/etc/healthbeat/agent.json.bak.* 2>/dev/null)" ]] && pass || fail "reconfigure: summary or backup missing: $OUT"
+
+  # özette vazgeçilirse hiçbir şey yazılmaz
+  new_root
+  run_wizard "\n127.0.0.1:$CAPORT\n$UUID\n$TOKEN\n1\n$WORK/ca.crt\n\n\n\nh\n"
+  [[ $RC -eq 0 && "$OUT" == *"İptal edildi"* && ! -e "$ROOT/etc/healthbeat/agent.json" && ! -e "$ROOT/usr/local/bin/healthbeat-agent" ]] && pass || fail "cancelling the wizard must change nothing (rc=$RC): $OUT"
+
+  # token dosyadan verilir, sorulmaz; server'a ulaşılamazsa "yine de kaydet"
+  new_root
+  printf '%s\n' "$TOKEN" >"$WORK/wiz-token"
+  run_wizard "\nhttps://127.0.0.1:1\n$UUID\n2\n\n\ne\n" --token-file "$WORK/wiz-token"
+  [[ $RC -eq 0 && "$OUT" == *"API token dosyadan alındı"* && "$OUT" == *"Porta ulaşılamıyor"* ]] \
+    && python3 -c "import json;c=json.load(open('$ROOT/etc/healthbeat/agent.json'));assert c['api_token'].startswith('enc:v1:') and c['server_url']=='https://127.0.0.1:1'" \
+    && pass || fail "wizard with --token-file and an unreachable server (rc=$RC): $OUT"
+  kill "$TLSSRV" 2>/dev/null
+
+  # pull, sıfırdan: hatalı IP yeniden sorulur; kendinden imzalı sertifika üretilir.
+  new_root
+  run_wizard "2\n10.0.0.1\"x\n10.0.0.1,10.0.1.0/24\n$SECRET\n\n\n127.0.0.1:19443\n\n\ne\n"
+  CONF="$ROOT/etc/healthbeat/agent.json"
+  python3 - <<PY && pass || fail "pull wizard wrote a wrong config (rc=$RC): $OUT"
+import json
+c = json.load(open("$CONF"))
+assert c["mode"] == "pull" and c["allowed_server_ips"] == ["10.0.0.1", "10.0.1.0/24"]
+assert c["pull_secret"].startswith("enc:v1:") and c["listen_addr"] == "127.0.0.1:19443"
+PY
+  [[ "$OUT" == *"IP ya da CIDR yazın"* && -f "$ROOT/etc/healthbeat/tls/cert.pem" && "$OUT" != *"$SECRET"* ]] && pass || fail "pull wizard: retry, certificate or secret leak: $OUT"
+else
+  echo "note: 'script' not found; wizard scenarios skipped"
+fi
 
 echo
 echo "install_test.sh: $PASSES passed, $FAILS failed"

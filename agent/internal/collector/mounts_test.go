@@ -51,6 +51,18 @@ func TestParseMountinfoKeepsOnlyRealFilesystems(t *testing.T) {
 	}
 }
 
+func TestParseFilesystemTypes(t *testing.T) {
+	got := parseFilesystemTypes(strings.NewReader(sampleMountinfo))
+	for point, want := range map[string]string{"/": "ext4", "/boot/efi": "vfat", "/data": "xfs", "/mnt/My Disk": "ext4", "/mnt/nfs/share": "nfs4", "/pool/home": "btrfs"} {
+		if got[point] != want {
+			t.Errorf("type of %s = %q, want %q", point, got[point], want)
+		}
+	}
+	if _, ok := got["relative/path"]; !ok {
+		t.Error("types should not filter: every mount line is mapped")
+	}
+}
+
 func TestParseMountinfoIsRobust(t *testing.T) {
 	for name, in := range map[string]string{
 		"empty":               "",
