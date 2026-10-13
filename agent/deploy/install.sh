@@ -634,7 +634,7 @@ if [[ $WIZARD -eq 1 ]]; then
   }
   # w_ask_host_id [geri]: "geri" ile menüden açılır; boş Enter menüye döner (1).
   w_ask_host_id() {
-    local v q="Host ID (panelde sunucu eklenirken gösterildi)"
+    local v q="Host ID (panelde sunucunun Ayarlar → Bağlantı ve kimlik kartında)"
     [[ -z "$HOST_ID" ]] || q="Host ID"
     while :; do
       if [[ "${1:-}" == geri ]]; then

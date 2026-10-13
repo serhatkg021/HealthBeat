@@ -4,7 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-14 — **Agent kurulum sihirbazı yenilendi, kurulum betiği Türkçe** (yalnızca agent):
+**Son güncelleme:** 2026-10-14 — Push sunucusunun **host id'si** panelde sunucu Ayarlar → Bağlantı ve kimlik kartında
+kopyalanabilir duruyor (önceden yalnızca sunucu eklenirken gösteriliyordu); sihirbazın host id sorusu ve 401 mesajı bu
+kartı gösteriyor. hbe2e'de test-1'de denendi. Aynı gün: **Agent kurulum sihirbazı yenilendi, kurulum betiği Türkçe** (yalnızca agent):
 `install.sh wizard` / `healthbeat-agent-setup` 6 adımda soruyor ve kaydetmeden önce server'a bir deneme raporu gönderiyor
 (yeni `-check-connection`); sertifika güvenilmiyor, adres ya da token yanlışsa ne yapılacağını soruyor. Diskler boyut ve
 dolulukla seçilebilir listede (`-list-mounts`), var olan yapılandırmada mevcut değerler varsayılan. `install.sh`,

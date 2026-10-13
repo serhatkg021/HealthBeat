@@ -111,7 +111,9 @@ go build -o healthbeat-agent ./cmd/agent
 
 Panelde **Organizasyonlar → (organizasyon) → Sunucu ekle**. Modu seç:
 
-- **push**: panel bir **host id** ve **API token** gösterir. Token **yalnızca bir kez** gösterilir.
+- **push**: panel bir **host id** ve **API token** gösterir. Token **yalnızca bir kez** gösterilir. Host id gizli
+  değildir (sunucu sayfasının adresinde de geçer), kimlik bilgisi yenilenince değişmez ve sunucunun **Ayarlar → Bağlantı
+  ve kimlik** kartından her zaman kopyalanabilir.
 - **pull**: sunucunun IP'sini, dinleme portunu ve endpoint'i gir; panel bir **pull secret** gösterir
   (bir kez).
 
@@ -370,8 +372,8 @@ elinde yoksa) tekrar vermen gerekir — tek bir adres düzeltmek için gereksiz.
 Token'ı `agent.json`'a elle düz yazıp restart etmek de çalışır, ama düz kalır (agent açılışta uyarır);
 `sudo healthbeat-agent-setup encrypt` yerinde şifreler. Otomasyon için değer `HEALTHBEAT_API_TOKEN` / `HEALTHBEAT_PULL_SECRET` ya da `--token-file` /
 `--secret-file` ile verilebilir. (Diğer
-`401` nedeni: token doğru ama agent'ın kayıtlı host id'siyle uyuşmuyor — ikisini panelden
-karşılaştır.)
+`401` nedeni: token doğru ama agent'ın kayıtlı host id'siyle uyuşmuyor — `agent.json`'daki `host_id`'yi panelde
+Ayarlar → Bağlantı ve kimlik kartındakiyle karşılaştır.)
 
 ### d) `disk_mounts` listesini değiştirmek istiyorsun
 

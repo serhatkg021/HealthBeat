@@ -64,7 +64,11 @@ export function HostsPage() {
       <TabPanel id="liste" active={tab}>
         {revealed && (
           <SecretNotice
-            title={`${revealed.title} oluşturuldu — bu kimlik bilgisi bir daha gösterilmeyecek; agent kurulumu (healthbeat-agent-setup) isteyecek, şimdi kopyalayın`}
+            title={
+              revealed.api_token
+                ? `${revealed.title} oluşturuldu — API token bir daha gösterilmeyecek (host id sunucunun Ayarlar sekmesinde kalır); agent kurulumu (healthbeat-agent-setup) isteyecek, şimdi kopyalayın`
+                : `${revealed.title} oluşturuldu — pull secret bir daha gösterilmeyecek; agent kurulumu (healthbeat-agent-setup) isteyecek, şimdi kopyalayın`
+            }
             text={revealed.api_token ? `host_id: ${revealed.id}\napi_token: ${revealed.api_token}` : `host_id: ${revealed.id}\npull_secret: ${revealed.pull_secret}`}
             onClose={() => setRevealed(null)}
           />
