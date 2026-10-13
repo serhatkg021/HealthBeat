@@ -239,7 +239,7 @@ healthbeat-agent` demek resmî olarak desteklenir; her düzeltme için `install.
 | --- | --- | --- |
 | `server_url` | evet | `https://host[:port]` — HealthBeat server'ının adresi |
 | `host_id` | evet | Panelin sunucuyu oluştururken verdiği UUID |
-| `api_token` | evet | Panelin **bir kez** gösterdiği token. Kaybolursa panelden yenile (bölüm 6.c) |
+| `api_token` | evet | Panelin **bir kez** gösterdiği token; kurulum bu makineye bağlı şifreli yazar (`enc:v1:…`, aşağıda). Kaybolursa panelden yenile (bölüm 6.c) |
 | `interval_seconds` | hayır | Gönderim aralığı, saniye (varsayılan 30) |
 | `ca_cert_file` | hayır | Server sertifikasını imzalayan (özel) CA'nın PEM dosyası. Verilirse **yalnızca o CA** güvenilir; `insecure_skip_verify` ile birlikte olamaz |
 | `insecure_skip_verify` | hayır | **Her** server sertifikasını kabul et (yalnızca geliştirme) |
@@ -251,7 +251,7 @@ healthbeat-agent` demek resmî olarak desteklenir; her düzeltme için `install.
   "mode": "push",
   "server_url": "https://api.example.com",
   "host_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
-  "api_token": "0f1c8b6a2e9d4a7fb5c3d6e8a1b2c4d6",
+  "api_token": "enc:v1:q8mE0VbS…",
   "interval_seconds": 30,
   "insecure_skip_verify": false,
   "disk_mounts": ["/", "/data"]
@@ -264,7 +264,7 @@ healthbeat-agent` demek resmî olarak desteklenir; her düzeltme için `install.
 | --- | --- | --- |
 | `listen_addr` | evet | Dinleme adresi, `host:port` (kurulumda varsayılan `0.0.0.0:9443`) |
 | `pull_endpoint` | evet | Status yolu, `/` ile başlamalı (varsayılan `/api/v1/status`) |
-| `pull_secret` | evet | Panelin **bir kez** gösterdiği secret. Kaybolursa panelden yenile (bölüm 6.c) |
+| `pull_secret` | evet | Panelin **bir kez** gösterdiği secret; `api_token` gibi şifreli yazılır. Kaybolursa panelden yenile (bölüm 6.c) |
 | `allowed_server_ips` | evet | Poll etmesine izin verilen IP/CIDR'ler. Diğer adreslerin bağlantısı TLS'ten önce kapatılır |
 | `tls_cert_file`, `tls_key_file` | evet | Sertifika ve anahtar dosya yolları (kurulumda yoksa kendinden imzalı üretilir) |
 
@@ -275,13 +275,31 @@ healthbeat-agent` demek resmî olarak desteklenir; her düzeltme için `install.
   "mode": "pull",
   "listen_addr": "0.0.0.0:9443",
   "pull_endpoint": "/api/v1/status",
-  "pull_secret": "k7UXHUc3XNqyVkpBFaKhCKRc2WHi6GXg",
+  "pull_secret": "enc:v1:Hc3XNqyV…",
   "allowed_server_ips": ["203.0.113.10"],
   "tls_cert_file": "/etc/healthbeat/tls/cert.pem",
   "tls_key_file": "/etc/healthbeat/tls/key.pem",
   "disk_mounts": ["/"]
 }
 ```
+
+### Şifreli token / secret
+
+`install.sh` ve `healthbeat-agent-setup`, token'ı (pull'da secret'ı) `agent.json`'a **bu makinenin kimliğine bağlı
+şifreli** yazar: `"enc:v1:…"` (AES-256-GCM; anahtar `/etc/machine-id`'den türetilir, ayrı anahtar dosyası yoktur). Agent
+açılışta bellekte çözer; server'a giden istek değişmez.
+
+- Dosya **tek başına** bir yere kopyalanırsa (yedek, Ansible/Git deposu, destek paketi, ekran paylaşımı) token okunamaz;
+  başka bir makinede ya da klonlanmış bir VM'de çözülmez. Makinenin root'u ise çözebilir — agent token'ı gözetimsiz
+  kullanmak zorunda; bu bir parola kasası değildir. Dosya yine `0640 root:healthbeat`'tir.
+- **Düz yazılmış değer de çalışır** (elle düzenleme, eski kurulumlar): agent açılışta
+  `warning: api_token is stored in plain text …` loglar; yükseltme de terminale aynı uyarıyı yazar (config'e dokunmaz).
+  Aynı değeri yerinde şifrelemek için, hiçbir şey sormayan ve zaten şifreliyse bir şey yapmayan tek komut:
+  `sudo healthbeat-agent-setup encrypt` (tarball'da `sudo ./install.sh encrypt`). Server'da bir şey değişmez.
+- Makine kimliği değişirse (VM şablondan klonlandı, `machine-id` yeniden üretildi) agent başlamaz:
+  `api_token could not be decrypted on this machine …`. Token'ı yeniden ver (bölüm 6.c); klon ayrı bir sunucu olarak
+  izlenecekse panelde yeni sunucu ekleyip klonda `healthbeat-agent-setup --force` çalıştır.
+- Makine kimliği olmayan ortamda (systemd'siz konteyner) kurulum uyarır ve token'ı düz yazar.
 
 ## 6. Sık yapılan hatalar ve düzeltmeler
 
@@ -333,21 +351,22 @@ elinde yoksa) tekrar vermen gerekir — tek bir adres düzeltmek için gereksiz.
 1. Panelde ilgili sunucunun **detay sayfasına** git → **Ayarlar → Bağlantı ve kimlik → "Kimlik
    bilgisini yenile"** ve açılan pencerede onayla. Bu, eski token/secret'ı **anında geçersiz
    kılar** ve yenisini bir kez gösterir (pencereyi kapatmadan kopyala).
-2. Agent'ın sunucusunda config'i yedekle, yalnızca `api_token` (push) ya da `pull_secret` (pull)
-   alanını yeni değerle değiştir:
+2. Agent'ın sunucusunda yeni değeri ver. Komut modu config'ten okur, değeri gizli sorar, şifreleyip yalnızca
+   `api_token` (push) ya da `pull_secret` (pull) alanını değiştirir ve servisi yeniden başlatır:
 
    ```sh
-   sudo cp -a /etc/healthbeat/agent.json /etc/healthbeat/agent.json.bak.$(date +%Y%m%d%H%M%S)
-   sudo nano /etc/healthbeat/agent.json
+   sudo healthbeat-agent-setup token     # paketle kurulduysa
+   sudo ./install.sh token               # tarball ile kurulduysa
    ```
-3. Restart et ve logda `401` kalmadığını gör:
+3. Logda `401` kalmadığını gör:
 
    ```sh
-   sudo systemctl restart healthbeat-agent
    sudo journalctl -u healthbeat-agent -n 20 --no-pager
    ```
 
-`install.sh`'ı yeniden çalıştırmana gerek yok — token/secret yalnızca bir JSON alanıdır. (Diğer
+Token'ı `agent.json`'a elle düz yazıp restart etmek de çalışır, ama düz kalır (agent açılışta uyarır);
+`sudo healthbeat-agent-setup encrypt` yerinde şifreler. Otomasyon için değer `HEALTHBEAT_API_TOKEN` / `HEALTHBEAT_PULL_SECRET` ya da `--token-file` /
+`--secret-file` ile verilebilir. (Diğer
 `401` nedeni: token doğru ama agent'ın kayıtlı host id'siyle uyuşmuyor — ikisini panelden
 karşılaştır.)
 
@@ -410,7 +429,8 @@ düşer. Sıra önerisi: **önce server, sonra agent'lar**. Ayrıntı ve kuralla
 
 ### 7.1 `install.sh upgrade` (önerilen yol)
 
-Yalnızca **binary'yi** değiştirir; yapılandırmaya, sertifikalara ve systemd unit'ine dokunmaz.
+Yalnızca **binary'yi** değiştirir; yapılandırmaya, sertifikalara ve systemd unit'ine dokunmaz. Token config'te düz
+duruyorsa sonunda bir uyarı yazar ve `sudo ./install.sh encrypt` komutunu gösterir (bölüm 5, "Şifreli token").
 
 ```sh
 # Yeni binary'yi ve install.sh'ı hedef sunucuya kopyala, sonra:
@@ -505,6 +525,8 @@ Docker alanları yalnızca `healthbeat` kullanıcısı `docker` grubundaysa geli
 | Belirti | Olası neden |
 | --- | --- |
 | Push: log'da `server returned 401` | Token/host id yanlış ya da credential döndürüldü (bölüm 6.c ile yenile) |
+| `api_token could not be decrypted on this machine` (agent başlamıyor) | Config başka makineden kopyalandı ya da VM klonlandı (makine kimliği değişti): token'ı yeniden ver (bölüm 6.c) |
+| Log'da (ya da yükseltmede) `api_token … is stored in plain text` | Token elle düz yazılmış ya da eski kurulum; çalışır, aynı değeri şifrelemek için `sudo healthbeat-agent-setup encrypt` (bölüm 5, "Şifreli token") |
 | Push: `x509: certificate signed by unknown authority` | Server sertifikasını özel bir CA imzalıyor: CA'yı `--ca-cert` / `ca_cert_file` ile ver (ya da halka açık CA'lı bir sertifika kullan). Yalnızca geliştirmede `insecure_skip_verify` |
 | Push: `x509: certificate is valid for …, not …` | Sertifika, `server_url`'deki host için (DNS/IP SAN) düzenlenmemiş |
 | Push: log'da `server rejected the full payload … switching to core metrics only` | Server bu agent'ın gönderdiği yeni alanları tanımıyor (agent server'dan yeni). Metrikler **kaybolmaz** (CPU/RAM/disk/Docker gider), yalnızca donanım özeti gibi yeni alanlar gelmez. Server'ı güncelle; agent her 10 döngüde tam payload'ı yoklar ve server güncellenince kendiliğinden düzelir |

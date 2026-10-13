@@ -46,6 +46,10 @@ type Config struct {
 	// mount'ları dışarıda bırakılır). Bir mount'u raporlamak tek başına alert üretmez: hangi
 	// mount'ların alert üreteceği agent başına panelden seçilir.
 	DiskMounts []string `json:"disk_mounts,omitempty"`
+
+	// PlaintextSecret, modun sırrı dosyada şifresiz duruyorsa alanın adıdır ("api_token" ya da "pull_secret"); agent
+	// açılışta uyarır. Şifreli biçim için bkz. secret.go.
+	PlaintextSecret string `json:"-"`
 }
 
 func Load(path string) (*Config, error) {
@@ -66,6 +70,9 @@ func Load(path string) (*Config, error) {
 
 	switch cfg.Mode {
 	case ModePush:
+		if err := cfg.openSecret("api_token", &cfg.APIToken); err != nil {
+			return nil, err
+		}
 		if cfg.ServerURL == "" || cfg.HostID == "" || cfg.APIToken == "" {
 			return nil, fmt.Errorf("push mode requires server_url, host_id, and api_token")
 		}
@@ -80,6 +87,9 @@ func Load(path string) (*Config, error) {
 			return nil, err
 		}
 	case ModePull:
+		if err := cfg.openSecret("pull_secret", &cfg.PullSecret); err != nil {
+			return nil, err
+		}
 		if cfg.CACertFile != "" {
 			return nil, fmt.Errorf("ca_cert_file only applies to push mode (it verifies the server the agent connects to)")
 		}

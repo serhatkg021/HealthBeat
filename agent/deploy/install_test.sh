@@ -49,7 +49,7 @@ check "config has the expected fields" python3 - <<PY
 import json
 c = json.load(open("$CONF"))
 assert c["mode"] == "push" and c["server_url"] == "https://api.example.com"  # sondaki eğik çizgi kırpıldı
-assert c["host_id"] == "$UUID" and c["api_token"] == "$TOKEN" and c["interval_seconds"] == 15
+assert c["host_id"] == "$UUID" and c["api_token"].startswith("enc:v1:") and c["interval_seconds"] == 15  # bu makineye bağlı şifreli
 assert c["disk_mounts"] == ["/", "/data"] and c["insecure_skip_verify"] is True
 PY
 [[ "$(mode_of "$CONF")" == 640 ]] && pass || fail "config mode is $(mode_of "$CONF"), want 640 (it holds a credential)"
@@ -57,6 +57,7 @@ PY
 [[ "$(mode_of "$ROOT/usr/local/bin/healthbeat-agent")" == 755 ]] && pass || fail "binary mode"
 [[ "$(mode_of "$ROOT/etc/systemd/system/healthbeat-agent.service")" == 644 ]] && pass || fail "unit mode"
 [[ "$OUT" != *"$TOKEN"* ]] && pass || fail "the API token was printed by the installer"
+! grep -q "$TOKEN" "$CONF" && pass || fail "the API token was written to the config in plain text"
 [[ ! -e "$ROOT/etc/systemd/system/healthbeat-agent.service.d" ]] && pass || fail "docker drop-in present without --docker"
 
 # Gerçek agent bu yapılandırmayı kabul etmeli ve çalışmaya devam etmeli (yalnızca server'a ulaşamayacak).
@@ -66,7 +67,7 @@ timeout 2 "$BIN" -config "$CONF" >"$WORK/push.log" 2>&1; rc=$?
 # ------------------------------------------------------------------ girdiler ve seçenek biçimleri
 new_root; printf '%s\n' "$TOKEN" >"$WORK/token"
 run_install --mode push --server-url https://h.example.com:8443 --host-id "$UUID" --token-file "$WORK/token"
-[[ $RC -eq 0 ]] && grep -q "\"$TOKEN\"" "$ROOT/etc/healthbeat/agent.json" && pass || fail "--token-file: $OUT"
+[[ $RC -eq 0 ]] && grep -q '"api_token": "enc:v1:' "$ROOT/etc/healthbeat/agent.json" && pass || fail "--token-file: $OUT"
 python3 -c "import json;c=json.load(open('$ROOT/etc/healthbeat/agent.json'));assert c['interval_seconds']==30 and c['disk_mounts']==['/'] and c['insecure_skip_verify'] is False" && pass || fail "defaults (interval 30, mount /, verify on)"
 
 new_root; run_install --mode push --server-url https://h.example.com --host-id "$UUID" --docker <<<"" 2>/dev/null
@@ -123,7 +124,7 @@ python3 - <<PY && pass || fail "pull config contents"
 import json
 c = json.load(open("$PCONF"))
 assert c["mode"] == "pull" and c["listen_addr"] == "127.0.0.1:$PORT" and c["pull_endpoint"] == "/api/v1/status"
-assert c["pull_secret"] == "$SECRET" and c["allowed_server_ips"] == ["127.0.0.1", "::1", "10.0.0.0/8"]
+assert c["pull_secret"].startswith("enc:v1:") and c["allowed_server_ips"] == ["127.0.0.1", "::1", "10.0.0.0/8"]
 assert c["tls_cert_file"] == "/etc/healthbeat/tls/cert.pem" and c["tls_key_file"] == "/etc/healthbeat/tls/key.pem"
 PY
 [[ "$(mode_of "$ROOT/etc/healthbeat/tls/key.pem")" == 640 ]] && pass || fail "private key mode is $(mode_of "$ROOT/etc/healthbeat/tls/key.pem"), want 640"
@@ -282,7 +283,13 @@ run_upgrade "$BIN"
 [[ "$(sha_of "$ROOT/etc/systemd/system/healthbeat-agent.service")" == "$unit_before" ]] && pass || fail "upgrade touched the unit"
 [[ "$(mode_of "$(INSTALLED)")" == 755 && "$(mode_of "$(INSTALLED).prev")" == 755 ]] && pass || fail "binary modes"
 [[ -z "$(ls "$ROOT"/usr/local/bin | grep -E '\.(new|swap)$')" ]] && pass || fail "temporary files left behind: $(ls "$ROOT"/usr/local/bin)"
-[[ "$OUT" == *"0.9.0 -> $(ver_of "$BIN")"* && "$OUT" == *"rollback"* && "$OUT" != *"$TOKEN"* ]] && pass || fail "unexpected upgrade output: $OUT"
+[[ "$OUT" == *"0.9.0 -> $(ver_of "$BIN")"* && "$OUT" == *"rollback"* && "$OUT" != *"$TOKEN"* && "$OUT" != *"plain text"* ]] && pass || fail "unexpected upgrade output: $OUT"
+
+# --- düz token'lı eski kurulum: yükseltme config'e dokunmaz, nasıl şifreleneceğini söyler
+fresh_install "$BIN_OLD"
+sed -i "s|\"api_token\": \"[^\"]*\"|\"api_token\": \"$TOKEN\"|" "$ROOT/etc/healthbeat/agent.json"; conf_before="$(snapshot_conf)"
+run_upgrade "$BIN"
+[[ $RC -eq 0 && "$OUT" == *"api_token in /etc/healthbeat/agent.json is stored in plain text"* && "$OUT" == *"sudo ./install.sh encrypt"* && "$OUT" != *"$TOKEN"* && "$(snapshot_conf)" == "$conf_before" ]] && pass || fail "upgrade of a plain-text install should keep the config and say how to encrypt it (rc=$RC): $OUT"
 
 # --- aynı sürüm: bir şey yapma, .prev'i koru
 run_upgrade "$BIN"
@@ -400,7 +407,7 @@ python3 - <<PY && pass || fail "configure wrote a wrong config"
 import json
 c = json.load(open("$CONF"))
 assert c["mode"] == "push" and c["server_url"] == "https://api.example.com" and c["host_id"] == "$UUID"
-assert c["api_token"] == "$TOKEN" and c["interval_seconds"] == 20 and c["disk_mounts"] == ["/", "/data"]
+assert c["api_token"].startswith("enc:v1:") and c["interval_seconds"] == 20 and c["disk_mounts"] == ["/", "/data"]
 PY
 [[ "$(mode_of "$CONF")" == 640 && "$(mode_of "$ROOT/etc/healthbeat")" == 750 ]] && pass || fail "configure: config/dir modes"
 [[ ! -e "$ROOT/usr/local/bin/healthbeat-agent" && ! -e "$ROOT/etc/systemd/system/healthbeat-agent.service" ]] && pass || fail "configure must not install a binary or a unit"
@@ -436,6 +443,92 @@ done
 [[ -x "$ROOT/usr/bin/healthbeat-agent" ]] && pass || fail "a refused action removed the packaged binary"
 HEALTHBEAT_API_TOKEN="$TOKEN" run_configure --mode push --server-url https://a.example.com --host-id "$UUID"
 [[ $RC -eq 0 && -f "$ROOT/etc/healthbeat/agent.json" ]] && pass || fail "configure must work on a package-managed host: $OUT"
+
+# ------------------------------------------------------------------ token: yalnızca sırrı değiştirir (healthbeat-agent-setup token)
+run_token() { OUT="$(./install.sh token --root "$ROOT" "$@" </dev/null 2>&1)"; RC=$?; }
+field_of() { python3 -c "import json,sys;print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$1" "$2"; }
+NEW_TOKEN="NeWtOkEn0123456789_-NeWtOkEn0123456789xyz"
+
+# paketle kurulu makinede çalışır; öteki ayarlara dokunmaz, yedek bırakmaz
+pkg_root; : >"$ROOT/usr/share/healthbeat/installed-from-package"
+HEALTHBEAT_API_TOKEN="$TOKEN" run_configure --mode push --server-url https://api.example.com --host-id "$UUID" --interval 20
+CONF="$ROOT/etc/healthbeat/agent.json"
+old_value="$(field_of "$CONF" api_token)"; others_before="$(grep -v '"api_token"' "$CONF")"
+HEALTHBEAT_API_TOKEN="$NEW_TOKEN" run_token
+new_value="$(field_of "$CONF" api_token)"
+[[ $RC -eq 0 && "$new_value" == enc:v1:* && "$new_value" != "$old_value" ]] && pass || fail "token did not replace the API token (rc=$RC): $OUT"
+[[ "$(grep -v '"api_token"' "$CONF")" == "$others_before" ]] && pass || fail "token changed other settings"
+! grep -q "$NEW_TOKEN" "$CONF" && [[ "$OUT" != *"$NEW_TOKEN"* ]] && pass || fail "token wrote or printed the new token in plain text"
+[[ "$(mode_of "$CONF")" == 640 && -z "$(ls -A "$ROOT"/etc/healthbeat | grep -v '^agent.json$')" ]] && pass || fail "token must keep mode 640 and leave no backup or temp file: $(ls -A "$ROOT/etc/healthbeat")"
+"$ROOT/usr/bin/healthbeat-agent" -config "$CONF" -check-config >/dev/null 2>&1 && pass || fail "the real agent rejected the token-updated config"
+
+# elle düz yazılmış token'ı şifreler (dosyadan okunur); agent artık uyarmaz
+sed -i "s|\"api_token\": \"[^\"]*\"|\"api_token\": \"$TOKEN\"|" "$CONF"
+"$ROOT/usr/bin/healthbeat-agent" -config "$CONF" -check-config 2>&1 | grep -q "plain text" && pass || fail "the agent did not warn about a plain-text token"
+printf '%s\n' "$TOKEN" >"$WORK/token"; run_token --token-file "$WORK/token"
+[[ $RC -eq 0 && "$(field_of "$CONF" api_token)" == enc:v1:* ]] && ! grep -q "$TOKEN" "$CONF" && pass || fail "token did not encrypt a plain-text token: $OUT"
+! "$ROOT/usr/bin/healthbeat-agent" -config "$CONF" -check-config 2>&1 | grep -q "plain text" && pass || fail "the agent still warns after token"
+
+# geçersiz token reddedilir, dosya değişmez; token verilmezse (etkileşimsiz) reddedilir
+conf_before="$(sha_of "$CONF")"
+HEALTHBEAT_API_TOKEN='short' run_token
+[[ $RC -ne 0 && "$OUT" == *"invalid API token"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "token must reject an invalid token and keep the config (rc=$RC): $OUT"
+( unset HEALTHBEAT_API_TOKEN; run_token; [[ $RC -ne 0 && "$OUT" == *"API token missing"* ]] ) && pass || fail "token without a value, not interactive, must be refused"
+
+# pull modunda pull secret'ı değiştirir
+pkg_root
+HEALTHBEAT_PULL_SECRET="$SECRET" run_configure --mode pull --allowed-ips 10.0.0.1
+CONF="$ROOT/etc/healthbeat/agent.json"; old_value="$(field_of "$CONF" pull_secret)"
+HEALTHBEAT_PULL_SECRET="$NEW_TOKEN" run_token
+[[ $RC -eq 0 && "$(field_of "$CONF" pull_secret)" == enc:v1:* && "$(field_of "$CONF" pull_secret)" != "$old_value" && "$OUT" == *"pull_secret updated"* ]] && pass || fail "token in pull mode (rc=$RC): $OUT"
+
+# yapılandırma yoksa reddedilir
+pkg_root
+HEALTHBEAT_API_TOKEN="$TOKEN" run_token
+[[ $RC -ne 0 && "$OUT" == *"no configuration"* ]] && pass || fail "token without a config must be refused (rc=$RC): $OUT"
+
+# ------------------------------------------------------------------ encrypt: düz duranı aynen şifreler (healthbeat-agent-setup encrypt)
+run_encrypt() { OUT="$(./install.sh encrypt --root "$ROOT" "$@" </dev/null 2>&1)"; RC=$?; }
+make_plain() { sed -i "s|\"$1\": \"[^\"]*\"|\"$1\": \"$2\"|" "$ROOT/etc/healthbeat/agent.json"; }
+
+# paketle kurulu makinede çalışır; öteki ayarlara dokunmaz, yedek bırakmaz; ikinci çalıştırma bir şey yapmaz
+pkg_root; : >"$ROOT/usr/share/healthbeat/installed-from-package"
+HEALTHBEAT_API_TOKEN="$TOKEN" run_configure --mode push --server-url https://api.example.com --host-id "$UUID" --interval 20
+CONF="$ROOT/etc/healthbeat/agent.json"; make_plain api_token "$TOKEN"; others_before="$(grep -v '"api_token"' "$CONF")"
+run_encrypt
+[[ $RC -eq 0 && "$(field_of "$CONF" api_token)" == enc:v1:* && "$OUT" == *"api_token encrypted"* ]] && pass || fail "encrypt did not encrypt a plain-text token (rc=$RC): $OUT"
+[[ "$(grep -v '"api_token"' "$CONF")" == "$others_before" ]] && pass || fail "encrypt changed other settings"
+! grep -q "$TOKEN" "$CONF" && [[ "$OUT" != *"$TOKEN"* ]] && pass || fail "encrypt left or printed the token in plain text"
+[[ "$(mode_of "$CONF")" == 640 && -z "$(ls -A "$ROOT"/etc/healthbeat | grep -v '^agent.json$')" ]] && pass || fail "encrypt must keep mode 640 and leave no backup or temp file: $(ls -A "$ROOT/etc/healthbeat")"
+! "$ROOT/usr/bin/healthbeat-agent" -config "$CONF" -check-config 2>&1 | grep -q "plain text" && pass || fail "the agent still warns after encrypt"
+conf_before="$(sha_of "$CONF")"
+run_encrypt
+[[ $RC -eq 0 && "$OUT" == *"already encrypted"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "encrypt of an encrypted token must change nothing (rc=$RC): $OUT"
+
+# geçersiz değer reddedilir, dosya değişmez
+make_plain api_token "not-a-token"; conf_before="$(sha_of "$CONF")"
+run_encrypt
+[[ $RC -ne 0 && "$OUT" == *"not a valid API token"* && "$OUT" == *"healthbeat-agent-setup token"* && "$(sha_of "$CONF")" == "$conf_before" ]] && pass || fail "encrypt must reject an invalid value and keep the config (rc=$RC): $OUT"
+
+# pull modu: şifrelenen secret, gerçek agent'ta aynı secret olarak çalışır
+PORT=$((20000 + RANDOM % 20000))
+pkg_root
+HEALTHBEAT_PULL_SECRET="$SECRET" run_configure --mode pull --listen "127.0.0.1:$PORT" --allowed-ips 127.0.0.1
+CONF="$ROOT/etc/healthbeat/agent.json"; make_plain pull_secret "$SECRET"
+run_encrypt
+[[ $RC -eq 0 && "$(field_of "$CONF" pull_secret)" == enc:v1:* && "$OUT" == *"pull_secret encrypted"* ]] && pass || fail "encrypt in pull mode (rc=$RC): $OUT"
+sed "s#/etc/healthbeat#$ROOT/etc/healthbeat#g" "$CONF" >"$WORK/enc-pull.json"
+"$BIN" -config "$WORK/enc-pull.json" >"$WORK/enc-pull.log" 2>&1 &
+AGENT=$!
+for _ in $(seq 1 50); do curl -sk -o /dev/null "https://127.0.0.1:$PORT/api/v1/status" 2>/dev/null && break; sleep 0.1; done
+code=$(curl -sk -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $SECRET" "https://127.0.0.1:$PORT/api/v1/status")
+[[ "$code" == 200 ]] && pass || fail "the encrypted pull secret does not work as the original secret: HTTP $code $(head -2 "$WORK/enc-pull.log")"
+kill "$AGENT" 2>/dev/null; wait "$AGENT" 2>/dev/null
+
+# yapılandırma yoksa reddedilir
+pkg_root
+run_encrypt
+[[ $RC -ne 0 && "$OUT" == *"no configuration"* ]] && pass || fail "encrypt without a config must be refused (rc=$RC): $OUT"
 
 echo
 echo "install_test.sh: $PASSES passed, $FAILS failed"

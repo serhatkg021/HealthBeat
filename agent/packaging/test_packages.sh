@@ -99,6 +99,8 @@ out="$(/usr/share/healthbeat/install.sh install --binary /usr/bin/healthbeat-age
 check "healthbeat-agent-setup --help" sh -c '/usr/sbin/healthbeat-agent-setup --help | grep -q "configure"'
 
 TOKEN="AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcd"; UUID="123e4567-e89b-12d3-a456-426614174000"
+# Konteyner imajlarında /etc/machine-id boştur (gerçek sunucuda systemd ilk açılışta yazar); sırlar ona bağlı şifrelenir.
+MID=0123456789abcdef0123456789abcdef; echo "$MID" >/etc/machine-id
 out="$(HEALTHBEAT_API_TOKEN=$TOKEN /usr/sbin/healthbeat-agent-setup --no-start --mode push --server-url https://api.example.com --host-id $UUID 2>&1)"; rc=$?
 [ $rc -eq 0 ] && ok "healthbeat-agent-setup (non-interactive)" || bad "healthbeat-agent-setup" "$out"
 [ "$(stat -c '%a %U:%G' /etc/healthbeat/agent.json)" = "640 root:healthbeat" ] && ok "config is 640 root:healthbeat" || bad "config perms" "$(stat -c '%a %U:%G' /etc/healthbeat/agent.json)"
@@ -110,6 +112,23 @@ if command -v su >/dev/null 2>&1; then
 else
   ok "the service user can read its config (skipped: no su in this image)"
 fi
+grep -q '"api_token": "enc:v1:' /etc/healthbeat/agent.json && ! grep -q "$TOKEN" /etc/healthbeat/agent.json && ok "token written encrypted" || bad "token written encrypted" "$(grep api_token /etc/healthbeat/agent.json | cut -c1-40)"
+
+# --- healthbeat-agent-setup token: yalnızca token değişir, şifreli; makine kimliği yoksa düz yazılır ve uyarılır
+NEW="NeWtOkEn0123456789_-NeWtOkEn0123456789xyz"
+out="$(HEALTHBEAT_API_TOKEN=$NEW /usr/sbin/healthbeat-agent-setup token 2>&1)"; rc=$?
+[ $rc -eq 0 ] && grep -q '"api_token": "enc:v1:' /etc/healthbeat/agent.json && ! grep -q "$NEW" /etc/healthbeat/agent.json && ok "healthbeat-agent-setup token" || bad "healthbeat-agent-setup token" "$out"
+[ "$(stat -c '%a %U:%G' /etc/healthbeat/agent.json)" = "640 root:healthbeat" ] && ok "config perms kept by token" || bad "config perms kept by token" "$(stat -c '%a %U:%G' /etc/healthbeat/agent.json)"
+check "the agent accepts the token-updated config" /usr/bin/healthbeat-agent -config /etc/healthbeat/agent.json -check-config
+: >/etc/machine-id
+out="$(HEALTHBEAT_API_TOKEN=$NEW /usr/sbin/healthbeat-agent-setup token 2>&1)"; rc=$?
+[ $rc -eq 0 ] && grep -q "\"api_token\": \"$NEW\"" /etc/healthbeat/agent.json && case "$out" in *"could not encrypt"*) true ;; *) false ;; esac && ok "without a machine id the token is written in plain text, with a warning" || bad "plain-text fallback without a machine id" "$out"
+echo "$MID" >/etc/machine-id
+out="$(HEALTHBEAT_API_TOKEN=$NEW /usr/sbin/healthbeat-agent-setup token 2>&1)"; rc=$?
+[ $rc -eq 0 ] && grep -q '"api_token": "enc:v1:' /etc/healthbeat/agent.json && ok "token encrypts a plain-text token" || bad "token encrypts a plain-text token" "$out"
+# Aşağıdaki yükseltme eski (düz token'lı) bir kurulumu canlandırır.
+make_plain() { sed -i "s|\"api_token\": \"[^\"]*\"|\"api_token\": \"$1\"|" /etc/healthbeat/agent.json; }
+make_plain "$TOKEN"
 sum1="$(sha256sum /etc/healthbeat/agent.json | cut -d' ' -f1)"
 
 # --- yükseltme: config ve kullanıcı korunur
@@ -119,12 +138,30 @@ case "$(/usr/bin/healthbeat-agent --version 2>&1)" in *"$V2"*) ok "binary report
 [ "$(sha256sum /etc/healthbeat/agent.json | cut -d' ' -f1)" = "$sum1" ] && ok "config untouched by the upgrade" || bad "config untouched by the upgrade"
 case "$out" in *"NOT configured yet"*) bad "no 'not configured' nag on upgrade" "$out" ;; *) ok "no 'not configured' nag on upgrade" ;; esac
 [ "$(stat -c '%a %U:%G' /etc/healthbeat/agent.json)" = "640 root:healthbeat" ] && ok "config perms kept after upgrade" || bad "config perms after upgrade"
+case "$out" in *"api_token in /etc/healthbeat/agent.json is stored in plain text"*"healthbeat-agent-setup encrypt"*) ok "upgrade warns about a plain-text token" ;; *) bad "upgrade warns about a plain-text token" "$out" ;; esac
+case "$out" in *"$TOKEN"*) bad "upgrade does not print the token" "$out" ;; *) ok "upgrade does not print the token" ;; esac
+
+# --- healthbeat-agent-setup encrypt: düz token aynen şifrelenir; ikinci kez bir şey yapmaz; makine kimliği yoksa dokunmaz
+out="$(/usr/sbin/healthbeat-agent-setup encrypt 2>&1)"; rc=$?
+[ $rc -eq 0 ] && grep -q '"api_token": "enc:v1:' /etc/healthbeat/agent.json && ! grep -q "$TOKEN" /etc/healthbeat/agent.json && ok "healthbeat-agent-setup encrypt" || bad "healthbeat-agent-setup encrypt" "$out"
+[ "$(stat -c '%a %U:%G' /etc/healthbeat/agent.json)" = "640 root:healthbeat" ] && ok "config perms kept by encrypt" || bad "config perms kept by encrypt"
+sum_enc="$(sha256sum /etc/healthbeat/agent.json | cut -d' ' -f1)"
+out="$(/usr/sbin/healthbeat-agent-setup encrypt 2>&1)"; rc=$?
+[ $rc -eq 0 ] && [ "$(sha256sum /etc/healthbeat/agent.json | cut -d' ' -f1)" = "$sum_enc" ] && case "$out" in *"already encrypted"*) true ;; *) false ;; esac && ok "encrypt is a no-op when already encrypted" || bad "encrypt is a no-op when already encrypted" "$out"
+make_plain "$TOKEN"; : >/etc/machine-id; sum_plain="$(sha256sum /etc/healthbeat/agent.json | cut -d' ' -f1)"
+out="$(/usr/sbin/healthbeat-agent-setup encrypt 2>&1)"; rc=$?
+[ $rc -ne 0 ] && [ "$(sha256sum /etc/healthbeat/agent.json | cut -d' ' -f1)" = "$sum_plain" ] && case "$out" in *"could not encrypt"*) true ;; *) false ;; esac && ok "encrypt without a machine id changes nothing" || bad "encrypt without a machine id changes nothing" "rc=$rc $out"
+echo "$MID" >/etc/machine-id
+out="$(/usr/sbin/healthbeat-agent-setup encrypt 2>&1)"; rc=$?
+[ $rc -eq 0 ] && grep -q '"api_token": "enc:v1:' /etc/healthbeat/agent.json && ok "encrypt after the machine id is back" || bad "encrypt after the machine id is back" "$out"
+sum1="$(sha256sum /etc/healthbeat/agent.json | cut -d' ' -f1)"
 
 # --- geri alma (downgrade): eski paket kurulur, config dokunulmaz (docs/DISTRIBUTION.md bölüm 5.3)
 out="$(pkg_downgrade "$PKGFILE1")"; rc=$?
 [ $rc -eq 0 ] && ok "downgrade to v$V1" || bad "downgrade to v$V1" "$out"
 case "$(/usr/bin/healthbeat-agent --version 2>&1)" in *"$V1"*) ok "binary reports $V1 after downgrade" ;; *) bad "binary reports $V1 after downgrade" ;; esac
 [ "$(sha256sum /etc/healthbeat/agent.json | cut -d' ' -f1)" = "$sum1" ] && ok "config untouched by the downgrade" || bad "config untouched by the downgrade"
+case "$out" in *"plain text"*) bad "no plain-text warning when the token is encrypted" "$out" ;; *) ok "no plain-text warning when the token is encrypted" ;; esac
 
 # --- kaldırma: binary ve unit gider, yapılandırma ve kullanıcı kalır
 out="$(pkg_remove)"; rc=$?

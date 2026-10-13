@@ -21,6 +21,17 @@ if [ -d /run/systemd/system ]; then
   fi
 fi
 
+# Eski kurulumlarda token/secret düz durur: agent'ın kendi okuma kuralıyla denetlenir, nasıl şifreleneceği söylenir.
+# Config'e dokunulmaz (şifreleme yöneticinin çalıştırdığı komutla yapılır).
+if [ -f /etc/healthbeat/agent.json ]; then
+  field="$(/usr/bin/healthbeat-agent -config /etc/healthbeat/agent.json -check-config 2>&1 | sed -n 's/.*warning: \([a-z_]*\) is stored in plain text.*/\1/p' | head -n1)"
+  if [ -n "$field" ]; then
+    echo "healthbeat-agent: WARNING: the $field in /etc/healthbeat/agent.json is stored in plain text." >&2
+    echo "  Encrypt it for this machine (the value stays the same; the service restarts):" >&2
+    echo "    sudo healthbeat-agent-setup encrypt" >&2
+  fi
+fi
+
 if [ ! -f /etc/healthbeat/agent.json ]; then
   echo "healthbeat-agent: installed but NOT configured yet. Configure and start it with:" >&2
   echo "    sudo healthbeat-agent-setup" >&2

@@ -8,11 +8,14 @@
 #   sudo ./install.sh configure ...                                      # yalnızca config yazar (paketle kurulu agent için; healthbeat-agent-setup)
 #   sudo ./install.sh upgrade [--binary PATH] [--dry-run]                # yalnızca binary'yi değiştirir; config'e dokunmaz
 #   sudo ./install.sh rollback                                           # bir önceki binary'ye dön
+#   sudo ./install.sh token                                              # yalnızca API token'ı / pull secret'ı değiştirir (healthbeat-agent-setup token)
+#   sudo ./install.sh encrypt                                            # config'te düz duran token'ı / secret'ı şifreler (healthbeat-agent-setup encrypt)
 #
 # Secret'lar (push api_token / pull secret) asla komut satırı argümanı olarak alınmaz
 # (`ps` çıktısında ve shell geçmişinde görünürlerdi): HEALTHBEAT_API_TOKEN /
 # HEALTHBEAT_PULL_SECRET ortam değişkenini, --token-file / --secret-file'ı ya da etkileşimli
-# istemi kullanın. Tüm seçenekler için --help ile çalıştırın.
+# istemi kullanın. agent.json'a bu makinenin kimliğine bağlı şifreli olarak yazılırlar (agent -encrypt-token).
+# Tüm seçenekler için --help ile çalıştırın.
 set -euo pipefail
 # Aşağıdaki karakter sınıfı regex'leri her locale'de düz ASCII anlamına gelmeli (tr_TR'de
 # GNU grep/bash, [A-Za-z] içinde 'i'yi reddeder).
@@ -24,7 +27,7 @@ readonly SERVICE_USER=healthbeat
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh <install|uninstall|wizard|upgrade|rollback|configure> [options]
+Usage: install.sh <install|uninstall|wizard|upgrade|rollback|configure|token|encrypt> [options]
 
 wizard
   guided install: explains each choice and asks for it one at a time, then shows a
@@ -84,6 +87,22 @@ upgrade   replace ONLY the agent binary; the config, certificates and unit are l
 rollback  swap the previous binary (healthbeat-agent.prev) back in and restart
   --dry-run, --no-restart, --verify-seconds N   as for upgrade
 
+token     replace ONLY the API token (push) or pull secret (pull) in the existing config, e.g. after
+          rotating the credentials in the panel, then restart the service. The mode is read from the
+          config; the value comes from HEALTHBEAT_API_TOKEN / HEALTHBEAT_PULL_SECRET, --token-file /
+          --secret-file, or a hidden prompt.
+  --no-restart                write the new value but do not restart the service
+
+encrypt   encrypt the API token / pull secret that is stored in plain text in the existing config
+          (older installs, hand edits); the value stays the same, so nothing changes on the server.
+          Asks nothing; does nothing if it is already encrypted, then
+          restarts the service.
+  --no-restart                encrypt but do not restart the service
+
+Secrets are written to the config encrypted for THIS machine (its /etc/machine-id); a copy of the
+config does not reveal them. A secret stored in plain text still works (the agent logs a warning,
+an upgrade prints one); 'encrypt' encrypts it in place.
+
 common
   --root DIR                  install into DIR instead of / (packaging/staging; skips systemctl and chown)
   -h, --help
@@ -101,9 +120,10 @@ case "$ACTION" in
   install | uninstall | upgrade | rollback) shift ;;
   wizard) ACTION=install; WIZARD=1; shift ;;
   configure) ACTION=install; CONFIGURE_ONLY=1; shift ;;
+  token | encrypt) shift ;;
   -h | --help) usage; exit 0 ;;
   "") usage >&2; exit 2 ;;
-  *) die "unknown action '$ACTION' (expected install, uninstall, wizard, upgrade, rollback, or configure)" ;;
+  *) die "unknown action '$ACTION' (expected install, uninstall, wizard, upgrade, rollback, configure, token, or encrypt)" ;;
 esac
 
 MODE="" BINARY="" DISK_MOUNTS="/" DOCKER=0 FORCE=0 NO_START=0 PURGE=0 ROOT=""
@@ -165,11 +185,26 @@ run_systemctl() { [[ $STAGING -eq 1 ]] || systemctl "$@"; }
 
 # Paketle (.deb/.rpm) kurulu bir makinede binary'yi ve unit'i paket yöneticisi yönetir; bu betiğin
 # install/upgrade/rollback/uninstall'ı aynı dosyalara ikinci bir kopya yazıp paket kaydıyla
-# çelişirdi. Yalnızca configure (config yazar) çalışır.
+# çelişirdi. Yalnızca configure ve token (config yazar) çalışır.
 readonly PACKAGE_MARKER="${ROOT}/usr/share/healthbeat/installed-from-package"
-if [[ -e "$PACKAGE_MARKER" && $CONFIGURE_ONLY -eq 0 ]]; then
-  die "the agent on this host was installed from a package (.deb/.rpm), which the package manager owns: use apt/dnf to install, upgrade, downgrade or remove it (see docs/DISTRIBUTION.md). Only 'install.sh configure' works here."
+if [[ -e "$PACKAGE_MARKER" && $CONFIGURE_ONLY -eq 0 && "$ACTION" != token && "$ACTION" != encrypt ]]; then
+  die "the agent on this host was installed from a package (.deb/.rpm), which the package manager owns: use apt/dnf to install, upgrade, downgrade or remove it (see docs/DISTRIBUTION.md). Only 'install.sh configure', 'token' and 'encrypt' work here."
 fi
+
+# plain_secret_notice BINARY KOMUT: config'teki sır düz duruyorsa (agent'ın kendi okuma kuralıyla) nasıl şifreleneceğini
+# söyler; yükseltmenin sonunda çağrılır, config'e dokunmaz.
+plain_secret_notice() {
+  local field
+  field="$("$1" -config "$CONF_PATH" -check-config 2>&1 | sed -n 's/.*warning: \([a-z_]*\) is stored in plain text.*/\1/p' | head -n1)"
+  [[ -n "$field" ]] || return 0
+  echo "install.sh: WARNING: the $field in /etc/healthbeat/agent.json is stored in plain text." >&2
+  echo "  Encrypt it for this machine (the value stays the same; the service restarts):" >&2
+  echo "    sudo $2" >&2
+}
+
+# Sırrı şifreleyen binary: install'da az önce kurulan, configure/token'da paketin (/usr/bin) ya da tarball'ın kurduğu.
+AGENT_BIN="$BIN_PATH"
+[[ "$ACTION" == install && $CONFIGURE_ONLY -eq 0 ]] || [[ ! -x "${ROOT}/usr/bin/healthbeat-agent" ]] || AGENT_BIN="${ROOT}/usr/bin/healthbeat-agent"
 
 # ---------------------------------------------------------------- kaldırma
 if [[ "$ACTION" == uninstall ]]; then
@@ -345,6 +380,7 @@ if [[ "$ACTION" == upgrade || "$ACTION" == rollback ]]; then
 
   info "upgraded $CUR_DESC -> $NEW_VER"
   info "previous binary kept as $PREV_PATH (undo with: install.sh rollback); verify in the panel that this server now shows $NEW_VER"
+  plain_secret_notice "$BIN_PATH" "./install.sh encrypt"
   exit 0
 fi
 
@@ -404,6 +440,19 @@ readonly RE_URL='^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$'
 readonly RE_IPCIDR='^[0-9A-Fa-f:.]+(/[0-9]{1,3})?$'
 readonly RE_PATH='^/[A-Za-z0-9._/-]*$'
 
+# encrypt_secret [strict]: SECRET'ı bu makinenin kimliğine bağlı şifreli biçime çevirir. Makine kimliği yoksa (ör.
+# systemd'siz bir konteyner) uyarıp düz bırakır (agent düz değeri de kabul eder); "strict" ise (encrypt) hata verir.
+encrypt_secret() {
+  local enc
+  if enc="$(printf '%s\n' "$SECRET" | "$AGENT_BIN" -encrypt-token 2>&1)" && [[ "$enc" =~ ^enc:v1:[A-Za-z0-9_-]+$ ]]; then
+    SECRET="$enc"
+  elif [[ "${1:-}" == strict ]]; then
+    die "could not encrypt the secret (${enc##*encrypt-token: }); $CONF_PATH was not changed"
+  else
+    echo "install.sh: WARNING: could not encrypt the secret, it is written in plain text (${enc##*encrypt-token: })" >&2
+  fi
+}
+
 json_array() { # json_array a,b,c -> ["a","b","c"]
   local IFS=',' item out="" first=1
   for item in $1; do
@@ -412,6 +461,53 @@ json_array() { # json_array a,b,c -> ["a","b","c"]
   done
   printf '[%s]' "$out"
 }
+
+# ---------------------------------------------------------------- yalnızca token / encrypt
+# token: panelde kimlik bilgisi yenilendiğinde yeni değeri verir. encrypt: config'te düz duran değeri (eski kurulum,
+# elle düzenleme) aynen şifreler; hiçbir şey sormaz, zaten şifreliyse dokunmaz. İkisinde de değer agent.json'daki tek
+# alanın yerine yazılır (öteki ayarlara, izinlere ve sahibe dokunulmaz), sonuç gerçek agent'a denetletilir, servis
+# yeniden başlatılır. Yedek alınmaz: eski dosya eski (belki düz) sırrı taşırdı.
+if [[ "$ACTION" == token || "$ACTION" == encrypt ]]; then
+  [[ -f "$CONF_PATH" ]] || die "no configuration at $CONF_PATH; configure the agent first (healthbeat-agent-setup)"
+  [[ -x "$AGENT_BIN" ]] || die "no agent binary is installed ($AGENT_BIN)"
+  if grep -Eq '"mode"[[:space:]]*:[[:space:]]*"pull"' "$CONF_PATH"; then
+    field=pull_secret what="pull secret" envname=HEALTHBEAT_PULL_SECRET file="$SECRET_FILE"
+  else
+    field=api_token what="API token" envname=HEALTHBEAT_API_TOKEN file="$TOKEN_FILE"
+  fi
+  re_field="(\"$field\"[[:space:]]*:[[:space:]]*\")[^\"]*\""
+  grep -Eq "$re_field" "$CONF_PATH" || die "$CONF_PATH has no $field field; rewrite the configuration with: healthbeat-agent-setup --force"
+
+  if [[ "$ACTION" == token ]]; then
+    read_secret SECRET "$envname" "$file" "New $what"
+    require_match "$SECRET" "$RE_SECRET" "$what (expected the URL-safe value shown once by the panel)"
+    encrypt_secret
+  else
+    SECRET="$(sed -nE "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p" "$CONF_PATH" | head -n1)"
+    if [[ "$SECRET" == enc:v1:* ]]; then
+      info "$field is already encrypted, nothing to do"
+      exit 0
+    fi
+    [[ "$SECRET" =~ $RE_SECRET ]] || die "the $field in $CONF_PATH is not a valid $what; set it again with: healthbeat-agent-setup token"
+    encrypt_secret strict
+  fi
+
+  tmp="$(mktemp "$CONF_DIR/.agent.json.XXXXXX")"
+  trap 'rm -f "$tmp"' EXIT
+  sed -E "s|$re_field|\1$SECRET\"|" "$CONF_PATH" >"$tmp"
+  chmod 0640 "$tmp"
+  [[ $STAGING -eq 1 ]] || chown "root:$SERVICE_USER" "$tmp"
+  "$AGENT_BIN" -config "$tmp" -check-config >/dev/null 2>&1 || die "the agent rejected the updated configuration; $CONF_PATH was not changed"
+  mv -f "$tmp" "$CONF_PATH"
+  if [[ "$ACTION" == token ]]; then info "$field updated in $CONF_PATH"; else info "$field encrypted in $CONF_PATH"; fi
+  if [[ $NO_RESTART -eq 1 || $STAGING -eq 1 ]]; then
+    info "restart the service to use it: systemctl restart ${SERVICE_NAME}"
+  elif systemctl is-enabled --quiet "${SERVICE_NAME}.service" 2>/dev/null || systemctl is-active --quiet "${SERVICE_NAME}.service"; then
+    systemctl restart "${SERVICE_NAME}.service"
+    info "service restarted; follow the log with: journalctl -u ${SERVICE_NAME} -f"
+  fi
+  exit 0
+fi
 
 # ---------------------------------------------------------------- topla + doğrula
 if [[ $WIZARD -eq 1 && -z "$MODE" ]]; then
@@ -587,6 +683,7 @@ if [[ -e "$CONF_PATH" ]]; then
   info "existing config backed up to $backup"
 fi
 
+encrypt_secret
 write_config() {
   umask 0077
   if [[ "$MODE" == push ]]; then

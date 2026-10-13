@@ -1624,6 +1624,36 @@ input[type='checkbox'], input[type='radio'] {
   overflow-wrap: anywhere;
 }
 
+/* Sunucuda çalıştırılacak komut (CommandLine): tek satır, solda vurgu çizgisi, sağda Kopyala. */
+.command-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 12px;
+  padding: 7px 7px 7px 12px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+}
+
+.command-line code {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.command-prompt {
+  margin-right: 8px;
+  color: var(--text-muted);
+  font-weight: 400;
+  user-select: none;
+}
+
 /* ---------- Segmentli kontrol (filtre) ---------- */
 .segmented {
   display: inline-flex;
