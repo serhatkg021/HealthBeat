@@ -13,6 +13,7 @@ import { SearchInput } from '../components/SearchInput'
 import { FieldLabel } from '../components/FieldLabel'
 import { Building2, LayoutGrid, List as ListIcon, Plus, Settings } from 'lucide-react'
 import { OrganizationSettingsModal } from './OrganizationSettings'
+import { formatDate, formatDateTime } from './datetime'
 
 type ViewMode = 'card' | 'list'
 // Görünüm tercihi yalnızca bu tarayıcıda hatırlanır (kullanıcı/organizasyon verisi değil) —
@@ -134,7 +135,7 @@ export function OrganizationsPage() {
                   {org.access === 'context' ? (
                     <span className="entity-card-meta">Yalnızca üst zincir bilgisi</span>
                   ) : (
-                    <span className="entity-card-meta">{org.address ?? `Oluşturulma: ${new Date(org.created_at).toLocaleDateString()}`}</span>
+                    <span className="entity-card-meta">{org.address ?? `Oluşturulma: ${formatDate(org.created_at)}`}</span>
                   )}
                 </>
               )
@@ -181,7 +182,7 @@ export function OrganizationsPage() {
                       </span>
                     </td>
                     <td className="muted" data-label="Adres">{row.org.address ?? '—'}</td>
-                    <td className="muted" data-label="Oluşturulma">{new Date(row.org.created_at).toLocaleString()}</td>
+                    <td className="muted" data-label="Oluşturulma">{formatDateTime(row.org.created_at)}</td>
                     {canManage && (
                       <td className="actions">
                         {row.org.access !== 'context' && (

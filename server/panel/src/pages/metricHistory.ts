@@ -1,6 +1,7 @@
 // Performans sekmesindeki geçmiş grafiklerinin saf mantığı: hazır aralıklar, zaman etiketleri ve metrik noktalarının
 // grafik satırlarına çevrilmesi. React içermez; Node'un çalıştırıcısıyla birim test edilir.
 import type { MetricPoint } from '../types/api'
+import { formatDateTime, formatTime, inputValue } from './datetime.ts'
 
 export type RangeKey = '1h' | '6h' | '24h' | '7d'
 
@@ -16,21 +17,13 @@ export const MAX_DISK_SERIES = 8
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-const pad = (n: number) => String(n).padStart(2, '0')
+// toInputValue, aralık seçicisinin (datetime-local) değeridir; kurulumun saat diliminde (bkz. datetime.ts).
+export const toInputValue = (d: Date): string => inputValue(d)
 
-export function toInputValue(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-}
-
-// Aralık bir günden uzunsa saat:dakika:saniye tek başına belirsiz kalır (hangi gün?); tarihi de
-// ekle — yerel biçime (ay/gün sırası belirsiz olabilir) değil, sabit gün-ay-yıl sırasına göre.
+// Aralık bir günden uzunsa saat:dakika:saniye tek başına belirsiz kalır (hangi gün?); tarih de eklenir. Biçim ve saat
+// dilimi panelin geri kalanıyla aynıdır (datetime.ts).
 export function formatPoint(ms: number, spanMs: number): string {
-  const d = new Date(ms)
-  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-  if (spanMs > DAY_MS) {
-    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${time}`
-  }
-  return time
+  return spanMs > DAY_MS ? formatDateTime(ms) : formatTime(ms)
 }
 
 export const isLongSpan = (spanMs: number): boolean => spanMs > DAY_MS

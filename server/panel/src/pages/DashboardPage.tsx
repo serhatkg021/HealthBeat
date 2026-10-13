@@ -40,6 +40,7 @@ import {
   type DashboardFilters,
 } from './dashboardFilters'
 import { HOSTS_PATH } from '../navigation'
+import { formatDateTime } from './datetime'
 
 const PROBLEM_LIMIT = 8
 const REFRESH_MS = 60_000
@@ -236,7 +237,7 @@ export function DashboardPage() {
                       </span>
                     </div>
                     <time className="muted feed-time" dateTime={a.created_at}>
-                      {new Date(a.created_at).toLocaleString()}
+                      {formatDateTime(a.created_at)}
                     </time>
                   </li>
                 ))}

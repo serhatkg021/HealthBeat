@@ -135,6 +135,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
+- Panel: tarih ve saatler her yerde **kurulumun saat diliminde** (Ayarlar → Saat dilimi; bakım pencereleri ve
+  e-postalardakiyle aynı) ve tek biçimde (GG.AA.YYYY SS:DD:SS). Önceden alert, denetim kaydı, kuyruk ve log zamanları
+  tarayıcının dilinde ve saat diliminde görünüyordu. Grafik ekseni ve Performans'taki aralık seçicileri de kurulumun
+  diliminde. Boş değer telefon, kernel, hostname gibi eşit aralıklı yazılan alanlarda da aynı uzun tire.
 - Panel: Bildirim → Kanallar 2 sütunlu kart ızgarası (telefonda tek sütun): **E-posta** kartı durumu, sunucu ve gönderen
   adresi, son başarılı denemeyi ve kanalı kullanan kural sayısını iki satırda özetliyor; ayar "Düzenle" penceresinde,
   deneme gönderimi "Deneme gönder" penceresinde. **Slack**, **SMS** ve **Özel webhook** aynı biçimde "Yakında" kartları;

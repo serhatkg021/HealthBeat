@@ -23,6 +23,7 @@ import type { DashboardOverview, Host } from '../types/api'
 import { AddHostWizard } from './AddHostWizard'
 import { DashboardFilterPanel } from './DashboardFilterPanel'
 import { activeChips, activeCount, applyFilters, emptyFilters, parseFilters, pruneOrgs, writeFilters, type DashboardFilters } from './dashboardFilters'
+import { formatDateTime } from './datetime'
 
 const PAGE = 20
 const REFRESH_MS = 60_000
@@ -246,7 +247,7 @@ function HostList() {
                     )}
                   </td>
                   <td className="muted" data-label="Son görülme">
-                    {c.last_seen ? new Date(c.last_seen).toLocaleString() : '—'}
+                    {formatDateTime(c.last_seen)}
                   </td>
                 </tr>
               ))}

@@ -19,6 +19,7 @@ import {
   summaryAttrs,
   type LogFilters,
 } from './logs'
+import { formatDateTime } from './datetime'
 
 const PAGE_SIZE = 200
 
@@ -233,7 +234,7 @@ export function SystemLogs() {
                         {isOpen ? <ChevronDown size={15} strokeWidth={1.9} /> : <ChevronRight size={15} strokeWidth={1.9} />}
                       </button>
                     </td>
-                    <td className="mono nowrap log-time" title={e.time ? new Date(e.time).toLocaleString() : undefined}>
+                    <td className="mono nowrap log-time" title={e.time ? formatDateTime(e.time) : undefined}>
                       {entryTime(e.time)}
                     </td>
                     <td>

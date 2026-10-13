@@ -17,6 +17,7 @@ import { effectiveLevels, mountLevels, pctText, usageTone, TONE_LABEL } from './
 import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertSubjectText, hostStatusLabel } from '../labels'
 import { alertReading } from './alertText'
 import { ioSummary, stateWarnings } from './systemState'
+import { formatDateTime } from './datetime'
 
 // Sunucu sayfasının "Genel" sekmesi: sunucunun şu anki durumu ve açık sorunları. Yalnızca en son raporu gösterir;
 // geçmiş grafikleri "Performans", donanım ve envanter "Envanter" sekmesindedir.
@@ -93,7 +94,7 @@ export function HostOverview({
           // Çalışma biçimi ve rapor aralığı tek satırda.
           hint={host.mode === 'push' ? `Push · ${host.interval_seconds} sn'de bir rapor` : `Pull · ${host.interval_seconds} sn'de bir sorgu`}
         />
-        <StatTile label="Son görülme" icon={Clock} small value={host.last_seen ? new Date(host.last_seen).toLocaleString() : '—'} />
+        <StatTile label="Son görülme" icon={Clock} small value={formatDateTime(host.last_seen)} />
       </div>
 
       {/* Anlık durumdan hemen bakılması gerekenler (alert kuralı kapalı olsa da görünür; ayrıntı Envanter'de). */}
@@ -273,7 +274,7 @@ function OpenIssues({ hostId, onShowAlerts }: { hostId: string; onShowAlerts: ()
                 {a.subject && <span className="muted"> · {alertSubjectText(a.alert_type, a.subject)}</span>}
               </span>
               {alertReading(a) && <span className="muted tnum">{alertReading(a)}</span>}
-              <span className="muted issue-age">{new Date(a.created_at).toLocaleString()}</span>
+              <span className="muted issue-age">{formatDateTime(a.created_at)}</span>
             </li>
           ))}
         </ul>

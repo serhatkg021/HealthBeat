@@ -15,6 +15,7 @@ import { supportsHardwareSummary } from './agentStatus'
 import { healthEmptyText, supportsHealth } from './inventory'
 import { diskLayout } from './diskLayout'
 import { RANGES, toInputValue, type RangeKey } from './metricHistory'
+import { parseInputValue } from './datetime'
 import { busiestDisk, busiestInterface, ioDisks, netInterfaces } from './perfSeries'
 import {
   CpuDetailChart,
@@ -136,8 +137,8 @@ export function HostPerformance({ host, latest, thresholds }: { host: Host; late
   }
 
   function applyCustom() {
-    const from = new Date(fromInput)
-    const to = new Date(toInput)
+    const from = parseInputValue(fromInput) ?? new Date(NaN)
+    const to = parseInputValue(toInput) ?? new Date(NaN)
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       setError('geçersiz tarih')
       return

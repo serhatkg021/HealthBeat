@@ -17,8 +17,9 @@ import {
 } from '../labels'
 import { alertReading } from './alertText'
 import { attemptsText, deliveryTime, groupNotifications, groupSummary, recipientsText } from './alertNotifications'
+import { formatDateTime } from './datetime'
 
-const when = (iso?: string): string => (iso ? new Date(iso).toLocaleString() : '—')
+const when = (iso?: string): string => formatDateTime(iso)
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (

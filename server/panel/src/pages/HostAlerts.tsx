@@ -11,6 +11,7 @@ import { Pagination } from '../components/Pagination'
 import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel } from '../labels'
 import { BellOff, Check, Info } from 'lucide-react'
 import { AlertDetail, NotificationBadge } from './AlertDetail'
+import { formatDateTime } from './datetime'
 
 const STATUS_TABS: { value: AlertStatus | ''; label: string }[] = [
   { value: 'open', label: 'Açık' },
@@ -103,12 +104,12 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
                   <StatusBadge tone={alertLevelTone(a.level)}>{alertLevelLabel(a.level)}</StatusBadge>
                 </td>
                 <td className="muted" data-label="Durum">{alertStatusLabel(a.status)}</td>
-                <td className="muted" data-label="Oluşturulma">{new Date(a.created_at).toLocaleString()}</td>
+                <td className="muted" data-label="Oluşturulma">{formatDateTime(a.created_at)}</td>
                 {showAcknowledged && (
-                  <td className="muted" data-label="Onaylanma">{a.acknowledged_at ? new Date(a.acknowledged_at).toLocaleString() : '—'}</td>
+                  <td className="muted" data-label="Onaylanma">{formatDateTime(a.acknowledged_at)}</td>
                 )}
                 {showResolved && (
-                  <td className="muted" data-label="Çözülme">{a.resolved_at ? new Date(a.resolved_at).toLocaleString() : '—'}</td>
+                  <td className="muted" data-label="Çözülme">{formatDateTime(a.resolved_at)}</td>
                 )}
                 <td data-label="Bildirim">
                   <NotificationBadge status={a.notification_status} deferred={a.notify_pending} />

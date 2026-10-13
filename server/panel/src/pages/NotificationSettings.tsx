@@ -11,10 +11,11 @@ import { Modal } from '../components/Modal'
 import { StatusBadge } from '../components/StatusBadge'
 import type { ChannelInfo, ContactInput, SystemContact } from '../types/api'
 import { SETTINGS_CHANGED, channelStatus } from './settingsForm'
+import { formatDateTime } from './datetime'
 
 
 const message = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback)
-const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString() : '—')
+const when = (iso: string | null | undefined) => formatDateTime(iso)
 const announce = () => window.dispatchEvent(new Event(SETTINGS_CHANGED))
 
 // Bildirim sayfasının Kanallar sekmesi ve Kişiler sekmesindeki sistem kişileri. Okumak settings.view, değiştirmek

@@ -4,6 +4,7 @@ import { contactsApi } from '../api/endpoints'
 import type { OrganizationContact } from '../types/api'
 import { EmptyState } from '../components/EmptyState'
 import { draftFromContact, emptyContactDraft, managerChoices, managerName, toContactInput, validateContact, type ContactDraft } from './contacts'
+import { MonoValue } from '../components/MonoValue'
 
 // Organizasyonun iletişim kişileri: sunucu işleri için başvurulacak kişiler (panel kullanıcısı olmaları gerekmez).
 // Bildirim kurallarında alıcı olarak seçilebilirler.
@@ -78,7 +79,7 @@ export function OrganizationContacts({ organizationId, canEdit }: { organization
                 <td className="primary">{c.name}</td>
                 <td className="muted" data-label="Departman / Unvan">{[c.department, c.title].filter(Boolean).join(' · ') || '—'}</td>
                 <td className="muted" data-label="Yöneticisi">{managerName(c, list) || '—'}</td>
-                <td className="muted mono" data-label="Telefon">{c.phone ?? '—'}</td>
+                <td className="muted" data-label="Telefon"><MonoValue value={c.phone} /></td>
                 <td className="muted" data-label="E-posta">{c.email ?? '—'}</td>
                 {canEdit && (
                   <td className="actions">

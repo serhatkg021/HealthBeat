@@ -14,6 +14,8 @@ import { InfoTip } from '../components/InfoTip'
 import { Building2, Pencil, Server, Trash2, UserPlus, Users, UserCog } from 'lucide-react'
 import { HostAssignment } from './HostAssignment'
 import { buildTree } from './orgTree'
+import { formatDateTime } from './datetime'
+import { MonoValue } from '../components/MonoValue'
 
 const PAGE_SIZE = 20
 
@@ -186,9 +188,9 @@ export function UsersPage() {
                     {u.full_name ?? u.email}
                     {u.full_name && <div className="muted">{u.email}</div>}
                   </td>
-                  <td className="muted mono" data-label="Telefon">{u.phone ?? '—'}</td>
+                  <td className="muted" data-label="Telefon"><MonoValue value={u.phone} /></td>
                   <td className="muted" data-label="Rol">{ROLE_LABELS[u.role]}</td>
-                  <td className="muted" data-label="Son giriş">{u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—'}</td>
+                  <td className="muted" data-label="Son giriş">{formatDateTime(u.last_login_at)}</td>
                   <td className="actions">
                     {canUpdate && (
                       <button className="btn btn-sm" onClick={() => openProfile(u)}>

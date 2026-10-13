@@ -12,6 +12,7 @@ import { timezoneOptions } from './timezones'
 import { useTab } from '../components/useTab'
 import type { SettingsField, SettingsResponse } from '../types/api'
 import { SETTINGS_SECTIONS, buildPatch, defaultText, fieldMessage, toDisplay, type SectionDef } from './settingsForm'
+import { formatDateTime } from './datetime'
 
 const SECTION_PARAM = 'bolum'
 
@@ -25,7 +26,7 @@ const NAV: { id: string; label: string; icon: LucideIcon }[] = [
 ]
 
 const message = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback)
-const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString() : '—')
+const when = (iso: string | null | undefined) => formatDateTime(iso)
 
 // Sistem ayarları: kurulum genelindeki, yeniden başlatmadan değişen ayarlar. Okumak settings.view, değiştirmek
 // settings.manage ister (varsayılan olarak yalnızca süper admin).

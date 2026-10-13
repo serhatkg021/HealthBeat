@@ -13,6 +13,7 @@ import { alertRulesPath } from '../navigation'
 import type { Host, HostService, HostStatusRuleView } from '../types/api'
 import { formatUptime, healthEmptyText } from './inventory'
 import { enabledLabel, filterServices, notReported, parseServiceName, serviceCounts, serviceState, toggleWatched } from './services'
+import { formatDateTime } from './datetime'
 
 // "Servisler" sekmesindeki sistem servisleri (systemd, protokol 4): agent'ın son bildirdiği liste ve izlenen servis
 // seçimi. İzlenen bir servis çalışmazsa "Servis çalışmıyor" durum kuralına göre alert açılır; seçim sunucu bazındadır.
@@ -155,7 +156,7 @@ export function SystemServices({ host }: { host: Host }) {
                       <td data-label="Durum">
                         <StatusBadge tone={st.tone}>{st.label}</StatusBadge>
                       </td>
-                      <td className="tnum" data-label="Ne zamandan beri" title={s.since ? new Date(s.since).toLocaleString('tr-TR') : undefined}>
+                      <td className="tnum" data-label="Ne zamandan beri" title={s.since ? formatDateTime(s.since) : undefined}>
                         {since === undefined ? '—' : formatUptime(since)}
                       </td>
                       <td className="tnum" data-label="Yeniden başlatma">

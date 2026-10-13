@@ -8,6 +8,8 @@ import { useNow } from '../components/useNow'
 import { InfoTip } from '../components/InfoTip'
 import { roleLabel } from '../labels'
 import { agoText, certExpiry, certNames, expiresInText, hiddenKeys, keyKindLabel, limiterInfo, limiterRate, usedOf } from './cache'
+import { formatDate, formatDateTime, formatTime } from './datetime'
+import { MonoValue } from '../components/MonoValue'
 
 // Cache Durumu: server sürecinin bellekte tuttuğu durum (izin önbelleği, hız sınırlayıcılar, pull zamanlayıcı, güvenilir
 // proxy'ler, sunulan TLS sertifikası). Salt okunur ve anlık bir görüntüdür: "Yenile" ile yeniden okunur. Yalnızca bu
@@ -38,7 +40,7 @@ export function SystemCache() {
       {error && <div className="error-banner">{error}</div>}
       <div className="toolbar">
         <span className="muted">
-          {status ? `Anlık görüntü: ${new Date(status.generated_at).toLocaleTimeString()} (${agoText(status.generated_at, now)})` : 'Yükleniyor…'}
+          {status ? `Anlık görüntü: ${formatTime(status.generated_at)} (${agoText(status.generated_at, now)})` : 'Yükleniyor…'}
         </span>
         <button className="btn" type="button" disabled={loading} onClick={load}>
           <RefreshCw size={15} strokeWidth={1.9} />
@@ -203,7 +205,7 @@ function PullScheduler({ pull, now }: { pull: CacheStatus['pull_scheduler']; now
                 {h.title || 'silinmiş sunucu'}
                 <div className="cell-sub mono">{h.host_id}</div>
               </td>
-              <td className="nowrap" data-label="Son sorgulama" title={new Date(h.last_polled_at).toLocaleString()}>
+              <td className="nowrap" data-label="Son sorgulama" title={formatDateTime(h.last_polled_at)}>
                 {agoText(h.last_polled_at, now)}
               </td>
               <td data-label="Durum">
@@ -270,16 +272,16 @@ function Certificate({ cert, now }: { cert: CacheStatus['tls_certificate']; now:
       </h2>
       <dl className="cache-facts">
         <FactRow label="Kime verilmiş">
-          <span className="mono">{cert.subject || '—'}</span>
+          <MonoValue value={cert.subject} />
         </FactRow>
         <FactRow label="Geçerli adlar">
-          <span className="mono">{names.length > 0 ? names.join(', ') : '—'}</span>
+          <MonoValue value={names.join(', ')} />
         </FactRow>
         <FactRow label="Veren">{cert.self_signed ? 'kendinden imzalı' : <span className="mono">{cert.issuer}</span>}</FactRow>
         <FactRow label="Geçerlilik">
-          {new Date(cert.not_before).toLocaleDateString()} – {new Date(cert.not_after).toLocaleString()}
+          {formatDate(cert.not_before)} – {formatDateTime(cert.not_after)}
         </FactRow>
-        <FactRow label="Dosya değişti">{new Date(cert.file_modified_at).toLocaleString()}</FactRow>
+        <FactRow label="Dosya değişti">{formatDateTime(cert.file_modified_at)}</FactRow>
       </dl>
     </div>
   )

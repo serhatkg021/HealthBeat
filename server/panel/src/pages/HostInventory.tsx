@@ -13,6 +13,8 @@ import { isRuleItem, topicInfo, topicItems, type TopicId } from './ruleTopics'
 import { daemonLabel, reachText, timeSourceState, timeSyncIssues } from './systemState'
 import { formatCount, formatMs, formatOffsetMs } from './units'
 import { useHostRules } from './useHostRules'
+import { formatDateTime } from './datetime'
+import { MonoValue } from '../components/MonoValue'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -38,7 +40,7 @@ function Card({ title, icon: Icon, children, footer }: { title: string; icon: Lu
   )
 }
 
-const when = (at: string, now: number) => <span title={new Date(at).toLocaleString('tr-TR')}>{agoText(at, now)}</span>
+const when = (at: string, now: number) => <span title={formatDateTime(at)}>{agoText(at, now)}</span>
 
 // Sunucu sayfasının "Envanter" sekmesi: makinenin ne olduğu ve bakımı, 2×2 kart. Yan yana kartlar içerik miktarı yakın
 // olacak şekilde eşleşir (Makine ↔ İşletim sistemi ve ağ, Saat ↔ Bakım). Kaynak kullanımı (sıcaklık, süreçler, RAID,
@@ -95,22 +97,26 @@ export function HostInventory({ host, thresholds }: { host: Host; thresholds: Ho
             )}
           </Row>
           <Row label="Makine kimliği (özet)">
-            <span className="mono" title="/etc/machine-id'nin uygulamaya özgü özeti; aynı makinenin iki kez eklenmesini yakalamak içindir">
-              {h ? shortMachineId(h) : '—'}
-            </span>
+            {h?.machine_id_hash ? (
+              <span className="mono" title="/etc/machine-id'nin uygulamaya özgü özeti; aynı makinenin iki kez eklenmesini yakalamak içindir">
+                {shortMachineId(h)}
+              </span>
+            ) : (
+              '—'
+            )}
           </Row>
         </Card>
 
         <Card title="İşletim sistemi ve ağ" icon={Network}>
           <Row label="İşletim sistemi">{h ? osLabel(h) : '—'}</Row>
           <Row label="Kernel · mimari">
-            <span className="mono">{h ? kernelLabel(h) : '—'}</span>
+            <MonoValue value={h ? kernelLabel(h) : null} />
           </Row>
           <Row label="Init · güvenlik modülü">
             {h?.init || '—'} · {h?.security_module ? (SECURITY_MODULE_LABEL[h.security_module] ?? h.security_module) : '—'}
           </Row>
           <Row label="Hostname">
-            <span className="mono">{h?.hostname || '—'}</span>
+            <MonoValue value={h?.hostname} />
           </Row>
           <Row label="IP adresleri">
             {h?.addresses && h.addresses.length > 0 ? (
@@ -228,7 +234,7 @@ export function HostInventory({ host, thresholds }: { host: Host; thresholds: Ho
           </Row>
           <Row label="Çalışma süresi">
             {formatUptime(h?.uptime_seconds)}
-            {h?.boot_time && <span className="muted"> · açılış {new Date(h.boot_time).toLocaleString('tr-TR')}</span>}
+            {h?.boot_time && <span className="muted"> · açılış {formatDateTime(h.boot_time)}</span>}
           </Row>
           <Row label="Başarısız servis">
             {h?.failed_units === undefined ? '—' : h.failed_units > 0 ? <StatusBadge tone="warning">{h.failed_units} servis</StatusBadge> : '0'}

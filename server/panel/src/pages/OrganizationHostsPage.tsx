@@ -20,6 +20,7 @@ import { OrganizationContacts } from './OrganizationContacts'
 import { OrganizationSettingsModal } from './OrganizationSettings'
 import { useDocumentTitle } from '../components/useDocumentTitle'
 import { addHostPath, alertRulesPath, notificationsPath } from '../navigation'
+import { formatDateTime } from './datetime'
 
 const PAGE_SIZE = 20
 
@@ -172,7 +173,7 @@ export function OrganizationHostsPage() {
                   <td data-label="Agent">
                     <AgentBadge host={c} policy={agentPolicy} />
                   </td>
-                  <td className="muted" data-label="Son görülme">{c.last_seen ? new Date(c.last_seen).toLocaleString() : '—'}</td>
+                  <td className="muted" data-label="Son görülme">{formatDateTime(c.last_seen)}</td>
                 </tr>
               ))}
               {hosts.length === 0 && (

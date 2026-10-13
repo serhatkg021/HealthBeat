@@ -5,8 +5,9 @@ import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/PageHeader'
 import { roleLabel } from '../labels'
 import { MAX_FULL_NAME, MAX_PHONE, profilePatch, validateProfile } from './profile'
+import { formatDateTime } from './datetime'
 
-const when = (iso?: string) => (iso ? new Date(iso).toLocaleString() : '—')
+const when = (iso?: string) => formatDateTime(iso)
 
 // Kişinin kendi profili: görünen ad ve telefon düzenlenir; e-posta ve rolü yalnızca bir yönetici değiştirir.
 export function ProfilePage() {
