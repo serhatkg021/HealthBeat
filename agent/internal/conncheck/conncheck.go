@@ -105,8 +105,9 @@ func Run(ctx context.Context, serverURL string, tlsOpts pusher.TLSOptions, send 
 		switch {
 		case errors.As(err, &status) && status.Status == 401:
 			fail(out, "Server token'ı ya da host id'yi kabul etmedi (401).",
-				"Panelde host id'yi kontrol edin. Token kaybolduysa",
-				"Ayarlar → Kimlik bilgisini yenile ile yenisini alın.")
+				"Host id'yi panelde sunucunun Ayarlar → Bağlantı ve kimlik",
+				"kartındakiyle karşılaştırın. Token kaybolduysa aynı",
+				"kartta Kimlik bilgisini yenile ile yenisini alın.")
 			return ResultAuth
 		case errors.As(err, &status):
 			fail(out, fmt.Sprintf("Server raporu reddetti (HTTP %d).", status.Status), shorten(status.Body, 60))

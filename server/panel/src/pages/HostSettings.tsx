@@ -126,6 +126,15 @@ export function HostSettings({
                   <KeyRound size={16} strokeWidth={1.75} />
                   Kimlik bilgisi
                 </h2>
+                {host.mode === 'push' && (
+                  <>
+                    <p className="card-desc">
+                      <strong>Host ID</strong> — agent yapılandırmasındaki <code>host_id</code>. Gizli değildir ve kimlik bilgisi
+                      yenilenince değişmez.
+                    </p>
+                    <CommandLine value={host.id} name="Host ID'yi" />
+                  </>
+                )}
                 <p className="card-desc">
                   Yeni bir kimlik bilgisi üretmek eskisini hemen geçersiz kılar. Yeni değeri agent'ın sunucusunda bu komutla verin;
                   değeri gizli sorar, şifreleyip yazar ve servisi yeniden başlatır:

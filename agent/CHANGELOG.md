@@ -57,7 +57,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   ne yapılacağı sorulur (CA dosyası ver, adresi ya da token'ı yeniden gir, yine de kaydet). Diskler gerçek boyut ve
   dolulukla listelenip ok tuşları ve Boşluk ile seçiliyor; Docker yalnızca kuruluysa soruluyor. Geçersiz girişte aynı soru
   yeniden soruluyor. Var olan yapılandırmada mevcut değerler varsayılan; Enter token dahil değeri koruyor. Kurulumdan
-  sonra ilk raporun gönderildiği journal'dan bekleniyor (~40 sn).
+  sonra ilk raporun gönderildiği journal'dan bekleniyor (~40 sn). Host id sorusu ve 401 mesajı host id'nin panelde nerede
+  olduğunu (sunucunun Ayarlar → Bağlantı ve kimlik kartı) söylüyor.
 - `-check-connection`: push yapılandırmasıyla adres çözme, port, TLS ve tek rapor gönderimini sırayla dener, ilk sorunu
   açıklar; çıkış kodu sorunun sınıfıdır. `-list-mounts`: raporlanabilecek diskleri (yol, dosya sistemi, boyut, doluluk)
   listeler.

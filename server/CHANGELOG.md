@@ -248,6 +248,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   kuralları ve süre koşulu bekleyen alert'ler).
 
 ### Düzeltildi
+- Panel: push sunucusunun host id'si yalnızca sunucu eklenirken token'la birlikte gösteriliyordu; kaybedilince agent'ı
+  yeniden yapılandırırken panelde bulunamıyordu. Artık sunucu Ayarlar → Bağlantı ve kimlik kartında kopyalanabilir
+  duruyor (gizli değildir, kimlik bilgisi yenilenince değişmez); ekleme sonrası not da bunu söylüyor.
 - Bildirim kuralının alıcısı olan kullanıcı organizasyondan çıkarılsa, rolü düşürülse ya da sunucu ataması kaldırılsa da
   o sunucuların alert e-postalarını (sunucu adı, IP ve organizasyonuyla) almaya devam ediyordu: erişim yalnızca kural
   eklenirken denetleniyordu. Artık her bildirimde de denetleniyor; sunucuyu göremeyen kullanıcıya ileti gitmez, kural

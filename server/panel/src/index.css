@@ -1647,6 +1647,16 @@ input[type='checkbox'], input[type='radio'] {
   color: var(--text-primary);
 }
 
+/* Kopyalanacak değer (host id): komut gibi vurgulanmaz. */
+.command-line-value {
+  border-left-width: 1px;
+  background: var(--surface-2);
+}
+
+.command-line-value code {
+  font-weight: 500;
+}
+
 .command-prompt {
   margin-right: 8px;
   color: var(--text-muted);
