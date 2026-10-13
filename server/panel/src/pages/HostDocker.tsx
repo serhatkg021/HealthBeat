@@ -9,6 +9,7 @@ import { formatUptime } from './inventory'
 import { containerLevels, usageTone } from './usage'
 
 // Sunucu sayfasının "Servisler" sekmesindeki Docker bölümü: Docker sürümü, container sayıları/kaynak toplamı ve container listesi.
+// Container yoksa yalnızca bir açıklama kartı.
 export function HostDocker({
   host,
   containers,
@@ -21,13 +22,30 @@ export function HostDocker({
   const s = dockerSummary(containers)
   const version = host.host_info?.docker_version
 
+  // Container yoksa sıfırlı kutular ve boş tablo yerine tek açıklama.
+  if (containers.length === 0) {
+    return (
+      <div className="card">
+        <EmptyState icon={Container}>
+          <div className="empty-state-title">Bu sunucuda Docker container'ı yok</div>
+          <div className="empty-state-hint">
+            {version
+              ? `Docker ${version} kurulu; çalışan ya da durmuş container bildirilmedi.`
+              : 'Docker kurulu değil ya da agent Docker’a erişemiyor.'}
+          </div>
+        </EmptyState>
+      </div>
+    )
+  }
+
   return (
     <div>
       <div className="stat-grid">
         <StatTile label="Docker sürümü" icon={Container} tone="accent" small value={version || '—'} hint={version ? undefined : 'bildirilmedi'} />
         <StatTile label="Container" icon={Box} tone="accent" value={s.total} hint={s.restarted > 0 ? `${s.restarted} tanesi yeniden başlamış` : undefined} />
         <StatTile label="Çalışan" icon={Play} tone="good" value={s.running} />
-        <StatTile label="Çalışmayan" icon={Square} tone={s.notRunning > 0 ? 'warning' : undefined} value={s.notRunning} />
+        {/* Durmuş container her zaman sorun değildir (tek seferlik işler); Genel'deki kartla aynı: yalnızca bilgi. */}
+        <StatTile label="Çalışmayan" icon={Square} value={s.notRunning} />
         <StatTile label="Toplam CPU" icon={Cpu} tone="accent" small value={`%${s.cpuPct.toFixed(1)}`} hint="çalışan container'lar" />
         <StatTile label="Toplam RAM" icon={MemoryStick} tone="accent" small value={formatMB(s.ramMB)} hint="çalışan container'lar" />
       </div>
@@ -74,13 +92,6 @@ export function HostDocker({
                 </tr>
               )
             })}
-            {containers.length === 0 && (
-              <tr>
-                <td colSpan={8} className="empty-cell">
-                  <EmptyState icon={Box}>Docker container'ı bulunamadı.</EmptyState>
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>

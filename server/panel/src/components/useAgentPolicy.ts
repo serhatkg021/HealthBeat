@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { metaApi } from '../api/endpoints'
 import { noPolicy, type AgentPolicy } from '../pages/agentStatus'
+import { setDisplayTimeZone } from '../pages/datetime'
 import type { Meta } from '../types/api'
 
 // Server'ın /meta yanıtı (sürüm politikası, server sürümü) oturum boyunca değişmez (server yapılandırması); her
@@ -21,7 +22,11 @@ export function refreshMeta() {
 function loadMeta(): Promise<LoadedMeta | null> {
   shared ??= metaApi
     .get()
-    .then((m) => ({ ...m, fetchedAt: Date.now() }))
+    .then((m) => {
+      // Panelin bütün zamanları kurulumun saat diliminde gösterilir (pages/datetime.ts).
+      setDisplayTimeZone(m.timezone, m.utc_offset_seconds)
+      return { ...m, fetchedAt: Date.now() }
+    })
     .catch(() => {
       shared = null // bir sonraki çağrıda yeniden dene
       return null
@@ -47,6 +52,20 @@ export function useMeta(): LoadedMeta | null {
     }
   }, [version])
   return meta
+}
+
+// useMetaSettled, /meta isteği sonuçlanınca (başarılı ya da değil) true olur. Sayfa içeriği bunu bekler: zamanlar ilk
+// çizimden itibaren kurulumun saat diliminde görünsün (meta alınamazsa tarayıcının dilimiyle devam edilir).
+export function useMetaSettled(): boolean {
+  const [settled, setSettled] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void loadMeta().finally(() => alive && setSettled(true))
+    return () => {
+      alive = false
+    }
+  }, [])
+  return settled
 }
 
 export function useAgentPolicy(): AgentPolicy {

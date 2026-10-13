@@ -135,6 +135,41 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
+- Panel: tarih ve saatler her yerde **kurulumun saat diliminde** (Ayarlar → Saat dilimi; bakım pencereleri ve
+  e-postalardakiyle aynı) ve tek biçimde (GG.AA.YYYY SS:DD:SS). Önceden alert, denetim kaydı, kuyruk ve log zamanları
+  tarayıcının dilinde ve saat diliminde görünüyordu. Grafik ekseni ve Performans'taki aralık seçicileri de kurulumun
+  diliminde. Boş değer telefon, kernel, hostname gibi eşit aralıklı yazılan alanlarda da aynı uzun tire.
+- Panel: görünüm tutarlı hale getirildi. Bağlantı olan düğmeler (Organizasyon, Profil, sunucu Ayarlar) artık mavi değil;
+  organizasyonun "Alert kuralları", "Bildirim kuralları" ve "Ayarlar" düğmeleri sekme satırında, "Sunucu ekle" arama
+  kutusunun yanında. Agent rozeti normal yazı tipinde; sürümü bilinmeyen agent rozetsiz "bilinmiyor". Bildirim kuralları
+  kartı önizlemeyle aynı genişlikte, ekleme formu tek satırda. Ayarlar'da kutular değer uzunluğuna göre daraldı, menü
+  simgeleri bölüme özgü. Profil kartları aynı genişlikte. Özet'teki "Açık alert'ler" kutuları kaldırıldı (sayaçlar üst
+  çubukta); sunucu Genel'de son görülme Durum kutusunda. Telefonda CPU ve RAM kartları arasındaki fazla boşluk giderildi;
+  arama kutusunun yer tutucusu kesilmiyor. Bakım pencereleri listesindeki server saati kaldırıldı (alt çubukta var).
+- Panel: sunucu sayfasının **Genel** sekmesi bir özet oldu. Üstte Durum · Açık alert'ler (seviye başına sayı, en eski
+  alert'in yaşı, onaylanmışlar) · Agent; altında bildirimin kime gideceği ve etkin alert kuralı sayısı. Ardından Alert
+  kurallarındaki konular birer kart: CPU, Bellek, Disk, Ağ, Sıcaklık, Servisler, Container, Saat (NTP), Sistem bakımı.
+  Her kartta son rapordaki değer ve ne olduğu, ayrıntı satırları, durum çipi (normal / uyarı / kritik), açık alert sayısı
+  ve "etkin / toplam" kural sayısı var; kart ilgili sekmeye, kural sayısı Alert kurallarında o konuya götürür. Uyarı ve
+  kritik kartların kenarı durum renginde. Sunucu çevrimdışıysa değerlerin güncel olmadığı yazılır ve kartlar renksiz
+  gösterilir (son değer artık canlı gibi görünmüyor). Açık sorunlar listesi, CPU/RAM çubukları ve disk kartı kaldırıldı
+  (ayrıntıları Alert'ler ve Performans'ta).
+- Panel: container'ı olmayan sunucuda Docker bölümü sıfırlı kutular ve boş tablo yerine tek açıklama kartı gösteriyor;
+  sistem bilgisi göndermeyen agent'ta Envanter "—" dolu kartlar yerine tek açıklama (biliniyorsa çekirdek, bellek, disk
+  sayısıyla). Durmuş container sayısı uyarı rengi taşımıyor. Alert tablolarında Durum sütunu yalnızca "Tümü"
+  süzgecinde; Bildirim sütununda "gönderildi" sade metin, rozet yalnızca bekleyen, gönderilemeyen ya da bakım sonrasına
+  kalan bildirimde.
+- Panel: Kullanıcılar'da her satır baş harf, ad ve e-posta ile aynı düzende (adı olmayanda "ad girilmemiş"); ada
+  tıklayınca profil açılıyor, rol rozet, hiç giriş yapmamış kullanıcıda "hiç giriş yapmadı", ilk girişte şifre
+  değiştirmesi gerekende rozet; arama ada göre de yapılıyor (yer tutucu buna göre). Kullanıcılar, organizasyon iletişim
+  kişileri ve sistem kişileri tablolarında işlemler satır sonundaki "⋯" menüsünde (silme ayraçtan sonra). Organizasyon
+  iletişim kişisi ekleme ve düzenleme pencerede, "Kişi ekle" listenin üstünde; silme onayı da pencerede.
+- Panel: telefonda (tabloların kart düzenine geçtiği genişlikte) sunucu ve alert listeleri iki satırlık özet. Sunucu:
+  durum noktası, ad, açık alert / bakım / güncellenmesi gereken agent rozeti; altta organizasyon, IP ve çevrimdışıysa ne
+  zamandır görülmediği. Alert: seviye, sunucu, ne kadar önce; altta ne olduğu, sorunlu bildirim ve "Onayla". Satıra
+  dokunmak sunucuyu ya da alert ayrıntısını açar. Dar telefonda üst çubuktaki tema düğmesi (seçim profil menüsünde) ve
+  profil oku gizli, sayfa başlığı kesilmiyor; Performans'ta tarih aralığı alt alta; Bildirim kuralı ekleme formu ve
+  Bakım listesindeki zaman aralığı ekrana sığıyor.
 - Panel: Bildirim → Kanallar 2 sütunlu kart ızgarası (telefonda tek sütun): **E-posta** kartı durumu, sunucu ve gönderen
   adresi, son başarılı denemeyi ve kanalı kullanan kural sayısını iki satırda özetliyor; ayar "Düzenle" penceresinde,
   deneme gönderimi "Deneme gönder" penceresinde. **Slack**, **SMS** ve **Özel webhook** aynı biçimde "Yakında" kartları;

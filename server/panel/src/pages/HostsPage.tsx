@@ -12,6 +12,7 @@ import { OrgPicker } from '../components/ScopePickers'
 import { SearchInput } from '../components/SearchInput'
 import { SecretNotice } from '../components/SecretNotice'
 import { MaintenanceBadge } from '../components/MaintenanceBadge'
+import { HostMobileRow } from '../components/HostMobileRow'
 import { StatusBadge } from '../components/StatusBadge'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
 import { useAgentPolicy } from '../components/useAgentPolicy'
@@ -23,6 +24,7 @@ import type { DashboardOverview, Host } from '../types/api'
 import { AddHostWizard } from './AddHostWizard'
 import { DashboardFilterPanel } from './DashboardFilterPanel'
 import { activeChips, activeCount, applyFilters, emptyFilters, parseFilters, pruneOrgs, writeFilters, type DashboardFilters } from './dashboardFilters'
+import { formatDateTime } from './datetime'
 
 const PAGE = 20
 const REFRESH_MS = 60_000
@@ -196,7 +198,7 @@ function HostList() {
               setPage(1)
             }}
           />
-          <table className="stack">
+          <table className="stack compact-mobile">
             <thead>
               <tr>
                 <th>Sunucu</th>
@@ -212,6 +214,14 @@ function HostList() {
             <tbody>
               {pageRows.map(({ host: c, critical, warning }) => (
                 <tr key={c.id}>
+                  <HostMobileRow
+                    host={c}
+                    orgName={organizations.length > 0 ? orgName.get(c.organization_id) : undefined}
+                    critical={critical}
+                    warning={warning}
+                    policy={agentPolicy}
+                    now={now.getTime()}
+                  />
                   <td className="primary">
                     <Link to={`/hosts/${c.id}`}>{c.title}</Link>
                   </td>
@@ -246,7 +256,7 @@ function HostList() {
                     )}
                   </td>
                   <td className="muted" data-label="Son görülme">
-                    {c.last_seen ? new Date(c.last_seen).toLocaleString() : '—'}
+                    {formatDateTime(c.last_seen)}
                   </td>
                 </tr>
               ))}

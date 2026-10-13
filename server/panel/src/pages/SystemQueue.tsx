@@ -20,6 +20,7 @@ import {
   queueStatus,
   type QueueFilter,
 } from './queue'
+import { formatDateTime } from './datetime'
 
 const PAGE_SIZE = 50
 
@@ -138,7 +139,7 @@ export function SystemQueue() {
               return (
                 <tr key={i.id}>
                   <td className="muted nowrap" data-label="Oluşturulma">
-                    {new Date(i.created_at).toLocaleString()}
+                    {formatDateTime(i.created_at)}
                   </td>
                   <td data-label="Tür">
                     {queueKindLabel(i.kind)}
@@ -151,8 +152,8 @@ export function SystemQueue() {
                   <td className="primary">{i.subject}</td>
                   <td data-label="Durum">
                     <StatusBadge tone={status.tone}>{status.label}</StatusBadge>
-                    <div className="cell-sub nowrap" title={time.at ? new Date(time.at).toLocaleString() : undefined}>
-                      {time.at && i.status !== 'pending' && i.status !== 'retrying' ? new Date(time.at).toLocaleString() : time.label}
+                    <div className="cell-sub nowrap" title={time.at ? formatDateTime(time.at) : undefined}>
+                      {time.at && i.status !== 'pending' && i.status !== 'retrying' ? formatDateTime(time.at) : time.label}
                     </div>
                   </td>
                   <td className="nowrap" data-label="Deneme">

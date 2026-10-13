@@ -2,6 +2,7 @@
 
 import type { LogDay, LogEntry, LogFiles } from '../types/api.ts'
 import { formatBytes } from './hardwareTotals.ts'
+import { formatTime, parseInputValue } from './datetime.ts'
 
 // En düşük seviye süzgeci: seçilen seviye ve üstü gösterilir.
 export const LOG_LEVELS: { value: string; label: string }[] = [
@@ -51,13 +52,13 @@ export function prettyValue(value: string): string {
   }
 }
 
-// entryTime, satır zamanını tarayıcının saatinde, milisaniyesiyle gösterir ("22:41:10.631"); zamanı yoksa "—".
+// entryTime, satır zamanını panelin saat diliminde (kurulumun; datetime.ts), milisaniyesiyle gösterir ("22:41:10.631");
+// zamanı yoksa "—".
 export function entryTime(time: string | null): string {
   if (!time) return '—'
   const d = new Date(time)
   if (Number.isNaN(d.getTime())) return '—'
-  const p = (n: number, w = 2) => String(n).padStart(w, '0')
-  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`
+  return `${formatTime(d)}.${String(d.getUTCMilliseconds()).padStart(3, '0')}`
 }
 
 // dayOptionLabel, gün seçicideki satırdır: "2026-10-02 · 86.1 KB · 3 parça".
@@ -72,12 +73,11 @@ export function diskUsage(f: Pick<LogFiles, 'total_bytes' | 'max_total_bytes'>):
   return { pct: Math.min(100, (f.total_bytes / f.max_total_bytes) * 100), text: `${used} / ${formatBytes(f.max_total_bytes)}` }
 }
 
-// clockToInstant, seçili günün tarayıcı saatindeki "SS:DD" anını RFC3339'a çevirir; boş ya da geçersizse undefined.
-// Günler server'ın tarihine göre ayrılır: gece yarısına yakın bir saat komşu günün dosyasında olabilir.
+// clockToInstant, seçili günün panel saatindeki (kurulumun saat dilimi) "SS:DD" anını RFC3339'a çevirir; boş ya da
+// geçersizse undefined. Günler server'ın tarihine göre ayrılır: gece yarısına yakın bir saat komşu günün dosyasında olabilir.
 export function clockToInstant(day: string, clock: string): string | undefined {
   if (!/^\d{2}:\d{2}$/.test(clock)) return undefined
-  const d = new Date(`${day}T${clock}:00`)
-  return Number.isNaN(d.getTime()) ? undefined : d.toISOString()
+  return parseInputValue(`${day}T${clock}`)?.toISOString()
 }
 
 export interface LogFilters {

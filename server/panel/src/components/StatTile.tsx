@@ -13,9 +13,11 @@ interface Props {
   hint?: ReactNode
   // Verilirse kutucuk o sayfaya giden bir bağlantıdır (ör. Özet'ten Sunucular'a süzgeçle).
   to?: string
+  // Yerleşim için ek sınıf (ör. telefonda öne alınan kutu).
+  className?: string
 }
 
-export function StatTile({ label, value, icon: Icon, tone, small, hint, to }: Props) {
+export function StatTile({ label, value, icon: Icon, tone, small, hint, to, className }: Props) {
   const body = (
     <>
       <div className="stat-tile-head">
@@ -31,10 +33,10 @@ export function StatTile({ label, value, icon: Icon, tone, small, hint, to }: Pr
     </>
   )
   return to ? (
-    <Link to={to} className="stat-tile stat-tile-link">
+    <Link to={to} className={`stat-tile stat-tile-link${className ? ` ${className}` : ''}`}>
       {body}
     </Link>
   ) : (
-    <div className="stat-tile">{body}</div>
+    <div className={`stat-tile${className ? ` ${className}` : ''}`}>{body}</div>
   )
 }

@@ -12,6 +12,8 @@ import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
 import { AgentBadge } from '../components/AgentBadge'
+import { HostMobileRow } from '../components/HostMobileRow'
+import { useNow } from '../components/useNow'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import { osLabel } from './inventory'
 import { Contact, Plus, Server, Settings } from 'lucide-react'
@@ -20,12 +22,14 @@ import { OrganizationContacts } from './OrganizationContacts'
 import { OrganizationSettingsModal } from './OrganizationSettings'
 import { useDocumentTitle } from '../components/useDocumentTitle'
 import { addHostPath, alertRulesPath, notificationsPath } from '../navigation'
+import { formatDateTime } from './datetime'
 
 const PAGE_SIZE = 20
 
 export function OrganizationHostsPage() {
   const { id } = useParams<{ id: string }>()
   const agentPolicy = useAgentPolicy()
+  const now = useNow(60_000)
   const { can } = useAuth()
   const canAddHost = can('host.create')
   const canSeeSettings = can('organization.update') || can('organization.delete')
@@ -99,15 +103,24 @@ export function OrganizationHostsPage() {
             </>
           ) : undefined
         }
+      />
+      <OrganizationSettingsModal
+        organization={settingsOpen ? org : null}
+        orgs={allOrgs}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={loadOrg}
+        onDeleted={() => navigate('/organizations')}
+      />
+      {error && <div className="error-banner">{error}</div>}
+
+      <Tabs
+        items={tabItems}
+        active={tab}
+        onChange={setTab}
+        label="Organizasyon sunucu bölümleri"
         actions={
           id && (
             <>
-              {canAddHost && (
-                <Link className="btn btn-sm" to={addHostPath(id)}>
-                  <Plus size={15} strokeWidth={1.9} />
-                  Sunucu ekle
-                </Link>
-              )}
               {can('threshold.view') && (
                 <Link className="btn btn-sm" to={alertRulesPath({ kind: 'org', id })}>
                   Alert kuralları →
@@ -128,24 +141,20 @@ export function OrganizationHostsPage() {
           )
         }
       />
-      <OrganizationSettingsModal
-        organization={settingsOpen ? org : null}
-        orgs={allOrgs}
-        onClose={() => setSettingsOpen(false)}
-        onSaved={loadOrg}
-        onDeleted={() => navigate('/organizations')}
-      />
-      {error && <div className="error-banner">{error}</div>}
-
-      <Tabs items={tabItems} active={tab} onChange={setTab} label="Organizasyon sunucu bölümleri" />
 
       <TabPanel id="sunucular" active={tab}>
         <div className="toolbar">
           <SearchInput value={q} onChange={setSearch} placeholder="Sunucu adı ya da IP ara…" />
+          {id && canAddHost && (
+            <Link className="btn btn-primary" to={addHostPath(id)}>
+              <Plus size={15} strokeWidth={1.9} />
+              Sunucu ekle
+            </Link>
+          )}
         </div>
         <div className="card table-card">
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
-          <table className="stack">
+          <table className="stack compact-mobile">
             <thead>
               <tr>
                 <th>Sunucu</th>
@@ -160,6 +169,7 @@ export function OrganizationHostsPage() {
             <tbody>
               {hosts.map((c) => (
                 <tr key={c.id} className="clickable">
+                  <HostMobileRow host={c} policy={agentPolicy} now={now} />
                   <td className="primary">
                     <Link to={`/hosts/${c.id}`}>{c.title}</Link>
                   </td>
@@ -172,7 +182,7 @@ export function OrganizationHostsPage() {
                   <td data-label="Agent">
                     <AgentBadge host={c} policy={agentPolicy} />
                   </td>
-                  <td className="muted" data-label="Son görülme">{c.last_seen ? new Date(c.last_seen).toLocaleString() : '—'}</td>
+                  <td className="muted" data-label="Son görülme">{formatDateTime(c.last_seen)}</td>
                 </tr>
               ))}
               {hosts.length === 0 && (

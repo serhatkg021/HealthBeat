@@ -3,6 +3,7 @@ import { auditApi } from '../api/endpoints'
 import type { AuditLogEntry } from '../types/api'
 import { EmptyState } from '../components/EmptyState'
 import { ScrollText } from 'lucide-react'
+import { formatDateTime } from './datetime'
 
 // Filtreler eylem önekleridir ve server tarafından eşlenir (starts_with).
 const CATEGORIES: { value: string; label: string }[] = [
@@ -85,7 +86,7 @@ export function AuditPage() {
             {entries.map((e) => (
               <tr key={e.id}>
                 <td className="muted nowrap" data-label="Zaman">
-                  {new Date(e.created_at).toLocaleString()}
+                  {formatDateTime(e.created_at)}
                 </td>
                 <td className="primary">{e.actor_email}</td>
                 <td data-label="İşlem">

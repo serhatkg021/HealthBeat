@@ -30,7 +30,7 @@ test('disk mounts are sorted, unique and capped; a mount missing from a report i
 test('labels add the date only when the span is longer than a day', () => {
   const ms = new Date(2026, 9, 5, 7, 8, 9).getTime()
   assert.equal(formatPoint(ms, 60 * 60 * 1000), '07:08:09')
-  assert.equal(formatPoint(ms, 2 * 24 * 60 * 60 * 1000), '05-10-2026 07:08:09')
+  assert.equal(formatPoint(ms, 2 * 24 * 60 * 60 * 1000), '05.10.2026 07:08:09')
   assert.equal(isLongSpan(24 * 60 * 60 * 1000), false)
   assert.equal(isLongSpan(24 * 60 * 60 * 1000 + 1), true)
 })

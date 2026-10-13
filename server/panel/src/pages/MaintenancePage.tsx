@@ -211,11 +211,6 @@ export function MaintenancePage() {
             </div>
             <SearchInput value={query} onChange={setQuery} placeholder="Açıklama ya da kapsam ara…" />
           </div>
-          {clock && (
-            <span className="muted server-clock-inline tnum" title={`Bakım saatleri kurulumun saat dilimine göredir: ${clock.timezone} (${clock.offset})`}>
-              Server saati {clock.label}
-            </span>
-          )}
         </div>
         <div className="card table-card">
           <table className="stack maintenance-table">
@@ -272,7 +267,17 @@ export function MaintenancePage() {
                         {occ ? (
                           <>
                             <span className="time-kind">{occ.kind}</span>
-                            {occurrenceText(occ.start_local, occ.end_local)}
+                            {/* Başlangıç ve bitiş ayrı parçalar: dar ekranda tarihin ortasından değil " – "den bölünür. */}
+                            <span className="time-range">
+                              {occurrenceText(occ.start_local, occ.end_local)
+                                .split(' – ')
+                                .map((part, i) => (
+                                  <Fragment key={i}>
+                                    {i > 0 && ' '}
+                                    <span>{i === 0 ? `${part} –` : part}</span>
+                                  </Fragment>
+                                ))}
+                            </span>
                           </>
                         ) : (
                           '—'

@@ -8,9 +8,12 @@ import { StatusBadge } from '../components/StatusBadge'
 import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
-import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel } from '../labels'
+import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel, alertSubjectText } from '../labels'
 import { BellOff, Check, Info } from 'lucide-react'
 import { AlertDetail, NotificationBadge } from './AlertDetail'
+import { AlertMobileRow } from './AlertMobileRow'
+import { useNow } from '../components/useNow'
+import { formatDateTime } from './datetime'
 
 const STATUS_TABS: { value: AlertStatus | ''; label: string }[] = [
   { value: 'open', label: 'Açık' },
@@ -27,6 +30,7 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
   const { can } = useAuth()
   const [status, setStatus] = useState<AlertStatus | ''>('open')
   const [selected, setSelected] = useState<Alert | null>(null)
+  const now = useNow(60_000)
 
   const {
     items: alerts,
@@ -59,7 +63,9 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
   // çözülme her zaman boştur (onaylanan bir alert asla kendiliğinden çözülmez — bkz. üstteki not).
   const showAcknowledged = status !== 'open'
   const showResolved = status === 'resolved' || status === ''
-  const columnCount = 5 + Number(showAcknowledged) + Number(showResolved) + 1
+  // Süzgeç tek bir durumdaysa her satırda aynı durum yazardı; sütun yalnızca "Tümü"nde.
+  const showStatus = status === ''
+  const columnCount = 4 + Number(showStatus) + Number(showAcknowledged) + Number(showResolved) + 1
 
   return (
     <div>
@@ -78,12 +84,12 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
 
       <div className="card table-card">
         <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
-        <table className="stack">
+        <table className="stack compact-mobile">
           <thead>
             <tr>
               <th>Metrik</th>
               <th>Seviye</th>
-              <th>Durum</th>
+              {showStatus && <th>Durum</th>}
               <th>Oluşturulma</th>
               {showAcknowledged && <th>Onaylanma</th>}
               {showResolved && <th>Çözülme</th>}
@@ -94,21 +100,29 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
           <tbody>
             {alerts.map((a) => (
               <tr key={a.id}>
+                <AlertMobileRow
+                  alert={a}
+                  showStatus={showStatus}
+                  canAcknowledge={can('alert.acknowledge')}
+                  onOpen={() => setSelected(a)}
+                  onAcknowledge={() => handleAcknowledge(a.id)}
+                  now={now}
+                />
                 <td className="primary" data-label="Metrik">
                   {alertMetricLabel(a.alert_type)}
-                  {a.subject && <span className="muted"> · {a.subject}</span>}
+                  {a.subject && <span className="muted"> · {alertSubjectText(a.alert_type, a.subject)}</span>}
                   {alertReading(a) && <div className="muted tnum">{alertReading(a)}</div>}
                 </td>
                 <td data-label="Seviye">
                   <StatusBadge tone={alertLevelTone(a.level)}>{alertLevelLabel(a.level)}</StatusBadge>
                 </td>
-                <td className="muted" data-label="Durum">{alertStatusLabel(a.status)}</td>
-                <td className="muted" data-label="Oluşturulma">{new Date(a.created_at).toLocaleString()}</td>
+                {showStatus && <td className="muted" data-label="Durum">{alertStatusLabel(a.status)}</td>}
+                <td className="muted" data-label="Oluşturulma">{formatDateTime(a.created_at)}</td>
                 {showAcknowledged && (
-                  <td className="muted" data-label="Onaylanma">{a.acknowledged_at ? new Date(a.acknowledged_at).toLocaleString() : '—'}</td>
+                  <td className="muted" data-label="Onaylanma">{formatDateTime(a.acknowledged_at)}</td>
                 )}
                 {showResolved && (
-                  <td className="muted" data-label="Çözülme">{a.resolved_at ? new Date(a.resolved_at).toLocaleString() : '—'}</td>
+                  <td className="muted" data-label="Çözülme">{formatDateTime(a.resolved_at)}</td>
                 )}
                 <td data-label="Bildirim">
                   <NotificationBadge status={a.notification_status} deferred={a.notify_pending} />

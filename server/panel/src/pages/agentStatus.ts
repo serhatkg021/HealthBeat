@@ -78,6 +78,8 @@ export interface AgentBadgeInfo {
   text: string
   tone: Tone
   title: string
+  // Sürüm hiç bilinmiyor: rozet değil, sönük düz metin olarak gösterilir.
+  plain?: boolean
 }
 
 const capitalize = (s: string) => s.charAt(0).toLocaleUpperCase('tr-TR') + s.slice(1)
@@ -88,9 +90,9 @@ export function agentBadgeInfo(c: AgentFields, policy: AgentPolicy): AgentBadgeI
   const status = capitalize(AGENT_KIND_LABEL[kind])
   const title = hint ? `${status}. ${hint}` : status
   if (c.agent_version) return { text: `v${c.agent_version}`, tone: AGENT_KIND_TONE[kind], title }
-  // Sürüm yok: eski (protokol 1) agent kendini "eski agent" diye gösterir; hiç rapor gelmediyse çizgi.
+  // Sürüm yok: eski (protokol 1) agent kendini "eski agent" diye gösterir; hiç rapor gelmediyse düz "bilinmiyor".
   if (kind === 'legacy') return { text: AGENT_KIND_LABEL.legacy, tone: AGENT_KIND_TONE.legacy, title }
-  return { text: '—', tone: 'neutral', title: 'Sürüm bilgisi yok (henüz rapor gelmedi ya da okunamadı).' }
+  return { text: 'bilinmiyor', tone: 'neutral', title: 'Sürüm bilgisi yok (henüz rapor gelmedi ya da okunamadı).', plain: true }
 }
 
 // Ne yapılması gerektiğini söyleyen açıklama; güncel/bilinmeyen için boş.

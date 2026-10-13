@@ -10,7 +10,7 @@ import { CommandPalette } from './CommandPalette'
 import { HeaderSlotContext } from './headerSlot'
 import { ProfileMenu } from './ProfileMenu'
 import { SystemTicker } from './SystemTicker'
-import { useServerVersion } from './useAgentPolicy'
+import { useMetaSettled, useServerVersion } from './useAgentPolicy'
 import { useServerClock } from './useServerClock'
 import { useDocumentTitle } from './useDocumentTitle'
 import { useOpenAlertCounts } from './useOpenAlertCounts'
@@ -85,6 +85,7 @@ export function Layout() {
   useDocumentTitle(pageTitle(pathname))
   useScrollStrips()
   const clock = useServerClock()
+  const metaSettled = useMetaSettled()
   const version = versionInfo(typeof __PANEL_VERSION__ === 'string' ? __PANEL_VERSION__ : 'dev', useServerVersion())
   const counts = useOpenAlertCounts(!!user && can('alert.view') && can('dashboard.view'))
   const notices = useSystemNotices(!!user && can('settings.view'), version.mismatch ? version.title : null)
@@ -211,7 +212,7 @@ export function Layout() {
 
         <main className="main">
           <HeaderSlotContext.Provider value={titleSlot}>
-            <Outlet />
+            {metaSettled && <Outlet />}
           </HeaderSlotContext.Provider>
         </main>
 

@@ -4,7 +4,14 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-13 — Bildirim → Kanallar kart düzeninde: E-posta özet kartı (ayar ve deneme gönderimi
+**Son güncelleme:** 2026-10-13 — **Panel tasarım toparlaması** (yalnızca panel): zamanlar her yerde kurulumun saat
+diliminde ve tek biçimde (GG.AA.YYYY SS:DD:SS); düğme, rozet ve kart genişlikleri tutarlı. Sunucu sayfasının **Genel**
+sekmesi bir özet oldu: Durum · Açık alert'ler · Agent, bildirim/kural özeti ve Alert kuralları konularına göre 9 kart (son
+değer, durum çipi, açık alert, etkin kural sayısı; çevrimdışı sunucuda değerler renksiz ve "güncel değil"). Boş Docker
+ve envanter tek açıklama kartında; alert tablolarında tekrar eden sütun ve rozetler kalktı. Kullanıcı ve kişi
+tablolarında işlemler "⋯" menüsünde, iletişim kişisi ekleme pencerede. Telefonda sunucu ve alert listeleri iki satır;
+dar ekranda başlık, tarih seçici ve formlar sığıyor. hbe2e'de protokol 4 agent'la (test-1) masaüstü, koyu tema ve
+telefon görünümünde denendi. Önceki: 2026-10-13 — Bildirim → Kanallar kart düzeninde: E-posta özet kartı (ayar ve deneme gönderimi
 pencerede), Slack, SMS ve Özel webhook "Yakında" kartları. Aynı gün: **Bildirim modeli sadeleşti** (server + panel): kanal "nasıl", bildirim kuralı "kime"
 gider. "Sistem sahipleri" yerine bildirim kurallarında **Sistem** kapsamı (bütün sunucular; alıcı süper admin ya da sistem
 kişisi); sistem sahipleri ile organizasyonların iletişim kişileri tek `contacts` tablosunda (organizasyonu boş = sistem

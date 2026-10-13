@@ -15,11 +15,14 @@ export function Tabs({
   active,
   onChange,
   label,
+  actions,
 }: {
   items: TabItem[]
   active: string
   onChange: (id: string) => void
   label: string
+  // Sekme satırının sağındaki sayfa işlemleri (ör. organizasyonun Ayarlar düğmesi); dar ekranda sekmelerin üstüne iner.
+  actions?: ReactNode
 }) {
   const ids = items.map((i) => i.id)
 
@@ -31,7 +34,7 @@ export function Tabs({
     document.getElementById(`tab-${target}`)?.focus()
   }
 
-  return (
+  const tabs = (
     <div className="tabs" role="tablist" aria-label={label}>
       {items.map((item) => (
         <button
@@ -51,6 +54,13 @@ export function Tabs({
           {item.badge !== undefined && <span className="tab-badge">{item.badge}</span>}
         </button>
       ))}
+    </div>
+  )
+  if (!actions) return tabs
+  return (
+    <div className="tabs-row">
+      {tabs}
+      <div className="tabs-actions">{actions}</div>
     </div>
   )
 }

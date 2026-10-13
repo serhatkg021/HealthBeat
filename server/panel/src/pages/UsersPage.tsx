@@ -12,8 +12,12 @@ import { Pagination } from '../components/Pagination'
 import { FieldLabel } from '../components/FieldLabel'
 import { InfoTip } from '../components/InfoTip'
 import { Building2, Pencil, Server, Trash2, UserPlus, Users, UserCog } from 'lucide-react'
+import { RowMenu, type RowMenuItem } from '../components/RowMenu'
+import { StatusBadge } from '../components/StatusBadge'
 import { HostAssignment } from './HostAssignment'
 import { buildTree } from './orgTree'
+import { formatDateTime } from './datetime'
+import { MonoValue } from '../components/MonoValue'
 
 const PAGE_SIZE = 20
 
@@ -156,6 +160,26 @@ export function UsersPage() {
     }
   }
 
+  // Satırın "⋯" menüsü: profil, role göre atama, ayraçtan sonra silme.
+  function userActions(u: User): RowMenuItem[] {
+    const items: RowMenuItem[] = []
+    if (canUpdate) items.push({ label: 'Profili düzenle', icon: Pencil, onSelect: () => openProfile(u) })
+    if (canUpdate && u.role === 'org_admin') items.push({ label: 'Organizasyon ata', icon: Building2, onSelect: () => openAssign(u.id) })
+    if (canUpdate && u.role === 'operator') {
+      items.push({
+        label: 'Sunucu ata',
+        icon: Server,
+        onSelect: () => {
+          setAssigningUserId(null)
+          setAssigningHostsTo(u)
+          setTab('atama')
+        },
+      })
+    }
+    if (can('user.delete')) items.push({ label: 'Sil', icon: Trash2, danger: true, separated: items.length > 0, onSelect: () => handleDelete(u.id) })
+    return items
+  }
+
   return (
     <div>
       <PageHeader title="Kullanıcılar" />
@@ -165,7 +189,7 @@ export function UsersPage() {
 
       <TabPanel id="liste" active={tab}>
         <div className="toolbar">
-          <SearchInput value={q} onChange={setSearch} placeholder="E-posta ara…" />
+          <SearchInput value={q} onChange={setSearch} placeholder="Ad ya da e-posta ara…" />
         </div>
         <div className="card table-card">
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
@@ -181,46 +205,40 @@ export function UsersPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.id}>
+                <tr key={u.id} className="menu-row">
                   <td className="primary">
-                    {u.full_name ?? u.email}
-                    {u.full_name && <div className="muted">{u.email}</div>}
+                    <div className="user-cell">
+                      <span className="avatar" aria-hidden="true">
+                        {(u.full_name || u.email).charAt(0)}
+                      </span>
+                      <div className="user-cell-text">
+                        {canUpdate ? (
+                          <button type="button" className="link-btn user-cell-name" onClick={() => openProfile(u)} title="Profili düzenle">
+                            {u.full_name || u.email}
+                          </button>
+                        ) : (
+                          <span className="user-cell-name">{u.full_name || u.email}</span>
+                        )}
+                        <div className="muted">{u.full_name ? u.email : 'ad girilmemiş'}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td className="muted mono" data-label="Telefon">{u.phone ?? '—'}</td>
-                  <td className="muted" data-label="Rol">{ROLE_LABELS[u.role]}</td>
-                  <td className="muted" data-label="Son giriş">{u.last_login_at ? new Date(u.last_login_at).toLocaleString() : '—'}</td>
+                  <td className="muted" data-label="Telefon"><MonoValue value={u.phone} /></td>
+                  <td data-label="Rol">
+                    {u.role === 'super_admin' ? <span className="badge badge-info badge-plain">{ROLE_LABELS[u.role]}</span> : <span className="badge badge-neutral badge-plain">{ROLE_LABELS[u.role]}</span>}
+                  </td>
+                  <td className="muted" data-label="Son giriş">
+                    {u.last_login_at ? formatDateTime(u.last_login_at) : 'hiç giriş yapmadı'}
+                    {u.must_change_password && (
+                      <div className="cell-badge">
+                        <StatusBadge tone="warning" title="İlk girişte yeni şifre seçmesi gerekiyor">
+                          şifre değiştirmeli
+                        </StatusBadge>
+                      </div>
+                    )}
+                  </td>
                   <td className="actions">
-                    {canUpdate && (
-                      <button className="btn btn-sm" onClick={() => openProfile(u)}>
-                        <Pencil size={14} strokeWidth={1.9} />
-                        Profil
-                      </button>
-                    )}
-                    {canUpdate && u.role === 'org_admin' && (
-                      <button className="btn btn-sm" onClick={() => openAssign(u.id)}>
-                        <Building2 size={14} strokeWidth={1.9} />
-                        Organizasyon ata
-                      </button>
-                    )}
-                    {canUpdate && u.role === 'operator' && (
-                      <button
-                        className="btn btn-sm"
-                        onClick={() => {
-                          setAssigningUserId(null)
-                          setAssigningHostsTo(u)
-                          setTab('atama')
-                        }}
-                      >
-                        <Server size={14} strokeWidth={1.9} />
-                        Sunucu ata
-                      </button>
-                    )}
-                    {can('user.delete') && (
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDelete(u.id)}>
-                        <Trash2 size={14} strokeWidth={1.9} />
-                        Sil
-                      </button>
-                    )}
+                    <RowMenu label={u.full_name || u.email} items={userActions(u)} />
                   </td>
                 </tr>
               ))}

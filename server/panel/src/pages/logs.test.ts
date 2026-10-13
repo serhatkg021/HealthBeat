@@ -41,7 +41,7 @@ test('prettyValue indents JSON and leaves everything else alone', () => {
   assert.equal(prettyValue(''), '')
 })
 
-test('entryTime shows the browser-local clock with milliseconds', () => {
+test('entryTime shows the panel clock with milliseconds (browser zone until the installation zone is known)', () => {
   const local = new Date(2026, 9, 2, 22, 41, 10, 631)
   assert.equal(entryTime(local.toISOString()), '22:41:10.631')
   assert.equal(entryTime(null), '—')

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { Clock, Clock4, Database, FileText, Globe, RotateCcw, Save, type LucideIcon } from 'lucide-react'
+import { Clock, Database, FileText, Gauge, Globe, Package, RotateCcw, Save, type LucideIcon } from 'lucide-react'
 import { ApiError } from '../api/client'
 import { settingsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
@@ -12,20 +12,21 @@ import { timezoneOptions } from './timezones'
 import { useTab } from '../components/useTab'
 import type { SettingsField, SettingsResponse } from '../types/api'
 import { SETTINGS_SECTIONS, buildPatch, defaultText, fieldMessage, toDisplay, type SectionDef } from './settingsForm'
+import { formatDateTime } from './datetime'
 
 const SECTION_PARAM = 'bolum'
 
 const NAV: { id: string; label: string; icon: LucideIcon }[] = [
-  { id: 'agent', label: 'Agent sürümleri', icon: Database },
-  { id: 'saklama', label: 'Veri saklama', icon: Clock },
-  { id: 'oturum', label: 'Oturum ve hız sınırları', icon: Clock },
+  { id: 'agent', label: 'Agent sürümleri', icon: Package },
+  { id: 'saklama', label: 'Veri saklama', icon: Database },
+  { id: 'oturum', label: 'Oturum ve hız sınırları', icon: Gauge },
   { id: 'panel', label: 'Panel adresi', icon: Globe },
-  { id: 'saat', label: 'Saat dilimi', icon: Clock4 },
+  { id: 'saat', label: 'Saat dilimi', icon: Clock },
   { id: 'log', label: 'Loglama', icon: FileText },
 ]
 
 const message = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback)
-const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString() : '—')
+const when = (iso: string | null | undefined) => formatDateTime(iso)
 
 // Sistem ayarları: kurulum genelindeki, yeniden başlatmadan değişen ayarlar. Okumak settings.view, değiştirmek
 // settings.manage ister (varsayılan olarak yalnızca süper admin).
