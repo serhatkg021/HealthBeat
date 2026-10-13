@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type ComponentProps, type FormEvent, type ReactNode } from 'react'
 import { Braces, Mail, Pencil, Plus, Save, Send, Smartphone, Trash2, Users } from 'lucide-react'
+import { RowMenu } from '../components/RowMenu'
 import { ApiError } from '../api/client'
 import { channelsApi, systemContactsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
@@ -466,7 +467,7 @@ export function SystemContactsSection({ canEdit }: { canEdit: boolean }) {
         </thead>
         <tbody>
           {contacts?.map((c) => (
-            <tr key={c.id}>
+            <tr key={c.id} className={canEdit ? 'menu-row' : undefined}>
               <td className="primary">{c.name}</td>
               <td data-label="E-posta">{c.email ?? <span className="muted">—</span>}</td>
               <td data-label="Telefon" className="tnum">
@@ -477,14 +478,13 @@ export function SystemContactsSection({ canEdit }: { canEdit: boolean }) {
               </td>
               {canEdit && (
                 <td className="actions">
-                  <button className="btn btn-sm" type="button" onClick={() => { setFormError(null); setEditing({ id: c.id, input: { name: c.name, email: c.email ?? '', phone: c.phone ?? '' } }) }}>
-                    <Pencil size={14} strokeWidth={1.9} />
-                    Düzenle
-                  </button>
-                  <button className="btn btn-sm btn-danger" type="button" onClick={() => setDeleting(c)}>
-                    <Trash2 size={14} strokeWidth={1.9} />
-                    Sil
-                  </button>
+                  <RowMenu
+                    label={c.name}
+                    items={[
+                      { label: 'Düzenle', icon: Pencil, onSelect: () => { setFormError(null); setEditing({ id: c.id, input: { name: c.name, email: c.email ?? '', phone: c.phone ?? '' } }) } },
+                      { label: 'Sil', icon: Trash2, danger: true, separated: true, onSelect: () => setDeleting(c) },
+                    ]}
+                  />
                 </td>
               )}
             </tr>

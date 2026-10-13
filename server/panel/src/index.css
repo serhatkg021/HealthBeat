@@ -1122,6 +1122,11 @@ input[type='checkbox'], input[type='radio'] {
   padding-left: 32px !important;
 }
 
+/* Araç çubuğunun solundaki kısa açıklama (sağında ekleme düğmesi). */
+.toolbar-note {
+  font-size: 13px;
+}
+
 /* Araç çubuğunda yer tutucu metin ("Sunucu, metrik ya da mount ara…") kesilmeyecek genişlikte; dar ekranda daralır. */
 .toolbar > .search-input {
   flex: 0 1 320px;
@@ -3860,6 +3865,35 @@ textarea {
   flex-wrap: wrap;
 }
 
+/* Kullanıcılar tablosu: baş harf yuvarlağı, yanında ad (tıklanınca profil) ve e-posta; her satır iki satırlı. */
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.user-cell-text {
+  min-width: 0;
+}
+
+.user-cell-name {
+  margin: 0;
+  color: var(--text-primary);
+  font-weight: 500;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.user-cell .muted {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.cell-badge {
+  margin-top: 4px;
+}
+
 /* Tablo hücresinde ana değerin altındaki küçük, sönük ikinci satır. */
 .cell-sub {
   margin-top: 2px;
@@ -5421,6 +5455,11 @@ textarea {
   height: 30px;
 }
 
+/* Tablo hücresinde sağa yaslı (icon-btn blok düzeyinde grid olduğu için text-align'ı izlemez). */
+td.actions .row-menu-button {
+  margin-left: auto;
+}
+
 .row-menu {
   position: fixed;
   z-index: 70;
@@ -5470,6 +5509,24 @@ textarea {
 }
 
 @media (max-width: 860px) {
+  /* İşlemleri yalnızca "⋯" olan satırlar (menu-row): kart düzeninde ⋯ sağ üst köşede, ayrı satır kaplamaz. */
+  table.stack tr.menu-row {
+    position: relative;
+  }
+
+  table.stack tr.menu-row td.primary {
+    padding-right: 40px;
+  }
+
+  table.stack tr.menu-row td.actions {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
   /* Kart düzeninde ok sol üstte, ⋯ sağ üstte; ayrıntı kartın altında tam genişlikte. */
   .maintenance-table tr.maintenance-row {
     position: relative;

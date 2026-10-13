@@ -159,6 +159,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   sayısıyla). Durmuş container sayısı uyarı rengi taşımıyor. Alert tablolarında Durum sütunu yalnızca "Tümü"
   süzgecinde; Bildirim sütununda "gönderildi" sade metin, rozet yalnızca bekleyen, gönderilemeyen ya da bakım sonrasına
   kalan bildirimde.
+- Panel: Kullanıcılar'da her satır baş harf, ad ve e-posta ile aynı düzende (adı olmayanda "ad girilmemiş"); ada
+  tıklayınca profil açılıyor, rol rozet, hiç giriş yapmamış kullanıcıda "hiç giriş yapmadı", ilk girişte şifre
+  değiştirmesi gerekende rozet; arama ada göre de yapılıyor (yer tutucu buna göre). Kullanıcılar, organizasyon iletişim
+  kişileri ve sistem kişileri tablolarında işlemler satır sonundaki "⋯" menüsünde (silme ayraçtan sonra). Organizasyon
+  iletişim kişisi ekleme ve düzenleme pencerede, "Kişi ekle" listenin üstünde; silme onayı da pencerede.
 - Panel: Bildirim → Kanallar 2 sütunlu kart ızgarası (telefonda tek sütun): **E-posta** kartı durumu, sunucu ve gönderen
   adresi, son başarılı denemeyi ve kanalı kullanan kural sayısını iki satırda özetliyor; ayar "Düzenle" penceresinde,
   deneme gönderimi "Deneme gönder" penceresinde. **Slack**, **SMS** ve **Özel webhook** aynı biçimde "Yakında" kartları;
