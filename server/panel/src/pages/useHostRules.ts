@@ -41,6 +41,8 @@ export function useHostRules(host: Host, thresholds: HostThresholdsResponse | nu
   return {
     canSee,
     canEdit: can('threshold.edit'),
+    // Eşikler ve durum kuralları yüklendi: sayılar (etkin / toplam) ancak o zaman doğrudur.
+    ready: canSee && thresholds !== null && status !== null,
     linesFor: (items: readonly RuleItem[]): RuleLine[] => (canSee ? ruleLinesFor(items, thresholds, status, sources) : []),
   }
 }

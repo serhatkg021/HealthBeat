@@ -1,8 +1,7 @@
 // Agent'ın son raporundaki anlık durumların (Host.system_state, protokol 4) panelde gösterimi — saf mantık. Bunların
-// geçmişi tutulmaz; Envanter'de ve Genel'deki uyarı şeridinde son bildirilen hâl gösterilir. React yok: Node'un
+// geçmişi tutulmaz; Envanter'de, Performans'ta ve Genel'in kartlarında son bildirilen hâl gösterilir. React yok: Node'un
 // çalıştırıcısıyla birim test edilir.
-import type { Capacity, HostThresholdsResponse, MetricPoint, RAIDArray, SystemState, Temperature, ThresholdLevels, TimeSync } from '../types/api.ts'
-import { formatByteRate, formatMs, formatPct } from './units.ts'
+import type { Capacity, HostThresholdsResponse, RAIDArray, Temperature, ThresholdLevels, TimeSync } from '../types/api.ts'
 
 export type Tone = 'good' | 'warning' | 'critical' | 'neutral'
 
@@ -99,38 +98,4 @@ export function timeSyncIssues(t: TimeSync, nowMs: number): string[] {
   }
   if (t.local_rtc) issues.push('donanım saati yerel saatte (UTC önerilir)')
   return issues
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000
-
-export interface StateWarning {
-  tone: Tone
-  text: string
-}
-
-// Genel sekmesinin uyarı şeridi: hemen bakılması gereken anlık durumlar. Alert açılıp açılmadığından bağımsızdır
-// (durum kuralları kapalı olabilir); bilgi içindir.
-export function stateWarnings(state: SystemState | undefined, latest: MetricPoint | null, nowMs: number): StateWarning[] {
-  const out: StateWarning[] = []
-  for (const a of state?.raid ?? []) {
-    const st = raidState(a)
-    if (st.tone === 'critical') out.push({ tone: 'critical', text: `RAID ${a.name} ${st.label} (${a.active}/${a.devices} disk etkin)` })
-    else if (st.tone === 'warning') out.push({ tone: 'warning', text: `RAID ${a.name} ${st.label}${a.sync_pct !== undefined ? ` (${formatPct(a.sync_pct)})` : ''}` })
-  }
-  const ro = (latest?.disk ?? []).filter((d) => d.read_only).map((d) => d.mount)
-  if (ro.length > 0) out.push({ tone: 'critical', text: `Salt okunur bağlı: ${ro.join(', ')}` })
-  if (state?.oom_last_increase_at && nowMs - new Date(state.oom_last_increase_at).getTime() < DAY_MS) {
-    out.push({ tone: 'warning', text: 'Son 24 saatte bellek yetmediği için süreç öldürüldü (OOM)' })
-  }
-  return out
-}
-
-// Genel'deki disk kartının G/Ç satırları: fiziksel disk başına son değerler.
-export function ioSummary(latest: MetricPoint | null): { name: string; text: string }[] {
-  return [...(latest?.disk_io ?? [])]
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((d) => ({
-      name: d.name,
-      text: `gecikme ${formatMs(d.await_ms)} · okuma ${formatByteRate(d.read_bps)} · yazma ${formatByteRate(d.write_bps)} · meşgul ${formatPct(d.util_pct)}`,
-    }))
 }

@@ -1343,32 +1343,6 @@ input[type='checkbox'], input[type='radio'] {
   .usage-fill { transition: none; }
 }
 
-.usage-card-value {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-bottom: 12px;
-}
-
-.usage-card-pct {
-  font-size: 30px;
-  font-weight: 650;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-.usage-card-detail {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.usage-card-foot {
-  margin-top: 8px;
-  font-size: 12px;
-}
-
 /* ---------- Mount kullanımı ---------- */
 .mount-grid {
   display: grid;
@@ -2663,23 +2637,416 @@ pre.secret-box {
   font-size: 13px;
 }
 
-/* Genel: anlık durum uyarı şeridi ve disk kartındaki G/Ç satırları. */
+/* Genel'in üst satırı: Durum · Açık alert'ler · Agent. Sıfır olan seviye sönük; telefonda alert kutusu üstte, tam
+   genişlik. */
+.alerts-tile .level-zero {
+  opacity: 0.55;
+}
+
+@media (max-width: 860px) {
+  .stat-grid.host-top > .alerts-tile {
+    order: -1;
+    grid-column: 1 / -1;
+  }
+
+  .stat-grid.host-top > .stat-tile:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+}
+
+/* Genel (sunucu özeti): sistem sınırı uyarı şeridi, tazelik satırı, konu kartları ve bildirim/kural özeti. */
 .state-warnings {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  margin-bottom: 12px;
+}
+
+.summary-freshness {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.card + .summary-freshness {
+  margin-top: 16px;
+}
+
+.summary-freshness.stale {
+  color: var(--status-warning-text);
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   margin-bottom: 16px;
 }
 
-.io-lines {
-  margin: 12px 0 0;
-  padding: 10px 0 0;
-  border-top: 1px solid var(--border);
-  list-style: none;
-  font-size: 13px;
+.summary-grid > .card,
+.summary-grid > .card + .card {
+  margin-top: 0;
+}
+
+/* Konu kartı: başlıkta durum rengindeki simge kutucuğu, ad, açık alert ve durum çipi; büyük değer ve ne olduğu;
+   etiket–değer satırları; altta kural sayısı ve götürdüğü sekme. Kartın tamamı başlık bağlantısıyla tıklanır (::after
+   kartı kaplar); kural bağlantısı onun üstündedir. Uyarı ve kritikte kenar durum renginde sabit ışır. */
+.summary-card {
+  --tone: var(--accent);
+  --tone-text: var(--accent);
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  padding: 0;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.summary-card.tone-warning {
+  --tone: var(--status-warning);
+  --tone-text: var(--status-warning-text);
+  border-color: color-mix(in srgb, var(--status-warning) 65%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--status-warning) 35%, transparent), 0 0 12px color-mix(in srgb, var(--status-warning) 22%, transparent);
+}
+
+.summary-card.tone-critical {
+  --tone: var(--status-critical);
+  --tone-text: var(--status-critical-text);
+  border-color: color-mix(in srgb, var(--status-critical) 60%, var(--border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--status-critical) 40%, transparent), 0 0 14px color-mix(in srgb, var(--status-critical) 25%, transparent);
+}
+
+.summary-card:hover {
+  border-color: var(--border-strong);
+}
+
+.summary-card.tone-warning:hover,
+.summary-card.tone-critical:hover {
+  border-color: var(--tone);
+}
+
+.summary-card:has(.summary-card-link:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.summary-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 0;
+}
+
+.summary-card-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
+  color: var(--tone-text);
+}
+
+.summary-card-link {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.summary-card-link:hover {
+  text-decoration: none;
+}
+
+.summary-card-link:focus-visible {
+  outline: none;
+}
+
+.summary-card-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+}
+
+.summary-card-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.summary-card-badges .badge {
+  position: relative;
+  z-index: 1;
+}
+
+.summary-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.summary-chip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.summary-chip.chip-good {
+  background: color-mix(in srgb, var(--status-good) 13%, transparent);
+  color: var(--status-good-text);
+}
+
+.summary-chip.chip-warning {
+  background: color-mix(in srgb, var(--status-warning) 20%, transparent);
+  color: var(--status-warning-text);
+}
+
+.summary-chip.chip-critical {
+  background: color-mix(in srgb, var(--status-critical) 14%, transparent);
+  color: var(--status-critical-text);
+}
+
+.summary-chip.chip-neutral,
+.summary-chip.chip-none {
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+
+.summary-chip.chip-none::before {
+  display: none;
+}
+
+.summary-card-value {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 12px 16px 0;
+}
+
+.summary-card-number {
+  font-size: 28px;
+  font-weight: 650;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-card.tone-warning .summary-card-number,
+.summary-card.tone-critical .summary-card-number {
+  color: var(--tone-text);
+}
+
+.summary-card.no-data .summary-card-number {
+  color: var(--text-muted);
+}
+
+.summary-card-caption {
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.summary-card-facts {
+  display: flex;
+  flex-direction: column;
+  margin: 10px 16px 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.summary-card-facts > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 2px 0;
+  font-size: 12.5px;
+}
+
+.summary-card-facts dt {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.summary-card-facts dd {
+  margin: 0;
+  min-width: 0;
+  font-weight: 500;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-card-facts .fact-warning dd {
+  color: var(--status-warning-text);
+}
+
+.summary-card-facts .fact-critical dd {
+  color: var(--status-critical-text);
+}
+
+.summary-card-note {
+  margin: 10px 16px 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.summary-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: auto;
+  padding: 14px 16px 10px;
+  font-size: 12px;
+}
+
+.summary-card-rules {
+  position: relative;
+  z-index: 1;
+  color: var(--text-secondary);
+}
+
+.summary-card-rules:hover {
+  color: var(--accent);
+}
+
+.summary-card-goto {
+  color: var(--text-muted);
+  transition: color 0.12s;
+}
+
+.summary-card:hover .summary-card-goto {
+  color: var(--accent);
+}
+
+/* Bildirim ve kurallar: geniş ekranda iki yarı yan yana (aralarında ince çizgi), dar ekranda alt alta. */
+.summary-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 0;
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+/* Bağlantı kendi değerinin hemen ardından gelir; yarının sağ ucu boş kalır, komşu yarının başlığına yapışmaz. */
+.summary-fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  padding: 0 24px;
+}
+
+.summary-fact:first-child {
+  padding-left: 0;
+}
+
+.summary-fact:last-child {
+  padding-right: 0;
+}
+
+.summary-fact + .summary-fact {
+  border-left: 1px solid var(--border);
+}
+
+.summary-fact-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.summary-fact-value {
+  font-size: 14px;
+}
+
+.summary-fact-link {
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .summary-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .summary-fact,
+  .summary-fact:first-child,
+  .summary-fact:last-child {
+    padding: 0;
+  }
+
+  .summary-fact + .summary-fact {
+    padding-top: 10px;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 1100px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* İki sütunda tek kalan kart satırı doldurur. */
+  .summary-grid > .summary-card:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .summary-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .summary-card-head,
+  .summary-card-value {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .summary-card-facts,
+  .summary-card-note {
+    margin-left: 12px;
+    margin-right: 12px;
+  }
+
+  .summary-card-foot {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .summary-card-number {
+    font-size: 22px;
+  }
+
+  .summary-fact {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .summary-fact-value {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
 }
 
 @media (max-width: 1100px) {
@@ -3930,33 +4297,6 @@ textarea {
   .channel-card-body {
     padding-left: 20px;
   }
-}
-
-.issue-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.issue-list li {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 8px 0;
-  border-top: 1px solid var(--border);
-  font-size: 14px;
-}
-
-.issue-list li:first-child {
-  border-top: 0;
-}
-
-.issue-list .issue-age {
-  margin-left: auto;
-  font-size: 12.5px;
 }
 
 /* ---------- Aranabilir seçim kutusu (SearchSelect) ---------- */

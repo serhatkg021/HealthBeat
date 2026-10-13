@@ -146,6 +146,14 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   simgeleri bölüme özgü. Profil kartları aynı genişlikte. Özet'teki "Açık alert'ler" kutuları kaldırıldı (sayaçlar üst
   çubukta); sunucu Genel'de son görülme Durum kutusunda. Telefonda CPU ve RAM kartları arasındaki fazla boşluk giderildi;
   arama kutusunun yer tutucusu kesilmiyor. Bakım pencereleri listesindeki server saati kaldırıldı (alt çubukta var).
+- Panel: sunucu sayfasının **Genel** sekmesi bir özet oldu. Üstte Durum · Açık alert'ler (seviye başına sayı, en eski
+  alert'in yaşı, onaylanmışlar) · Agent; altında bildirimin kime gideceği ve etkin alert kuralı sayısı. Ardından Alert
+  kurallarındaki konular birer kart: CPU, Bellek, Disk, Ağ, Sıcaklık, Servisler, Container, Saat (NTP), Sistem bakımı.
+  Her kartta son rapordaki değer ve ne olduğu, ayrıntı satırları, durum çipi (normal / uyarı / kritik), açık alert sayısı
+  ve "etkin / toplam" kural sayısı var; kart ilgili sekmeye, kural sayısı Alert kurallarında o konuya götürür. Uyarı ve
+  kritik kartların kenarı durum renginde. Sunucu çevrimdışıysa değerlerin güncel olmadığı yazılır ve kartlar renksiz
+  gösterilir (son değer artık canlı gibi görünmüyor). Açık sorunlar listesi, CPU/RAM çubukları ve disk kartı kaldırıldı
+  (ayrıntıları Alert'ler ve Performans'ta).
 - Panel: Bildirim → Kanallar 2 sütunlu kart ızgarası (telefonda tek sütun): **E-posta** kartı durumu, sunucu ve gönderen
   adresi, son başarılı denemeyi ve kanalı kullanan kural sayısını iki satırda özetliyor; ayar "Düzenle" penceresinde,
   deneme gönderimi "Deneme gönder" penceresinde. **Slack**, **SMS** ve **Özel webhook** aynı biçimde "Yakında" kartları;

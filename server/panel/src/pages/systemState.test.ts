@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { HostThresholdsResponse, MetricPoint } from '../types/api.ts'
+import type { HostThresholdsResponse } from '../types/api.ts'
 import {
   capacityRows,
   daemonLabel,
-  ioSummary,
   raidState,
   reachText,
-  stateWarnings,
   temperatureLevels,
   temperatureTone,
   timeSourceState,
@@ -91,38 +89,4 @@ test('time sync issues follow the server rules', () => {
       'donanım saati yerel saatte (UTC önerilir)',
     ],
   )
-})
-
-const point = (extra: Partial<MetricPoint>): MetricPoint => ({ timestamp: '2026-10-08T12:00:00Z', cpu_usage_pct: 1, ram_usage_pct: 1, disk: [], ...extra })
-
-test('the warning strip lists broken RAID, read-only mounts and a recent OOM kill', () => {
-  assert.deepEqual(stateWarnings(undefined, null, NOW), [])
-  const w = stateWarnings(
-    {
-      raid: [
-        { name: 'md0', state: 'degraded', devices: 2, active: 1 },
-        { name: 'md1', state: 'recovering', devices: 2, active: 2, sync_pct: 41.25 },
-        { name: 'md2', state: 'clean', devices: 2, active: 2 },
-      ],
-      oom_last_increase_at: '2026-10-08T03:00:00Z',
-    },
-    point({ disk: [{ mount: '/', used_pct: 1, total: 1, free: 1, read_only: true }, { mount: '/data', used_pct: 1, total: 1, free: 1, read_only: false }] }),
-    NOW,
-  )
-  assert.deepEqual(w, [
-    { tone: 'critical', text: 'RAID md0 bozuk (1/2 disk etkin)' },
-    { tone: 'warning', text: 'RAID md1 yeniden kuruluyor (%41,3)' },
-    { tone: 'critical', text: 'Salt okunur bağlı: /' },
-    { tone: 'warning', text: 'Son 24 saatte bellek yetmediği için süreç öldürüldü (OOM)' },
-  ])
-  assert.deepEqual(stateWarnings({ oom_last_increase_at: '2026-10-06T03:00:00Z' }, null, NOW), [], 'an old OOM kill is not repeated')
-})
-
-test('ioSummary: one line per physical disk', () => {
-  const io = { read_iops: 1, write_iops: 1, read_bps: 1536, write_bps: 0, util_pct: 2.5, await_ms: 0.374, queue_depth: 0 }
-  assert.deepEqual(ioSummary(point({ disk_io: [{ name: 'sdb', ...io }, { name: 'sda', ...io }] })), [
-    { name: 'sda', text: 'gecikme 0,37 ms · okuma 1,5 KB/sn · yazma 0 B/sn · meşgul %2,5' },
-    { name: 'sdb', text: 'gecikme 0,37 ms · okuma 1,5 KB/sn · yazma 0 B/sn · meşgul %2,5' },
-  ])
-  assert.deepEqual(ioSummary(null), [])
 })

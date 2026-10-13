@@ -137,9 +137,8 @@ export function HostDetailPage() {
             host={host}
             latest={latest}
             thresholds={thresholds}
+            containers={containers}
             policy={agentPolicy}
-            onHistory={() => setTab('performans')}
-            onShowAlerts={() => setTab('alertler')}
           />
         )}
       </TabPanel>
