@@ -100,15 +100,24 @@ export function OrganizationHostsPage() {
             </>
           ) : undefined
         }
+      />
+      <OrganizationSettingsModal
+        organization={settingsOpen ? org : null}
+        orgs={allOrgs}
+        onClose={() => setSettingsOpen(false)}
+        onSaved={loadOrg}
+        onDeleted={() => navigate('/organizations')}
+      />
+      {error && <div className="error-banner">{error}</div>}
+
+      <Tabs
+        items={tabItems}
+        active={tab}
+        onChange={setTab}
+        label="Organizasyon sunucu bölümleri"
         actions={
           id && (
             <>
-              {canAddHost && (
-                <Link className="btn btn-sm" to={addHostPath(id)}>
-                  <Plus size={15} strokeWidth={1.9} />
-                  Sunucu ekle
-                </Link>
-              )}
               {can('threshold.view') && (
                 <Link className="btn btn-sm" to={alertRulesPath({ kind: 'org', id })}>
                   Alert kuralları →
@@ -129,20 +138,16 @@ export function OrganizationHostsPage() {
           )
         }
       />
-      <OrganizationSettingsModal
-        organization={settingsOpen ? org : null}
-        orgs={allOrgs}
-        onClose={() => setSettingsOpen(false)}
-        onSaved={loadOrg}
-        onDeleted={() => navigate('/organizations')}
-      />
-      {error && <div className="error-banner">{error}</div>}
-
-      <Tabs items={tabItems} active={tab} onChange={setTab} label="Organizasyon sunucu bölümleri" />
 
       <TabPanel id="sunucular" active={tab}>
         <div className="toolbar">
           <SearchInput value={q} onChange={setSearch} placeholder="Sunucu adı ya da IP ara…" />
+          {id && canAddHost && (
+            <Link className="btn btn-primary" to={addHostPath(id)}>
+              <Plus size={15} strokeWidth={1.9} />
+              Sunucu ekle
+            </Link>
+          )}
         </div>
         <div className="card table-card">
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />

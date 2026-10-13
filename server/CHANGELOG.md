@@ -139,6 +139,13 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   e-postalardakiyle aynı) ve tek biçimde (GG.AA.YYYY SS:DD:SS). Önceden alert, denetim kaydı, kuyruk ve log zamanları
   tarayıcının dilinde ve saat diliminde görünüyordu. Grafik ekseni ve Performans'taki aralık seçicileri de kurulumun
   diliminde. Boş değer telefon, kernel, hostname gibi eşit aralıklı yazılan alanlarda da aynı uzun tire.
+- Panel: görünüm tutarlı hale getirildi. Bağlantı olan düğmeler (Organizasyon, Profil, sunucu Ayarlar) artık mavi değil;
+  organizasyonun "Alert kuralları", "Bildirim kuralları" ve "Ayarlar" düğmeleri sekme satırında, "Sunucu ekle" arama
+  kutusunun yanında. Agent rozeti normal yazı tipinde; sürümü bilinmeyen agent rozetsiz "bilinmiyor". Bildirim kuralları
+  kartı önizlemeyle aynı genişlikte, ekleme formu tek satırda. Ayarlar'da kutular değer uzunluğuna göre daraldı, menü
+  simgeleri bölüme özgü. Profil kartları aynı genişlikte. Özet'teki "Açık alert'ler" kutuları kaldırıldı (sayaçlar üst
+  çubukta); sunucu Genel'de son görülme Durum kutusunda. Telefonda CPU ve RAM kartları arasındaki fazla boşluk giderildi;
+  arama kutusunun yer tutucusu kesilmiyor. Bakım pencereleri listesindeki server saati kaldırıldı (alt çubukta var).
 - Panel: Bildirim → Kanallar 2 sütunlu kart ızgarası (telefonda tek sütun): **E-posta** kartı durumu, sunucu ve gönderen
   adresi, son başarılı denemeyi ve kanalı kullanan kural sayısını iki satırda özetliyor; ayar "Düzenle" penceresinde,
   deneme gönderimi "Deneme gönder" penceresinde. **Slack**, **SMS** ve **Özel webhook** aynı biçimde "Yakında" kartları;

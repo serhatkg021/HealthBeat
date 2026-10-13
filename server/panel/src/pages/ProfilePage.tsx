@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { KeyRound, Save, UserRound } from 'lucide-react'
+import { KeyRound, Save, ShieldCheck, UserRound } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { PageHeader } from '../components/PageHeader'
 import { roleLabel } from '../labels'
@@ -45,7 +45,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="page-readable">
+    <div className="page-readable profile-page">
       <PageHeader title="Profil" />
       {error && <div className="error-banner">{error}</div>}
 
@@ -54,26 +54,28 @@ export function ProfilePage() {
           <UserRound size={16} strokeWidth={1.75} />
           Bilgilerim
         </h2>
-        <div className="form-row">
-          <label htmlFor="profile-name">Ad soyad</label>
-          <input
-            id="profile-name"
-            value={fullName}
-            onChange={(e) => { setFullName(e.target.value); setSaved(false) }}
-            maxLength={MAX_FULL_NAME}
-            autoComplete="name"
-          />
-        </div>
-        <div className="form-row">
-          <label htmlFor="profile-phone">Telefon</label>
-          <input
-            id="profile-phone"
-            value={phone}
-            onChange={(e) => { setPhone(e.target.value); setSaved(false) }}
-            inputMode="tel"
-            maxLength={MAX_PHONE}
-            autoComplete="tel"
-          />
+        <div className="profile-fields">
+          <div className="form-row">
+            <label htmlFor="profile-name">Ad soyad</label>
+            <input
+              id="profile-name"
+              value={fullName}
+              onChange={(e) => { setFullName(e.target.value); setSaved(false) }}
+              maxLength={MAX_FULL_NAME}
+              autoComplete="name"
+            />
+          </div>
+          <div className="form-row">
+            <label htmlFor="profile-phone">Telefon</label>
+            <input
+              id="profile-phone"
+              value={phone}
+              onChange={(e) => { setPhone(e.target.value); setSaved(false) }}
+              inputMode="tel"
+              maxLength={MAX_PHONE}
+              autoComplete="tel"
+            />
+          </div>
         </div>
         <div className="form-actions">
           <button className="btn btn-primary" type="submit" disabled={saving || !patch}>
@@ -85,7 +87,10 @@ export function ProfilePage() {
       </form>
 
       <div className="card">
-        <h2 className="card-title">Hesap</h2>
+        <h2 className="card-title">
+          <ShieldCheck size={16} strokeWidth={1.75} />
+          Hesap
+        </h2>
         <dl className="profile-facts">
           <div>
             <dt>E-posta</dt>

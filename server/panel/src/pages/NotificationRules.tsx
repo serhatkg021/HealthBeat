@@ -178,9 +178,6 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
                 </option>
               ))}
             </select>
-            {!channelUsable && options.length > 0 && (
-              <p className="form-hint">Bu kanal kapalı ya da ayarı yapılmamış; süper admin Bildirim → Kanallar’dan açabilir.</p>
-            )}
           </div>
           <div className="form-row">
             <label htmlFor="rule-level">En düşük seviye</label>
@@ -196,6 +193,9 @@ export function NotificationRules({ scope, canEdit }: { scope: RouteScope; canEd
             <Plus size={15} strokeWidth={1.9} />
             Kural ekle
           </button>
+          {!channelUsable && options.length > 0 && (
+            <p className="form-hint">Bu kanal kapalı ya da ayarı yapılmamış; süper admin Bildirim → Kanallar’dan açabilir.</p>
+          )}
         </form>
       )}
     </div>

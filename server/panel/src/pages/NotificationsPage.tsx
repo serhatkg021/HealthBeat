@@ -110,10 +110,12 @@ function RoutesTab() {
           />
         </div>
       ) : (
-        <div className="card">
-          <EmptyState icon={scope.kind === 'org' ? Building2 : Server}>
-            {scope.kind === 'org' ? 'Kurallarını görmek için bir organizasyon seçin.' : 'Kurallarını görmek için bir sunucu seçin.'}
-          </EmptyState>
+        <div className="page-readable">
+          <div className="card">
+            <EmptyState icon={scope.kind === 'org' ? Building2 : Server}>
+              {scope.kind === 'org' ? 'Kurallarını görmek için bir organizasyon seçin.' : 'Kurallarını görmek için bir sunucu seçin.'}
+            </EmptyState>
+          </div>
         </div>
       )}
 

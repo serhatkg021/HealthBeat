@@ -2,7 +2,6 @@ import { alertReading } from './alertText'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  AlertTriangle,
   ArrowRight,
   Bell,
   CircleArrowUp,
@@ -10,7 +9,6 @@ import {
   ListFilter,
   RefreshCw,
   Server,
-  ServerCrash,
   ServerOff,
   Wifi,
   X,
@@ -160,19 +158,6 @@ export function DashboardPage() {
               to={hostsHref({ agentUpdate: true })}
             />
           </div>
-          <h2 className="section-title">Açık alert’ler</h2>
-          <div className="stat-grid">
-            <StatTile label="Açık alert" value={counts.alerts} icon={Bell} tone="accent" to={hostsHref({ withAlerts: true })} />
-            <StatTile
-              label="Kritik"
-              value={counts.critical}
-              icon={ServerCrash}
-              tone={counts.critical > 0 ? 'critical' : undefined}
-              to={hostsHref({ levels: ['critical'] })}
-            />
-            <StatTile label="Uyarı" value={counts.warning} icon={AlertTriangle} tone={counts.warning > 0 ? 'warning' : undefined} to={hostsHref({ levels: ['warning'] })} />
-          </div>
-
           <div className="card table-card">
             <div className="card-head">
               <h2 className="card-title">

@@ -981,6 +981,9 @@ td.empty-cell {
   background: var(--surface-1);
   box-shadow: var(--shadow-xs);
   cursor: pointer;
+  /* Bağlantı (<a class="btn">) da düğme gibi görünsün: bağlantı rengi ve alt çizgisi almaz. */
+  color: inherit;
+  text-decoration: none;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.3;
@@ -990,6 +993,7 @@ td.empty-cell {
 
 .btn:hover:not(:disabled) {
   background: var(--surface-2);
+  text-decoration: none;
 }
 
 .btn:disabled {
@@ -1118,6 +1122,17 @@ input[type='checkbox'], input[type='radio'] {
   padding-left: 32px !important;
 }
 
+/* Araç çubuğunda yer tutucu metin ("Sunucu, metrik ya da mount ara…") kesilmeyecek genişlikte; dar ekranda daralır. */
+.toolbar > .search-input {
+  flex: 0 1 320px;
+}
+
+@media (max-width: 640px) {
+  .toolbar > .search-input {
+    flex-basis: 100%;
+  }
+}
+
 .pagination {
   display: flex;
   align-items: center;
@@ -1241,7 +1256,9 @@ input[type='checkbox'], input[type='radio'] {
   margin-bottom: 16px;
 }
 
-.grid-2 > .card {
+/* Izgarada aralık gap'tir; .card + .card'ın üst boşluğu (telefonda da) uygulanmaz. */
+.grid-2 > .card,
+.grid-2 > .card + .card {
   margin-top: 0;
 }
 
@@ -1253,7 +1270,8 @@ input[type='checkbox'], input[type='radio'] {
   min-width: 0;
 }
 
-.stack-col > .card {
+.stack-col > .card,
+.stack-col > .card + .card {
   margin-top: 0;
 }
 
@@ -1926,6 +1944,42 @@ input[type='checkbox'], input[type='radio'] {
 
 .tabs::-webkit-scrollbar {
   display: none;
+}
+
+/* Sekmeler ve sağında sayfa işlemleri tek satırda; alt çizgi işlemlerin altında da sürer. Dar ekranda işlemler
+   sekmelerin üstüne iner. */
+.tabs-row {
+  display: flex;
+  min-width: 0;
+}
+
+.tabs-row > .tabs {
+  flex: 1;
+  min-width: 0;
+}
+
+.tabs-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin: 0 0 20px;
+  padding-left: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 1100px) {
+  .tabs-row {
+    flex-direction: column;
+  }
+
+  .tabs-actions {
+    order: -1;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding-left: 0;
+    border-bottom: 0;
+  }
 }
 
 .tab {
@@ -3110,11 +3164,28 @@ body.scroll-lock {
   background: color-mix(in srgb, var(--status-warning) 12%, transparent);
   border-color: color-mix(in srgb, var(--status-warning) 45%, transparent);
 }
+/* Bildirim kuralları kartı alttaki önizleme kartıyla aynı genişlikte; ekleme formu tek satır (alıcı · kanal · seviye ·
+   Ekle), dar ekranda alt alta. */
 .form-card.rule-card {
-  max-width: 760px;
+  max-width: none;
 }
 .form-card.rule-card .rule-form {
-  max-width: 440px;
+  display: grid;
+  grid-template-columns: minmax(220px, 2fr) minmax(150px, 1fr) minmax(150px, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+.form-card.rule-card .rule-form .form-row {
+  margin-bottom: 0;
+}
+.form-card.rule-card .rule-form .form-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+@media (max-width: 760px) {
+  .form-card.rule-card .rule-form {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---------- Sistem ayarları ---------- */
@@ -3140,6 +3211,19 @@ body.scroll-lock {
 .input-with-unit input,
 .input-with-unit select {
   flex: 1 1 auto;
+}
+
+/* Ayarlarda kutu değerin uzunluğuna göre: sayılar dar, metin ve seçimler orta genişlikte (geniş ekranda kart boyu
+   uzanmaz). */
+.settings-content .input-with-unit > input,
+.settings-content .input-with-unit > select,
+.settings-content .input-with-unit > .search-select {
+  flex: 0 1 420px;
+  min-width: 0;
+}
+
+.settings-content .input-with-unit > input[inputmode='decimal'] {
+  flex-basis: 160px;
 }
 
 /* Birim sütunu sabit genişlikte: aynı karttaki kutular birimin uzunluğundan bağımsız hizalanır. */
@@ -3348,12 +3432,32 @@ textarea {
   }
 }
 
-/* Profil sayfasındaki salt-okunur hesap bilgileri: etiket solda, değer sağda; dar ekranda alt alta. */
+/* Profil: iki kart aynı genişlikte; ad ve telefon yan yana, hesap bilgileri 2 × 2 (telefonda alt alta). */
+.profile-page {
+  max-width: 720px;
+}
+
+.profile-page .form-card {
+  max-width: none;
+}
+
+.profile-fields,
 .profile-facts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 16px;
+}
+
+.profile-facts {
   gap: 12px 24px;
   margin: 0 0 14px;
+}
+
+@media (max-width: 640px) {
+  .profile-fields,
+  .profile-facts {
+    grid-template-columns: 1fr;
+  }
 }
 
 .profile-facts dt {
@@ -4780,11 +4884,7 @@ textarea {
   }
 }
 
-/* Bakım pencereleri: liste araç çubuğundaki server saati, form ızgarası, gün seçici, kapsam ağacı, sonraki tekrarlar. */
-.server-clock-inline {
-  font-size: 12.5px;
-  white-space: nowrap;
-}
+/* Bakım pencereleri: form ızgarası, gün seçici, kapsam ağacı, sonraki tekrarlar. */
 
 .form-label {
   font-size: 13px;

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, BellRing, ChartLine, CircleArrowUp, Clock, Cpu, Download, HardDrive, MemoryStick, TriangleAlert, Upload, type LucideIcon } from 'lucide-react'
+import { Activity, BellRing, ChartLine, CircleArrowUp, Cpu, Download, HardDrive, MemoryStick, TriangleAlert, Upload, type LucideIcon } from 'lucide-react'
 import { alertsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import type { Alert, Host, HostThresholdsResponse, MetricPoint } from '../types/api'
@@ -42,6 +42,10 @@ export function HostOverview({
   // Çevrimiçiyse uptime, çevrimdışıysa son veriden bu yana geçen süre (canlı akar); bkz. statusDuration.
   const now = useNow(5000)
   const duration = statusDuration(host, now)
+  // Son görülme Durum kutusunun alt satırında: çevrimdışıyken süre zaten son veriden bu yana olduğu için yalnızca zaman.
+  const seenAt = host.last_seen ? formatDateTime(host.last_seen) : ''
+  let statusHint = duration?.hint
+  if (seenAt) statusHint = online && duration ? `${duration.hint} · son görülme ${seenAt}` : `son görülme ${seenAt}`
   const kind = agentKind(host, policy)
   const warnings = stateWarnings(host.system_state, latest, now)
   const io = ioSummary(latest)
@@ -83,7 +87,7 @@ export function HostOverview({
               )}
             </span>
           }
-          hint={duration?.hint}
+          hint={statusHint}
         />
         <StatTile
           label="Agent"
@@ -94,7 +98,6 @@ export function HostOverview({
           // Çalışma biçimi ve rapor aralığı tek satırda.
           hint={host.mode === 'push' ? `Push · ${host.interval_seconds} sn'de bir rapor` : `Pull · ${host.interval_seconds} sn'de bir sorgu`}
         />
-        <StatTile label="Son görülme" icon={Clock} small value={formatDateTime(host.last_seen)} />
       </div>
 
       {/* Anlık durumdan hemen bakılması gerekenler (alert kuralı kapalı olsa da görünür; ayrıntı Envanter'de). */}

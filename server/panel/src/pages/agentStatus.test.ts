@@ -78,15 +78,16 @@ test('agentBadgeInfo: text is only the version; the status is carried by tone an
   assert.match(unsupported.title, /^Desteklenmiyor\. .*1\.0\.0/)
 })
 
-test('agentBadgeInfo: without a version a legacy agent says so, an unreported one shows a dash', () => {
+test('agentBadgeInfo: without a version a legacy agent says so, an unreported one is plain "bilinmiyor"', () => {
   const legacy = agentBadgeInfo({ agent_protocol: 1 }, noPolicy)
   assert.equal(legacy.text, 'eski agent')
   assert.equal(legacy.tone, 'warning')
   assert.match(legacy.title, /^Eski agent\. /)
 
   const none = agentBadgeInfo({}, noPolicy)
-  assert.equal(none.text, '—')
+  assert.equal(none.text, 'bilinmiyor')
   assert.equal(none.tone, 'neutral')
+  assert.equal(none.plain, true)
   assert.match(none.title, /Sürüm bilgisi yok/)
 })
 

@@ -211,11 +211,6 @@ export function MaintenancePage() {
             </div>
             <SearchInput value={query} onChange={setQuery} placeholder="Açıklama ya da kapsam ara…" />
           </div>
-          {clock && (
-            <span className="muted server-clock-inline tnum" title={`Bakım saatleri kurulumun saat dilimine göredir: ${clock.timezone} (${clock.offset})`}>
-              Server saati {clock.label}
-            </span>
-          )}
         </div>
         <div className="card table-card">
           <table className="stack maintenance-table">
