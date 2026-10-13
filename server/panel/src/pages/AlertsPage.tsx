@@ -100,7 +100,9 @@ export function AlertsPage() {
   // çözülme her zaman boştur (onaylanan bir alert asla kendiliğinden çözülmez — bkz. HostAlerts).
   const showAcknowledged = status !== 'open'
   const showResolved = status === 'resolved' || status === ''
-  const columnCount = 6 + Number(showAcknowledged) + Number(showResolved) + 1
+  // Süzgeç tek bir durumdaysa her satırda aynı durum yazardı; sütun yalnızca "Tümü"nde.
+  const showStatus = status === ''
+  const columnCount = 5 + Number(showStatus) + Number(showAcknowledged) + Number(showResolved) + 1
 
   return (
     <div>
@@ -133,7 +135,7 @@ export function AlertsPage() {
               <th>Sunucu</th>
               <th>Metrik</th>
               <th>Seviye</th>
-              <th>Durum</th>
+              {showStatus && <th>Durum</th>}
               <th>Oluşturulma</th>
               {showAcknowledged && <th>Onaylanma</th>}
               {showResolved && <th>Çözülme</th>}
@@ -155,7 +157,7 @@ export function AlertsPage() {
                 <td data-label="Seviye">
                   <StatusBadge tone={alertLevelTone(a.level)}>{alertLevelLabel(a.level)}</StatusBadge>
                 </td>
-                <td className="muted" data-label="Durum">{alertStatusLabel(a.status)}</td>
+                {showStatus && <td className="muted" data-label="Durum">{alertStatusLabel(a.status)}</td>}
                 <td className="muted" data-label="Oluşturulma">{formatDateTime(a.created_at)}</td>
                 {showAcknowledged && (
                   <td className="muted" data-label="Onaylanma">{formatDateTime(a.acknowledged_at)}</td>

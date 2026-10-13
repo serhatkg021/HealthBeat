@@ -1668,6 +1668,16 @@ input[type='checkbox'], input[type='radio'] {
   color: var(--border-strong);
 }
 
+.empty-state-title {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.empty-state-hint {
+  margin-top: 2px;
+  font-size: 13px;
+}
+
 /* ---------- Giriş ---------- */
 .login-shell {
   min-height: 100vh;

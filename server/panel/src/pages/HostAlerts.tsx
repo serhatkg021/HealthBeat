@@ -8,7 +8,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
-import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel } from '../labels'
+import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel, alertSubjectText } from '../labels'
 import { BellOff, Check, Info } from 'lucide-react'
 import { AlertDetail, NotificationBadge } from './AlertDetail'
 import { formatDateTime } from './datetime'
@@ -60,7 +60,9 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
   // çözülme her zaman boştur (onaylanan bir alert asla kendiliğinden çözülmez — bkz. üstteki not).
   const showAcknowledged = status !== 'open'
   const showResolved = status === 'resolved' || status === ''
-  const columnCount = 5 + Number(showAcknowledged) + Number(showResolved) + 1
+  // Süzgeç tek bir durumdaysa her satırda aynı durum yazardı; sütun yalnızca "Tümü"nde.
+  const showStatus = status === ''
+  const columnCount = 4 + Number(showStatus) + Number(showAcknowledged) + Number(showResolved) + 1
 
   return (
     <div>
@@ -84,7 +86,7 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
             <tr>
               <th>Metrik</th>
               <th>Seviye</th>
-              <th>Durum</th>
+              {showStatus && <th>Durum</th>}
               <th>Oluşturulma</th>
               {showAcknowledged && <th>Onaylanma</th>}
               {showResolved && <th>Çözülme</th>}
@@ -97,13 +99,13 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
               <tr key={a.id}>
                 <td className="primary" data-label="Metrik">
                   {alertMetricLabel(a.alert_type)}
-                  {a.subject && <span className="muted"> · {a.subject}</span>}
+                  {a.subject && <span className="muted"> · {alertSubjectText(a.alert_type, a.subject)}</span>}
                   {alertReading(a) && <div className="muted tnum">{alertReading(a)}</div>}
                 </td>
                 <td data-label="Seviye">
                   <StatusBadge tone={alertLevelTone(a.level)}>{alertLevelLabel(a.level)}</StatusBadge>
                 </td>
-                <td className="muted" data-label="Durum">{alertStatusLabel(a.status)}</td>
+                {showStatus && <td className="muted" data-label="Durum">{alertStatusLabel(a.status)}</td>}
                 <td className="muted" data-label="Oluşturulma">{formatDateTime(a.created_at)}</td>
                 {showAcknowledged && (
                   <td className="muted" data-label="Onaylanma">{formatDateTime(a.acknowledged_at)}</td>

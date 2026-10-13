@@ -140,6 +140,7 @@ export function AlertDetail({ alert, hostTitle, onClose }: { alert: Alert | null
 }
 
 // NotificationBadge, alert listelerindeki "Bildirim" sütunudur: bildirimlerin toplu durumu ya da (hiç bildirim yoksa) "—".
+// Yalnızca sorunlu durumlar rozettir; "gönderildi" sade metindir.
 // deferred: bir olayının bildirimi sunucu bakımdayken ertelendi; bakım bitince, alert hâlâ açıksa gönderilir.
 export function NotificationBadge({ status, deferred }: { status?: NotificationStatus; deferred?: boolean }) {
   if (deferred) {
@@ -150,5 +151,7 @@ export function NotificationBadge({ status, deferred }: { status?: NotificationS
     )
   }
   if (!status) return <span className="muted" title="Bu alert için bildirim yazılmadı">—</span>
+  // Gönderilmiş bildirim olağan durumdur: rozet yalnızca dikkat isteyende (bekliyor, gönderilemedi).
+  if (status === 'sent') return <span className="muted">{notificationStatusLabel(status)}</span>
   return <StatusBadge tone={notificationStatusTone(status)}>{notificationStatusLabel(status)}</StatusBadge>
 }

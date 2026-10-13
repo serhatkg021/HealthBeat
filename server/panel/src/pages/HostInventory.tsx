@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Clock, MonitorCog, Network, Wrench, type LucideIcon } from 'lucide-react'
 import type { Host, HostThresholdsResponse } from '../types/api'
+import { EmptyState } from '../components/EmptyState'
 import { StatusBadge } from '../components/StatusBadge'
 import { useNow } from '../components/useNow'
 import { alertRulesPath } from '../navigation'
@@ -65,15 +66,27 @@ export function HostInventory({ host, thresholds }: { host: Host; thresholds: Ho
   const issues = t ? timeSyncIssues(t, now) : []
   const u = state?.updates
 
+  // Sistem bilgisi yoksa (eski agent ya da henüz rapor yok) "—" dolu kartlar yerine tek açıklama; agent'ın donanım
+  // özetinden bilinenler (çekirdek, bellek, disk sayısı) varsa altında.
+  if (!h) {
+    const known = [cores, ram ? `${ram} bellek` : null, disks.length > 0 ? `${disks.length} fiziksel disk` : null].filter(Boolean).join(' · ')
+    return (
+      <div className="card">
+        <EmptyState icon={MonitorCog}>
+          <div className="empty-state-title">{supportsInventory(host) ? 'Sistem bilgisi henüz alınmadı' : 'Bu agent sürümü sistem bilgisi göndermiyor'}</div>
+          <div className="empty-state-hint">
+            {supportsInventory(host)
+              ? 'Agent ilk raporunu gönderince işletim sistemi, ağ, saat ve bakım bilgileri burada görünür.'
+              : 'İşletim sistemi, kernel, IP adresleri, saat senkronu ve bekleyen güncellemeler agent güncellenince görünür (protokol 3).'}
+          </div>
+          {known && <div className="empty-state-hint">Bilinen: {known}</div>}
+        </EmptyState>
+      </div>
+    )
+  }
+
   return (
     <div className="stack-col">
-      {!h && (
-        <div className="notice notice-info">
-          {supportsInventory(host)
-            ? 'Sistem bilgisi henüz alınmadı.'
-            : 'Bu agent sistem bilgisini (işletim sistemi, kernel, IP adresleri, uptime vb.) göndermiyor; agent güncellenince görünür (protokol 3).'}
-        </div>
-      )}
       <div className="inventory-grid">
         <Card title="Makine" icon={MonitorCog}>
           <Row label="Donanım">{h ? virtualizationLabel(h) : '—'}</Row>

@@ -154,6 +154,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   kritik kartların kenarı durum renginde. Sunucu çevrimdışıysa değerlerin güncel olmadığı yazılır ve kartlar renksiz
   gösterilir (son değer artık canlı gibi görünmüyor). Açık sorunlar listesi, CPU/RAM çubukları ve disk kartı kaldırıldı
   (ayrıntıları Alert'ler ve Performans'ta).
+- Panel: container'ı olmayan sunucuda Docker bölümü sıfırlı kutular ve boş tablo yerine tek açıklama kartı gösteriyor;
+  sistem bilgisi göndermeyen agent'ta Envanter "—" dolu kartlar yerine tek açıklama (biliniyorsa çekirdek, bellek, disk
+  sayısıyla). Durmuş container sayısı uyarı rengi taşımıyor. Alert tablolarında Durum sütunu yalnızca "Tümü"
+  süzgecinde; Bildirim sütununda "gönderildi" sade metin, rozet yalnızca bekleyen, gönderilemeyen ya da bakım sonrasına
+  kalan bildirimde.
 - Panel: Bildirim → Kanallar 2 sütunlu kart ızgarası (telefonda tek sütun): **E-posta** kartı durumu, sunucu ve gönderen
   adresi, son başarılı denemeyi ve kanalı kullanan kural sayısını iki satırda özetliyor; ayar "Düzenle" penceresinde,
   deneme gönderimi "Deneme gönder" penceresinde. **Slack**, **SMS** ve **Özel webhook** aynı biçimde "Yakında" kartları;
