@@ -12,6 +12,8 @@ import { EmptyState } from '../components/EmptyState'
 import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
 import { AgentBadge } from '../components/AgentBadge'
+import { HostMobileRow } from '../components/HostMobileRow'
+import { useNow } from '../components/useNow'
 import { useAgentPolicy } from '../components/useAgentPolicy'
 import { osLabel } from './inventory'
 import { Contact, Plus, Server, Settings } from 'lucide-react'
@@ -27,6 +29,7 @@ const PAGE_SIZE = 20
 export function OrganizationHostsPage() {
   const { id } = useParams<{ id: string }>()
   const agentPolicy = useAgentPolicy()
+  const now = useNow(60_000)
   const { can } = useAuth()
   const canAddHost = can('host.create')
   const canSeeSettings = can('organization.update') || can('organization.delete')
@@ -151,7 +154,7 @@ export function OrganizationHostsPage() {
         </div>
         <div className="card table-card">
           <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
-          <table className="stack">
+          <table className="stack compact-mobile">
             <thead>
               <tr>
                 <th>Sunucu</th>
@@ -166,6 +169,7 @@ export function OrganizationHostsPage() {
             <tbody>
               {hosts.map((c) => (
                 <tr key={c.id} className="clickable">
+                  <HostMobileRow host={c} policy={agentPolicy} now={now} />
                   <td className="primary">
                     <Link to={`/hosts/${c.id}`}>{c.title}</Link>
                   </td>

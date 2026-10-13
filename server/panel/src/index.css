@@ -3566,7 +3566,12 @@ body.scroll-lock {
 }
 @media (max-width: 760px) {
   .form-card.rule-card .rule-form {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .form-card.rule-card .rule-form select {
+    min-width: 0;
+    width: 100%;
   }
 }
 
@@ -3725,9 +3730,15 @@ tbody + tbody .rule-topic-row th {
   margin-bottom: 8px;
 }
 
-/* Dar ekranda üst çubukta yalnızca açık alert'i olan seviyeler kalır; başlığa yer açılır. */
+/* Dar ekranda üst çubukta yalnızca açık alert'i olan seviyeler kalır; tema düğmesi (seçim profil menüsünde de var) ve
+   profil okunun yeri başlığa bırakılır. */
 @media (max-width: 480px) {
   .alert-counter.zero {
+    display: none;
+  }
+
+  .topbar > .theme-toggle,
+  .profile-button > svg {
     display: none;
   }
 }
@@ -3892,6 +3903,136 @@ textarea {
 
 .cell-badge {
   margin-top: 4px;
+}
+
+/* Dar ekranda iki satırlık liste satırı (compact-mobile tablolar): masaüstünde gizli; kart düzenine geçilen genişlikte
+   satırın diğer hücrelerinin yerini alır. Üstte ad ve rozetler, altta sönük bağlam; satırın tamamı bağlantıdır
+   (mobile-row-link ::after ile satırı kaplar), içindeki düğmeler onun üstündedir. */
+td.mobile-row {
+  display: none;
+}
+
+.mobile-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mobile-row-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.mobile-row-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mobile-row-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.mobile-row-sub > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Alert satırında ne olduğu (metrik, okuma) bağlamdan bir ton koyu: satırın asıl bilgisi. */
+.mobile-row-sub .mobile-row-what {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.mobile-row-link {
+  color: inherit;
+  text-align: left;
+}
+
+.mobile-row-link:hover {
+  text-decoration: none;
+}
+
+.mobile-row-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+
+button.mobile-row-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.mobile-row .btn,
+.mobile-row .badge {
+  position: relative;
+  z-index: 1;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--status-critical);
+}
+
+.status-dot.online {
+  background: var(--status-good);
+}
+
+@media (max-width: 860px) {
+  table.stack.compact-mobile tr {
+    position: relative;
+  }
+
+  table.stack.compact-mobile td:not(.mobile-row):not(.empty-cell) {
+    display: none;
+  }
+
+  table.stack.compact-mobile td.mobile-row {
+    display: block;
+    padding: 0;
+    min-height: 0;
+    text-align: left;
+  }
+
+  /* Bakım listesinde Zaman satırı sığmazsa başlangıç ve bitiş alt alta, sağa yaslı. */
+  .maintenance-table td[data-label='Zaman'] {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .maintenance-table .time-range {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    column-gap: 4px;
+  }
+
+  .maintenance-table .time-range > span {
+    white-space: nowrap;
+  }
 }
 
 /* Tablo hücresinde ana değerin altındaki küçük, sönük ikinci satır. */
@@ -5016,6 +5157,24 @@ textarea {
 
 .perf-range-dates {
   flex-wrap: nowrap;
+}
+
+/* Telefonda iki tarih kutusu yan yana sığmaz: başlangıç, bitiş ve Uygula alt alta, tam genişlik. */
+@media (max-width: 640px) {
+  .perf-range-dates {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+
+  .perf-range-dates > .muted {
+    display: none;
+  }
+
+  .perf-range-dates input {
+    min-width: 0;
+    width: 100%;
+  }
 }
 
 .perf-panel {

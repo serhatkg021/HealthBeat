@@ -11,6 +11,8 @@ import { Pagination } from '../components/Pagination'
 import { alertLevelLabel, alertLevelTone, alertMetricLabel, alertStatusLabel, alertSubjectText } from '../labels'
 import { BellOff, Check, Info } from 'lucide-react'
 import { AlertDetail, NotificationBadge } from './AlertDetail'
+import { AlertMobileRow } from './AlertMobileRow'
+import { useNow } from '../components/useNow'
 import { formatDateTime } from './datetime'
 
 const STATUS_TABS: { value: AlertStatus | ''; label: string }[] = [
@@ -28,6 +30,7 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
   const { can } = useAuth()
   const [status, setStatus] = useState<AlertStatus | ''>('open')
   const [selected, setSelected] = useState<Alert | null>(null)
+  const now = useNow(60_000)
 
   const {
     items: alerts,
@@ -81,7 +84,7 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
 
       <div className="card table-card">
         <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
-        <table className="stack">
+        <table className="stack compact-mobile">
           <thead>
             <tr>
               <th>Metrik</th>
@@ -97,6 +100,14 @@ export function HostAlerts({ hostId, hostTitle }: { hostId: string; hostTitle?: 
           <tbody>
             {alerts.map((a) => (
               <tr key={a.id}>
+                <AlertMobileRow
+                  alert={a}
+                  showStatus={showStatus}
+                  canAcknowledge={can('alert.acknowledge')}
+                  onOpen={() => setSelected(a)}
+                  onAcknowledge={() => handleAcknowledge(a.id)}
+                  now={now}
+                />
                 <td className="primary" data-label="Metrik">
                   {alertMetricLabel(a.alert_type)}
                   {a.subject && <span className="muted"> · {alertSubjectText(a.alert_type, a.subject)}</span>}

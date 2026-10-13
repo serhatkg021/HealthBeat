@@ -164,6 +164,12 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   değiştirmesi gerekende rozet; arama ada göre de yapılıyor (yer tutucu buna göre). Kullanıcılar, organizasyon iletişim
   kişileri ve sistem kişileri tablolarında işlemler satır sonundaki "⋯" menüsünde (silme ayraçtan sonra). Organizasyon
   iletişim kişisi ekleme ve düzenleme pencerede, "Kişi ekle" listenin üstünde; silme onayı da pencerede.
+- Panel: telefonda (tabloların kart düzenine geçtiği genişlikte) sunucu ve alert listeleri iki satırlık özet. Sunucu:
+  durum noktası, ad, açık alert / bakım / güncellenmesi gereken agent rozeti; altta organizasyon, IP ve çevrimdışıysa ne
+  zamandır görülmediği. Alert: seviye, sunucu, ne kadar önce; altta ne olduğu, sorunlu bildirim ve "Onayla". Satıra
+  dokunmak sunucuyu ya da alert ayrıntısını açar. Dar telefonda üst çubuktaki tema düğmesi (seçim profil menüsünde) ve
+  profil oku gizli, sayfa başlığı kesilmiyor; Performans'ta tarih aralığı alt alta; Bildirim kuralı ekleme formu ve
+  Bakım listesindeki zaman aralığı ekrana sığıyor.
 - Panel: Bildirim → Kanallar 2 sütunlu kart ızgarası (telefonda tek sütun): **E-posta** kartı durumu, sunucu ve gönderen
   adresi, son başarılı denemeyi ve kanalı kullanan kural sayısını iki satırda özetliyor; ayar "Düzenle" penceresinde,
   deneme gönderimi "Deneme gönder" penceresinde. **Slack**, **SMS** ve **Özel webhook** aynı biçimde "Yakında" kartları;

@@ -14,6 +14,8 @@ import { SearchInput } from '../components/SearchInput'
 import { Pagination } from '../components/Pagination'
 import { BellOff, Check, Info } from 'lucide-react'
 import { AlertDetail, NotificationBadge } from './AlertDetail'
+import { AlertMobileRow } from './AlertMobileRow'
+import { useNow } from '../components/useNow'
 import { formatDateTime } from './datetime'
 
 const STATUS_TABS: { value: AlertStatus | ''; label: string }[] = [
@@ -43,6 +45,7 @@ export function AlertsPage() {
   const level = levelTab === LEVEL_ALL ? undefined : (levelTab as AlertLevel)
   const [hostTitles, setHostTitles] = useState<Record<string, string>>({})
   const [selected, setSelected] = useState<Alert | null>(null)
+  const now = useNow(60_000)
 
   const {
     items: alerts,
@@ -129,7 +132,7 @@ export function AlertsPage() {
 
       <div className="card table-card">
         <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} onPageSizeChange={setPageSize} />
-        <table className="stack">
+        <table className="stack compact-mobile">
           <thead>
             <tr>
               <th>Sunucu</th>
@@ -146,6 +149,15 @@ export function AlertsPage() {
           <tbody>
             {alerts.map((a) => (
               <tr key={a.id}>
+                <AlertMobileRow
+                  alert={a}
+                  hostTitle={hostTitles[a.host_id] ?? a.host_id}
+                  showStatus={showStatus}
+                  canAcknowledge={can('alert.acknowledge')}
+                  onOpen={() => setSelected(a)}
+                  onAcknowledge={() => handleAcknowledge(a.id)}
+                  now={now}
+                />
                 <td className="primary">
                   <Link to={`/hosts/${a.host_id}`}>{hostTitles[a.host_id] ?? a.host_id}</Link>
                 </td>

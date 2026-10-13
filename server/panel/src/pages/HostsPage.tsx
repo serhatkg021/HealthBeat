@@ -12,6 +12,7 @@ import { OrgPicker } from '../components/ScopePickers'
 import { SearchInput } from '../components/SearchInput'
 import { SecretNotice } from '../components/SecretNotice'
 import { MaintenanceBadge } from '../components/MaintenanceBadge'
+import { HostMobileRow } from '../components/HostMobileRow'
 import { StatusBadge } from '../components/StatusBadge'
 import { TabPanel, Tabs, type TabItem } from '../components/Tabs'
 import { useAgentPolicy } from '../components/useAgentPolicy'
@@ -197,7 +198,7 @@ function HostList() {
               setPage(1)
             }}
           />
-          <table className="stack">
+          <table className="stack compact-mobile">
             <thead>
               <tr>
                 <th>Sunucu</th>
@@ -213,6 +214,14 @@ function HostList() {
             <tbody>
               {pageRows.map(({ host: c, critical, warning }) => (
                 <tr key={c.id}>
+                  <HostMobileRow
+                    host={c}
+                    orgName={organizations.length > 0 ? orgName.get(c.organization_id) : undefined}
+                    critical={critical}
+                    warning={warning}
+                    policy={agentPolicy}
+                    now={now.getTime()}
+                  />
                   <td className="primary">
                     <Link to={`/hosts/${c.id}`}>{c.title}</Link>
                   </td>
