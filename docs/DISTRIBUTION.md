@@ -85,7 +85,7 @@ yerine `gh release download agent/vX.Y.Z` kullan.)
 
 ```sh
 sudo apt install ./healthbeat-agent_X.Y.Z_amd64.deb     # arm64 sunucuda _arm64.deb
-sudo healthbeat-agent-setup                              # adım adım sorar (mod, adres, host id, token, diskler, Docker)
+sudo healthbeat-agent-setup                              # adım adım sorar, kaydetmeden önce bağlantıyı dener
 healthbeat-agent --version                               # X.Y.Z
 sudo systemctl status healthbeat-agent                   # active (running)
 ```
@@ -141,7 +141,7 @@ belirlediğin gruplarla); her sunucudan sonra sayaç düşmeli.
 | --- | --- | --- |
 | Ubuntu / Debian paketi | `sudo apt install ./healthbeat-agent_X.Y.Z_amd64.deb` | `healthbeat-agent --version` |
 | RHEL ailesi paketi | `sudo dnf install ./healthbeat-agent-X.Y.Z-1.x86_64.rpm` (kuruluysa yükseltir) | `healthbeat-agent --version` |
-| Tarball | `sudo ./install.sh upgrade --dry-run` → `sudo ./install.sh upgrade` | çıktı `upgraded … -> X.Y.Z` ile biter |
+| Tarball | `sudo ./install.sh upgrade --dry-run` → `sudo ./install.sh upgrade` | çıktıda `Yükseltildi: … -> X.Y.Z` |
 
 - **Paket yükseltmesi** yapılandırmaya, kullanıcıya ve `docker.conf` drop-in'ine dokunmaz. Servis etkin ve
   yapılandırılmışsa paket yeniden başlatır. `apt`/`dnf` standart davranışıdır: **yeni sürüm çökerse otomatik
@@ -149,8 +149,8 @@ belirlediğin gruplarla); her sunucudan sonra sayaç düşmeli.
 - **Eski kurulumlarda token düz durur.** Yükseltme bunu algılar, config'e dokunmadan bir uyarı yazar:
 
   ```
-  healthbeat-agent: WARNING: the api_token in /etc/healthbeat/agent.json is stored in plain text.
-    Encrypt it for this machine (the value stays the same; the service restarts):
+  healthbeat-agent: UYARI: /etc/healthbeat/agent.json içindeki api_token düz metin olarak duruyor.
+    Bu makine için şifreleyin (değer aynı kalır; servis yeniden başlar):
       sudo healthbeat-agent-setup encrypt
   ```
 
@@ -360,9 +360,9 @@ sonra her kurulumda Ayarlar → Agent sürümleri'nden girilir.
 | Belirti | Çözüm |
 | --- | --- |
 | `apt install ./x.deb`: "Download is performed unsandboxed as root" uyarısı | Zararsız: yerel dosya `_apt` kullanıcısı tarafından okunamıyor. Dosyayı `/tmp`'ye kopyala ya da yoksay. |
-| Kurulum sonrası "NOT configured yet" | Beklenen: `sudo healthbeat-agent-setup` çalıştır. |
-| `healthbeat-agent-setup`: "no agent binary is installed" | Paket kurulu değil (ya da tarball kurulumu); önce paketi kur. |
-| `install.sh`: "was installed from a package" | Paketle kurulu makinede `install/upgrade` reddedilir; `apt`/`dnf` kullan (bölüm 5). |
+| Kurulum sonrası "HENÜZ yapılandırılmadı" | Beklenen: `sudo healthbeat-agent-setup` çalıştır. |
+| `healthbeat-agent-setup`: "kurulu agent binary'si yok" | Paket kurulu değil (ya da tarball kurulumu); önce paketi kur. |
+| `install.sh`: "agent paketle (.deb/.rpm) kurulmuş" | Paketle kurulu makinede `install/upgrade` reddedilir; `apt`/`dnf` kullan (bölüm 5). |
 | Paket yükseltmesinden sonra servis eski sürümü çalıştırıyor | Eski tarball kurulumu paketi gölgeliyor: bölüm 6. |
 | `dnf`: `groupadd: command not found` | Minimal imajda `shadow-utils` yok; paket bunu bağımlılık olarak ister, `dnf install` kendisi kurar (`rpm -i` kurmaz). |
 | Servis başlamıyor (RHEL) | `journalctl -u healthbeat-agent -n 50`; SELinux ise `sudo ausearch -m avc -ts recent`. |

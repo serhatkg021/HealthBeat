@@ -70,9 +70,11 @@ scp healthbeat-agent deploy/install.sh deploy/healthbeat-agent.service kullanici
 ```sh
 cd /tmp
 
-# 4) Kur — sihirbaz modu, her soruyu kısaca açıklayarak tek tek sorar (mod, adres,
-#    token, Docker izleme, hangi diskler raporlanacak, ...) ve kurmadan önce bir
-#    özet gösterip onay ister. Terminal gerektirir.
+# 4) Kur — sihirbaz 6 adımda sorar: mod, server bağlantısı (adres, host id,
+#    token), bağlantı denemesi (girilen değerlerle server'a bir rapor gönderir;
+#    sertifika/token sorununda ne yapılacağını sorar), izlenecekler (diskler,
+#    Docker), gelişmiş ayarlar ve özet. Kurduktan sonra ilk raporu bekler.
+#    Terminal gerektirir.
 sudo ./install.sh wizard
 
 # 5) Doğrula
@@ -92,8 +94,8 @@ sudo HEALTHBEAT_API_TOKEN='<panelin gösterdiği token>' ./install.sh install --
 ```
 
 Docker container'larını da izlemek istiyorsan bu komuta `--docker` ekle (kararı burada ver —
-sonradan eklemek de mümkün, bkz. bölüm 6.a); `wizard`'a da aynı şekilde ek bayraklar verilebilir,
-verilen her bayrak için sihirbaz o soruyu atlar (`./install.sh --help`).
+sonradan eklemek de mümkün, bkz. bölüm 6.a). `wizard`'a verilen bayraklar soruların varsayılanı olur;
+token `HEALTHBEAT_API_TOKEN` ya da `--token-file` ile verildiyse hiç sorulmaz (`./install.sh --help`).
 
 ## 2. Adım adım kurulum
 
@@ -120,10 +122,11 @@ Token/secret'ı kaybedersen kurulumu baştan yapmana gerek yok — bkz. bölüm 
 `agent/deploy/` altındaki `install.sh`, `healthbeat-agent.service` ve derlediğin binary'yi
 sunucuya kopyala.
 
-**En kolayı `sudo ./install.sh wizard`** — soru sorarak seni yönlendirir, her alanı neden
-istediğini kısaca açıklar (bölüm 1). Aşağıdakiler doğrudan `install` komutunu, tüm değerleri
-bayrak/ortam değişkeniyle vererek (script/otomasyon için) kullanır; `wizard`'a da aynı bayraklar
-verilebilir, verilen her alan için o soru atlanır.
+**En kolayı `sudo ./install.sh wizard`** — soru sorarak seni yönlendirir, kaydetmeden önce
+bağlantıyı dener (bölüm 1). Aşağıdakiler doğrudan `install` komutunu, tüm değerleri
+bayrak/ortam değişkeniyle vererek (script/otomasyon için) kullanır; `wizard`'a verilen bayraklar
+soruların varsayılanı olur. Sihirbaz var olan bir yapılandırmada çalıştırılırsa mevcut değerleri
+varsayılan gösterir; Enter değeri (token dahil) korur.
 
 Komutu çalıştırmadan önce iki şeyi bil:
 
@@ -297,7 +300,7 @@ açılışta bellekte çözer; server'a giden istek değişmez.
   Aynı değeri yerinde şifrelemek için, hiçbir şey sormayan ve zaten şifreliyse bir şey yapmayan tek komut:
   `sudo healthbeat-agent-setup encrypt` (tarball'da `sudo ./install.sh encrypt`). Server'da bir şey değişmez.
 - Makine kimliği değişirse (VM şablondan klonlandı, `machine-id` yeniden üretildi) agent başlamaz:
-  `api_token could not be decrypted on this machine …`. Token'ı yeniden ver (bölüm 6.c); klon ayrı bir sunucu olarak
+  `api_token bu makinede çözülemedi …`. Token'ı yeniden ver (bölüm 6.c); klon ayrı bir sunucu olarak
   izlenecekse panelde yeni sunucu ekleyip klonda `healthbeat-agent-setup --force` çalıştır.
 - Makine kimliği olmayan ortamda (systemd'siz konteyner) kurulum uyarır ve token'ı düz yazar.
 
@@ -392,11 +395,11 @@ container kayıtlarını, eşik ayarlarını ve alert'lerini de siler** (veritab
 CASCADE`) — geri alınamaz. Geçmişi kaybetmek istemiyorsan eski kaydı silmeden önce gerekiyorsa
 dışa aktar/not al.
 
-### f) `install.sh` "already exists; pass --force to replace it" diyor
+### f) `install.sh` "zaten var; üzerine yazmak için --force verin" diyor
 
-Bu bilerek konmuş bir koruma — mevcut config'i yanlışlıkla ezmemek için. `wizard` ile kuruyorsan
-aynı durumda önce sorar (üzerine yaz/vazgeç); `install`'i bayraklarla çalıştırıyorsan gerçekten
-yeniden kurmak istediğinde `--force` ekle. Her iki yol da yeni yazmadan önce otomatik yedek alır
+Bu bilerek konmuş bir koruma — mevcut config'i yanlışlıkla ezmemek için. `wizard` mevcut değerleri
+varsayılan gösterir ve özeti onaylayınca üzerine yazar; `install`'i bayraklarla çalıştırıyorsan
+gerçekten yeniden kurmak istediğinde `--force` ekle. Her iki yol da yeni yazmadan önce otomatik yedek alır
 (`/etc/healthbeat/agent.json.bak.<tarih>`). Yanlışlıkla ezdiysen o yedekten geri dönebilirsin:
 
 ```sh
@@ -525,7 +528,7 @@ Docker alanları yalnızca `healthbeat` kullanıcısı `docker` grubundaysa geli
 | Belirti | Olası neden |
 | --- | --- |
 | Push: log'da `server returned 401` | Token/host id yanlış ya da credential döndürüldü (bölüm 6.c ile yenile) |
-| `api_token could not be decrypted on this machine` (agent başlamıyor) | Config başka makineden kopyalandı ya da VM klonlandı (makine kimliği değişti): token'ı yeniden ver (bölüm 6.c) |
+| `api_token bu makinede çözülemedi` (agent başlamıyor) | Config başka makineden kopyalandı ya da VM klonlandı (makine kimliği değişti): token'ı yeniden ver (bölüm 6.c) |
 | Log'da (ya da yükseltmede) `api_token … is stored in plain text` | Token elle düz yazılmış ya da eski kurulum; çalışır, aynı değeri şifrelemek için `sudo healthbeat-agent-setup encrypt` (bölüm 5, "Şifreli token") |
 | Push: `x509: certificate signed by unknown authority` | Server sertifikasını özel bir CA imzalıyor: CA'yı `--ca-cert` / `ca_cert_file` ile ver (ya da halka açık CA'lı bir sertifika kullan). Yalnızca geliştirmede `insecure_skip_verify` |
 | Push: `x509: certificate is valid for …, not …` | Sertifika, `server_url`'deki host için (DNS/IP SAN) düzenlenmemiş |
@@ -534,7 +537,8 @@ Docker alanları yalnızca `healthbeat` kullanıcısı `docker` grubundaysa geli
 | Push: `429 çok fazla istek` | Aynı IP'den çok fazla başarısız kimlik doğrulama; birkaç dakika bekle |
 | Pull: panelde sunucu offline | Güvenlik duvarı, `allowed_server_ips`'de server IP'si yok ya da secret uyuşmuyor (bölüm 6.b/6.c) |
 | Sunucu bir süre sonra **offline** alert'i veriyor | Ajan durmuş ya da ağ kopuk (push'ta `interval_seconds × 3` sessizlik) |
-| `install.sh`: `... already exists; pass --force ...` | Bölüm 6.f |
+| Push: server'a neden ulaşılamadığı belli değil | `sudo healthbeat-agent -config /etc/healthbeat/agent.json -check-connection` adres çözme, port, sertifika ve token'ı sırayla dener, ilk sorunu Türkçe açıklar (bir rapor gönderir) |
+| `install.sh`: `... zaten var; üzerine yazmak için --force verin` | Bölüm 6.f |
 | Kurulumda bir alan yanlış/eksik girildi | Bölüm 6 (a-g) — çoğu durumda yeniden kurulum gerekmez |
 
 ## 10. Envanter (makine bilgisi)

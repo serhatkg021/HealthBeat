@@ -55,12 +55,12 @@ type Config struct {
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read config file: %w", err)
+		return nil, fmt.Errorf("yapılandırma dosyası okunamadı: %w", err)
 	}
 
 	var cfg Config
 	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config file: %w", err)
+		return nil, fmt.Errorf("yapılandırma dosyası geçerli JSON değil: %w", err)
 	}
 
 	// Faz 3 yapılandırmaları "mode" alanından öncedir ve hepsi push modudur.
@@ -74,13 +74,13 @@ func Load(path string) (*Config, error) {
 			return nil, err
 		}
 		if cfg.ServerURL == "" || cfg.HostID == "" || cfg.APIToken == "" {
-			return nil, fmt.Errorf("push mode requires server_url, host_id, and api_token")
+			return nil, fmt.Errorf("push modunda server_url, host_id ve api_token zorunludur")
 		}
 		if cfg.IntervalSeconds <= 0 {
 			cfg.IntervalSeconds = 30
 		}
 		if cfg.CACertFile != "" && cfg.InsecureSkipVerify {
-			return nil, fmt.Errorf("ca_cert_file and insecure_skip_verify contradict each other: use the CA file to verify the server, or skip verification, not both")
+			return nil, fmt.Errorf("ca_cert_file ile insecure_skip_verify çelişiyor: server'ı ya CA dosyasıyla doğrulayın ya da doğrulamayı kapatın, ikisini birden değil")
 		}
 		// Kullanılamaz bir CA dosyasında ilk push'ta değil, açılışta hata ver.
 		if _, err := cfg.RootCAs(); err != nil {
@@ -91,22 +91,22 @@ func Load(path string) (*Config, error) {
 			return nil, err
 		}
 		if cfg.CACertFile != "" {
-			return nil, fmt.Errorf("ca_cert_file only applies to push mode (it verifies the server the agent connects to)")
+			return nil, fmt.Errorf("ca_cert_file yalnızca push modunda geçerlidir (agent'ın bağlandığı server'ı doğrular)")
 		}
 		if cfg.ListenAddr == "" || cfg.PullEndpoint == "" || cfg.PullSecret == "" {
-			return nil, fmt.Errorf("pull mode requires listen_addr, pull_endpoint, and pull_secret")
+			return nil, fmt.Errorf("pull modunda listen_addr, pull_endpoint ve pull_secret zorunludur")
 		}
 		if !strings.HasPrefix(cfg.PullEndpoint, "/") {
-			return nil, fmt.Errorf("pull_endpoint must start with /")
+			return nil, fmt.Errorf("pull_endpoint / ile başlamalı")
 		}
 		if cfg.TLSCertFile == "" || cfg.TLSKeyFile == "" {
-			return nil, fmt.Errorf("pull mode requires tls_cert_file and tls_key_file (HTTPS is mandatory — see docs/MIMARI.md section 5)")
+			return nil, fmt.Errorf("pull modunda tls_cert_file ve tls_key_file zorunludur (HTTPS şart; bkz. docs/MIMARI.md bölüm 5)")
 		}
 		if len(cfg.AllowedServerIPs) == 0 {
-			return nil, fmt.Errorf("pull mode requires at least one entry in allowed_server_ips")
+			return nil, fmt.Errorf("pull modunda allowed_server_ips en az bir adres içermeli")
 		}
 	default:
-		return nil, fmt.Errorf("mode must be %q or %q", ModePush, ModePull)
+		return nil, fmt.Errorf("mode %q ya da %q olmalı", ModePush, ModePull)
 	}
 
 	if len(cfg.DiskMounts) == 0 {
@@ -115,7 +115,7 @@ func Load(path string) (*Config, error) {
 	for _, m := range cfg.DiskMounts {
 		// "data" gibi bir yazım hatası aksi halde sonsuza dek sessizce atlanırdı.
 		if m != "auto" && !strings.HasPrefix(m, "/") {
-			return nil, fmt.Errorf(`disk_mounts entry %q must be an absolute path or "auto" (every real filesystem)`, m)
+			return nil, fmt.Errorf(`disk_mounts girdisi %q mutlak bir yol ya da "auto" (bütün gerçek dosya sistemleri) olmalı`, m)
 		}
 	}
 
@@ -130,11 +130,11 @@ func (c *Config) RootCAs() (*x509.CertPool, error) {
 	}
 	pem, err := os.ReadFile(c.CACertFile)
 	if err != nil {
-		return nil, fmt.Errorf("read ca_cert_file: %w", err)
+		return nil, fmt.Errorf("ca_cert_file okunamadı: %w", err)
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(pem) {
-		return nil, fmt.Errorf("ca_cert_file %s contains no PEM-encoded certificate", c.CACertFile)
+		return nil, fmt.Errorf("ca_cert_file %s PEM biçiminde sertifika içermiyor", c.CACertFile)
 	}
 	return pool, nil
 }

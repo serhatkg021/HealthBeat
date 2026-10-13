@@ -43,7 +43,7 @@ func machineKey() ([]byte, error) {
 			return hkdf.Key(sha256.New, []byte(id), nil, hkdfInfo, 32)
 		}
 	}
-	return nil, fmt.Errorf("no machine id found (%s); secrets cannot be encrypted or decrypted on this machine", strings.Join(machineIDPaths, ", "))
+	return nil, fmt.Errorf("makine kimliği bulunamadı (%s); bu makinede sır şifrelenemez ya da çözülemez", strings.Join(machineIDPaths, ", "))
 }
 
 func machineAEAD() (cipher.AEAD, error) {
@@ -61,10 +61,10 @@ func machineAEAD() (cipher.AEAD, error) {
 // EncryptSecret, sırrı bu makineye bağlı şifreli biçime çevirir (agent -encrypt-token; install.sh kullanır).
 func EncryptSecret(plain string) (string, error) {
 	if plain == "" {
-		return "", errors.New("secret is empty")
+		return "", errors.New("sır boş")
 	}
 	if strings.HasPrefix(plain, encPrefix) {
-		return "", errors.New("secret is already encrypted")
+		return "", errors.New("sır zaten şifreli")
 	}
 	aead, err := machineAEAD()
 	if err != nil {
@@ -84,18 +84,18 @@ func IsEncrypted(value string) bool { return strings.HasPrefix(value, encPrefix)
 func decryptSecret(field, value string) (string, error) {
 	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimPrefix(value, encPrefix))
 	if err != nil {
-		return "", fmt.Errorf("%s: malformed encrypted value; set it again with: %s", field, RepairHint)
+		return "", fmt.Errorf("%s: şifreli değer bozuk; yeniden vermek için: %s", field, RepairHint)
 	}
 	aead, err := machineAEAD()
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", field, err)
 	}
 	if len(raw) < aead.NonceSize()+aead.Overhead() {
-		return "", fmt.Errorf("%s: malformed encrypted value; set it again with: %s", field, RepairHint)
+		return "", fmt.Errorf("%s: şifreli değer bozuk; yeniden vermek için: %s", field, RepairHint)
 	}
 	plain, err := aead.Open(nil, raw[:aead.NonceSize()], raw[aead.NonceSize():], nil)
 	if err != nil || len(plain) == 0 {
-		return "", fmt.Errorf("%s could not be decrypted on this machine (was the config copied or the machine cloned?); set it again with: %s", field, RepairHint)
+		return "", fmt.Errorf("%s bu makinede çözülemedi (config kopyalanmış ya da makine klonlanmış olabilir); yeniden vermek için: %s", field, RepairHint)
 	}
 	return string(plain), nil
 }

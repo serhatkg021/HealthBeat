@@ -82,10 +82,10 @@ func TestValidationErrors(t *testing.T) {
 		"pull without TLS cert":   {without("tls_cert_file"), "tls_cert_file"},
 		"pull without TLS key":    {without("tls_key_file"), "tls_key_file"},
 		"pull without whitelist":  {without("allowed_server_ips"), "allowed_server_ips"},
-		"pull endpoint w/o slash": {strings.Replace(validPull, `"/api/v1/status"`, `"api/v1/status"`, 1), "must start with /"},
-		"unknown mode":            {`{"mode":"carrier-pigeon"}`, "mode must be"},
-		"not json":                {`{`, "parse config"},
-		"empty":                   {``, "parse config"},
+		"pull endpoint w/o slash": {strings.Replace(validPull, `"/api/v1/status"`, `"api/v1/status"`, 1), "/ ile başlamalı"},
+		"unknown mode":            {`{"mode":"carrier-pigeon"}`, "olmalı"},
+		"not json":                {`{`, "geçerli JSON değil"},
+		"empty":                   {``, "geçerli JSON değil"},
 	} {
 		_, err := load(t, tc.json)
 		if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -93,7 +93,7 @@ func TestValidationErrors(t *testing.T) {
 		}
 	}
 
-	if _, err := Load(filepath.Join(t.TempDir(), "missing.json")); err == nil || !strings.Contains(err.Error(), "read config") {
+	if _, err := Load(filepath.Join(t.TempDir(), "missing.json")); err == nil || !strings.Contains(err.Error(), "okunamadı") {
 		t.Errorf("missing file: err = %v", err)
 	}
 }
@@ -138,10 +138,10 @@ func TestCACertFile(t *testing.T) {
 	notPEM := filepath.Join(t.TempDir(), "junk.pem")
 	os.WriteFile(notPEM, []byte("this is not a certificate"), 0o600)
 	for name, tc := range map[string]struct{ json, want string }{
-		"missing file":              {fmt.Sprintf(base, filepath.Join(t.TempDir(), "nope.pem"), ""), "read ca_cert_file"},
-		"not a certificate":         {fmt.Sprintf(base, notPEM, ""), "no PEM-encoded certificate"},
-		"contradicts insecure mode": {fmt.Sprintf(base, ca, `,"insecure_skip_verify":true`), "contradict"},
-		"pull mode":                 {strings.Replace(validPull, `{"mode":"pull"`, fmt.Sprintf(`{"ca_cert_file":%q,"mode":"pull"`, ca), 1), "only applies to push mode"},
+		"missing file":              {fmt.Sprintf(base, filepath.Join(t.TempDir(), "nope.pem"), ""), "ca_cert_file okunamadı"},
+		"not a certificate":         {fmt.Sprintf(base, notPEM, ""), "PEM biçiminde sertifika içermiyor"},
+		"contradicts insecure mode": {fmt.Sprintf(base, ca, `,"insecure_skip_verify":true`), "çelişiyor"},
+		"pull mode":                 {strings.Replace(validPull, `{"mode":"pull"`, fmt.Sprintf(`{"ca_cert_file":%q,"mode":"pull"`, ca), 1), "yalnızca push modunda"},
 	} {
 		if _, err := load(t, tc.json); err == nil || !strings.Contains(err.Error(), tc.want) {
 			t.Errorf("%s: err = %v, want it to mention %q", name, err, tc.want)

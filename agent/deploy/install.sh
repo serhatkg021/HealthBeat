@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # HealthBeat agent kurucusu (docs/MIMARI.md bölüm 6, "Agent kurulumu").
 #
-#   sudo ./install.sh wizard                                             # guided, asks one question at a time
+#   sudo ./install.sh wizard                                             # adım adım sihirbaz
 #   sudo ./install.sh install --mode push --server-url https://api.example.com --host-id <uuid>
 #   sudo ./install.sh install --mode pull --allowed-ips 203.0.113.10
 #   sudo ./install.sh uninstall [--purge]
@@ -27,90 +27,96 @@ readonly SERVICE_USER=healthbeat
 
 usage() {
   cat <<'USAGE'
-Usage: install.sh <install|uninstall|wizard|upgrade|rollback|configure|token|encrypt> [options]
+Kullanım: install.sh <eylem> [seçenekler]
+Paketle kurulu agent'ta:
+  healthbeat-agent-setup [token|encrypt] [seçenekler]
 
-wizard
-  guided install: explains each choice and asks for it one at a time, then shows a
-  summary before writing anything (requires a terminal). Equivalent to 'install' with
-  no options, plus prompts for --docker/--disk-mounts/--ca-cert/--tls-cert too. Any
-  option below can still be passed alongside 'wizard' to pre-fill (and skip) that
-  question.
+Eylemler
+  wizard      Adım adım kurulum sihirbazı (terminal gerekir). Paketle
+              kurulu agent'ta seçeneksiz healthbeat-agent-setup.
+  install     Binary'yi, servisi ve yapılandırmayı kurar (tarball).
+  configure   Yalnızca yapılandırmayı yazar ve servisi başlatır
+              (paketle kurulu agent; healthbeat-agent-setup).
+  token       Panelde yenilenen API token'ı (pull'da secret'ı) verir.
+  encrypt     Config'te düz duran token'ı aynen şifreler.
+  upgrade     Yalnızca binary'yi değiştirir (tarball).
+  rollback    Bir önceki binary'ye döner (tarball).
+  uninstall   Agent'ı kaldırır (tarball).
 
-install options
-  --mode push|pull            operating mode (prompted if omitted)
-  --binary PATH               agent binary to install (default: ./healthbeat-agent or ../healthbeat-agent)
-  --disk-mounts /,/data       mount points to report (default: /). "auto" means every real filesystem
-                              (virtual, tmpfs and snap/squashfs mounts are left out), e.g. --disk-mounts auto
-                              or /,auto. Reporting a mount does not raise alerts by itself: choose which
-                              mounts alert per agent in the panel.
-  --docker                    let the agent read the Docker socket (adds the service to the
-                              'docker' group -- that is effectively ROOT on this host, see docs/AGENT.md)
-  --force                     overwrite an existing config (it is backed up first)
-  --no-start                  install but do not enable/start the service
+Kurulum seçenekleri (install, configure; wizard'da ön doldurma)
+  --mode push|pull           Çalışma modu
+  --binary DOSYA             Kurulacak binary (yalnızca install;
+                             varsayılan: betiğin yanındaki)
+  --disk-mounts /,/data      Raporlanacak diskler (varsayılan /);
+                             "auto" = bütün gerçek dosya sistemleri.
+                             Alert üretecek diskler panelden seçilir.
+  --docker                   Docker container'larını izle: servis
+                             'docker' grubuna eklenir (Docker soketine
+                             erişim bu makinede root yetkisine denktir)
+  --force                    Var olan config'in üzerine yaz (önce
+                             yedeklenir)
+  --no-start                 Kur ama servisi başlatma
 
-  push mode
-  --server-url URL            https://host[:port] of the HealthBeat server
-  --host-id UUID            host id shown when the agent was created in the panel
-  --interval SECONDS          push interval (default 30)
-  --ca-cert FILE              PEM file of the (private) CA that signed the server's certificate;
-                              only that CA is trusted. Use this instead of --insecure-skip-verify.
-  --insecure-skip-verify      accept ANY server certificate (dev only; conflicts with --ca-cert)
-  API token: HEALTHBEAT_API_TOKEN env var, --token-file FILE, or prompt
+  push modu
+  --server-url URL           Server adresi: https://adres[:port]
+  --host-id UUID             Panelin gösterdiği host id
+  --interval SANİYE          Gönderim aralığı (varsayılan 30)
+  --ca-cert DOSYA            Server sertifikasını imzalayan özel CA
+                             (PEM); yalnızca o CA'ya güvenilir
+  --insecure-skip-verify     Her sertifikayı kabul et (yalnızca test;
+                             --ca-cert ile birlikte olmaz)
+  API token: HEALTHBEAT_API_TOKEN, --token-file DOSYA ya da gizli istem
 
-  pull mode
-  --allowed-ips IP[,IP|CIDR]  the server address(es) allowed to poll this agent (required)
-  --listen ADDR               listen address (default 0.0.0.0:9443; port must be >= 1024)
-  --endpoint PATH             status path (default /api/v1/status)
-  --tls-cert FILE --tls-key FILE   existing certificate (default: generate a self-signed one)
-  pull secret: HEALTHBEAT_PULL_SECRET env var, --secret-file FILE, or prompt
+  pull modu
+  --allowed-ips IP[,CIDR]    Sorgulamasına izin verilen server
+                             adresleri (zorunlu)
+  --listen ADRES             Dinleme adresi (varsayılan 0.0.0.0:9443;
+                             port 1024 ve üstü)
+  --endpoint YOL             Status yolu (varsayılan /api/v1/status)
+  --tls-cert DOSYA --tls-key DOSYA
+                             Mevcut sertifika (verilmezse kendinden
+                             imzalı üretilir)
+  Pull secret: HEALTHBEAT_PULL_SECRET, --secret-file DOSYA ya da istem
 
-uninstall options
-  --purge                     also delete /etc/healthbeat (config, certificates) and the service user
+token / encrypt
+  --no-restart               Değeri yaz ama servisi yeniden başlatma
+  token: değer HEALTHBEAT_API_TOKEN / HEALTHBEAT_PULL_SECRET,
+  --token-file / --secret-file ya da gizli istemle verilir; mod
+  config'ten okunur. encrypt hiçbir şey sormaz, zaten şifreliyse bir
+  şey yapmaz.
 
-configure write ONLY the configuration (and certificates / docker drop-in), then enable+start the service.
-          Used after installing the .deb/.rpm package, which puts the binary and unit in place but no config
-          (the package installs a 'healthbeat-agent-setup' command that runs this). Takes the same options as
-          'install' (--mode, --server-url, ...) except --binary; on a terminal with no options it asks step by step.
+upgrade / rollback
+  --binary DOSYA             Yeni binary (upgrade; varsayılan:
+                             betiğin yanındaki)
+  --dry-run                  Her şeyi denetle, planı yaz, değiştirme
+  --no-restart               Binary'yi koy ama servisi yeniden başlatma
+  --allow-downgrade          Daha eski sürüme geçmeye izin ver
+  --update-unit              systemd unit'ini de güncelle
+  --verify-seconds N         Yeniden başlayan servisin sağlıklı
+                             kalması gereken süre (varsayılan 15);
+                             çökerse önceki binary geri konur
+  Yeni binary önce sürümünü bildirmeli ve MEVCUT config'i kabul
+  etmelidir. Eski binary healthbeat-agent.prev olarak saklanır.
 
-upgrade   replace ONLY the agent binary; the config, certificates and unit are left alone
-  --binary PATH               the new agent binary (default: ./healthbeat-agent or ../healthbeat-agent)
-  --dry-run                   check everything and print the plan, change nothing
-  --no-restart                install the binary but do not restart the service
-  --allow-downgrade           allow installing an older version than the current one
-  --update-unit               also install the systemd unit shipped next to this script
-  --verify-seconds N          how long the restarted service must stay healthy before the upgrade
-                              counts as successful (default 15); if it crashes, the previous binary
-                              is restored automatically and the exit code is 1
-  Before touching anything the new binary must report its version (--version) and must accept the
-  EXISTING config (--check-config). The old binary is kept as healthbeat-agent.prev.
+uninstall
+  --purge                    /etc/healthbeat'i (config, sertifikalar) ve
+                             servis kullanıcısını da sil
 
-rollback  swap the previous binary (healthbeat-agent.prev) back in and restart
-  --dry-run, --no-restart, --verify-seconds N   as for upgrade
+Ortak
+  --root DİZİN               / yerine DİZİN'e kur (hazırlık/test;
+                             systemctl ve chown atlanır)
+  -h, --help                 Bu yardımı göster
 
-token     replace ONLY the API token (push) or pull secret (pull) in the existing config, e.g. after
-          rotating the credentials in the panel, then restart the service. The mode is read from the
-          config; the value comes from HEALTHBEAT_API_TOKEN / HEALTHBEAT_PULL_SECRET, --token-file /
-          --secret-file, or a hidden prompt.
-  --no-restart                write the new value but do not restart the service
-
-encrypt   encrypt the API token / pull secret that is stored in plain text in the existing config
-          (older installs, hand edits); the value stays the same, so nothing changes on the server.
-          Asks nothing; does nothing if it is already encrypted, then
-          restarts the service.
-  --no-restart                encrypt but do not restart the service
-
-Secrets are written to the config encrypted for THIS machine (its /etc/machine-id); a copy of the
-config does not reveal them. A secret stored in plain text still works (the agent logs a warning,
-an upgrade prints one); 'encrypt' encrypts it in place.
-
-common
-  --root DIR                  install into DIR instead of / (packaging/staging; skips systemctl and chown)
-  -h, --help
+Token ve secret komut satırından alınmaz. Config'e bu makineye
+bağlı şifreli yazılır; düz değer de çalışır (agent uyarır).
 USAGE
 }
 
-die() { echo "install.sh: error: $*" >&2; exit 1; }
-info() { echo "==> $*"; }
+die() { echo "install.sh: hata: $*" >&2; exit 1; }
+# info: sihirbazdan sonra (WIZARD_DONE) ✓ satırı olarak yazılır.
+info() {
+  if [[ ${WIZARD_DONE:-0} -eq 1 ]]; then printf '  %s✓%s %s\n' "${C_G:-}" "${C_0:-}" "$*"; else echo "==> $*"; fi
+}
 
 # ---------------------------------------------------------------- argüman ayrıştırma
 WIZARD=0
@@ -123,15 +129,15 @@ case "$ACTION" in
   token | encrypt) shift ;;
   -h | --help) usage; exit 0 ;;
   "") usage >&2; exit 2 ;;
-  *) die "unknown action '$ACTION' (expected install, uninstall, wizard, upgrade, rollback, configure, token, or encrypt)" ;;
+  *) die "bilinmeyen eylem '$ACTION' (geçerli: install, uninstall, wizard, upgrade, rollback, configure, token, encrypt)" ;;
 esac
 
 MODE="" BINARY="" DISK_MOUNTS="/" DOCKER=0 FORCE=0 NO_START=0 PURGE=0 ROOT=""
 DRY_RUN=0 NO_RESTART=0 ALLOW_DOWNGRADE=0 UPDATE_UNIT=0 VERIFY_SECONDS=15
 SERVER_URL="" HOST_ID="" INTERVAL=30 INSECURE=0 TOKEN_FILE="" CA_CERT=""
-ALLOWED_IPS="" LISTEN="0.0.0.0:9443" ENDPOINT="/api/v1/status" TLS_CERT="" TLS_KEY="" SECRET_FILE=""
+ALLOWED_IPS="" LISTEN="0.0.0.0:9443" ENDPOINT="/api/v1/status" TLS_CERT="" TLS_KEY="" SECRET_FILE="" SECRET=""
 
-need_value() { [[ $# -ge 2 && -n "$2" ]] || die "option $1 needs a value"; }
+need_value() { [[ $# -ge 2 && -n "$2" ]] || die "$1 seçeneği bir değer ister"; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --mode) need_value "$@"; MODE="$2"; shift 2 ;;
@@ -160,7 +166,7 @@ while [[ $# -gt 0 ]]; do
     --tls-key) need_value "$@"; TLS_KEY="$2"; shift 2 ;;
     --secret-file) need_value "$@"; SECRET_FILE="$2"; shift 2 ;;
     -h | --help) usage; exit 0 ;;
-    *) die "unknown option '$1' (see --help)" ;;
+    *) die "bilinmeyen seçenek '$1' (bkz. --help)" ;;
   esac
 done
 
@@ -178,7 +184,7 @@ readonly LIVE_CA_PATH="/etc/healthbeat/ca.pem"
 STAGING=0
 [[ -n "$ROOT" ]] && STAGING=1
 if [[ $STAGING -eq 0 && $EUID -ne 0 ]]; then
-  die "must run as root (use sudo), or pass --root DIR to install into a staging directory"
+  die "root olarak çalıştırın (sudo) ya da bir hazırlık dizinine kurmak için --root DİZİN verin"
 fi
 
 run_systemctl() { [[ $STAGING -eq 1 ]] || systemctl "$@"; }
@@ -188,7 +194,7 @@ run_systemctl() { [[ $STAGING -eq 1 ]] || systemctl "$@"; }
 # çelişirdi. Yalnızca configure ve token (config yazar) çalışır.
 readonly PACKAGE_MARKER="${ROOT}/usr/share/healthbeat/installed-from-package"
 if [[ -e "$PACKAGE_MARKER" && $CONFIGURE_ONLY -eq 0 && "$ACTION" != token && "$ACTION" != encrypt ]]; then
-  die "the agent on this host was installed from a package (.deb/.rpm), which the package manager owns: use apt/dnf to install, upgrade, downgrade or remove it (see docs/DISTRIBUTION.md). Only 'install.sh configure', 'token' and 'encrypt' work here."
+  die "bu makinedeki agent paketle (.deb/.rpm) kurulmuş; kurma, yükseltme, sürüm düşürme ve kaldırma paket yöneticisiyle (apt/dnf) yapılır (bkz. docs/DISTRIBUTION.md). Burada yalnızca 'install.sh configure', 'token' ve 'encrypt' çalışır."
 fi
 
 # plain_secret_notice BINARY KOMUT: config'teki sır düz duruyorsa (agent'ın kendi okuma kuralıyla) nasıl şifreleneceğini
@@ -197,8 +203,8 @@ plain_secret_notice() {
   local field
   field="$("$1" -config "$CONF_PATH" -check-config 2>&1 | sed -n 's/.*warning: \([a-z_]*\) is stored in plain text.*/\1/p' | head -n1)"
   [[ -n "$field" ]] || return 0
-  echo "install.sh: WARNING: the $field in /etc/healthbeat/agent.json is stored in plain text." >&2
-  echo "  Encrypt it for this machine (the value stays the same; the service restarts):" >&2
+  echo "install.sh: UYARI: /etc/healthbeat/agent.json içindeki $field düz metin olarak duruyor." >&2
+  echo "  Bu makine için şifreleyin (değer aynı kalır; servis yeniden başlar):" >&2
   echo "    sudo $2" >&2
 }
 
@@ -217,9 +223,9 @@ if [[ "$ACTION" == uninstall ]]; then
   if [[ $PURGE -eq 1 ]]; then
     rm -rf "$CONF_DIR"
     if [[ $STAGING -eq 0 ]] && id "$SERVICE_USER" >/dev/null 2>&1; then userdel "$SERVICE_USER" || true; fi
-    info "removed the agent, its configuration and the '$SERVICE_USER' user"
+    info "Agent, yapılandırması ve '$SERVICE_USER' kullanıcısı kaldırıldı"
   else
-    info "removed the agent; configuration kept in $CONF_DIR (use --purge to delete it)"
+    info "Agent kaldırıldı; yapılandırma $CONF_DIR içinde duruyor (silmek için --purge)"
   fi
   exit 0
 fi
@@ -232,7 +238,7 @@ fi
 if [[ "$ACTION" == upgrade || "$ACTION" == rollback ]]; then
   readonly PREV_PATH="${BIN_PATH}.prev"
   readonly RE_SEMVER='^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'
-  [[ "$VERIFY_SECONDS" =~ ^[0-9]{1,3}$ ]] || die "--verify-seconds must be a whole number of seconds"
+  [[ "$VERIFY_SECONDS" =~ ^[0-9]{1,3}$ ]] || die "--verify-seconds tam sayı (saniye) olmalı"
 
   # HB_SYSTEMCTL testlerin sahte bir systemctl vermesi içindir; --root ile bile o zaman kullanılır.
   SYSTEMCTL="${HB_SYSTEMCTL:-systemctl}"
@@ -240,7 +246,7 @@ if [[ "$ACTION" == upgrade || "$ACTION" == rollback ]]; then
   [[ $STAGING -eq 1 && -z "${HB_SYSTEMCTL:-}" ]] && SERVICE_CONTROL=0
   svc() { "$SYSTEMCTL" "$@"; }
 
-  [[ -x "$BIN_PATH" && -f "$CONF_PATH" ]] || die "no installation found at $BIN_PATH / $CONF_PATH (use 'install' first; upgrade only replaces the binary of an existing install)"
+  [[ -x "$BIN_PATH" && -f "$CONF_PATH" ]] || die "kurulum bulunamadı ($BIN_PATH / $CONF_PATH): önce 'install' çalıştırın; upgrade yalnızca var olan kurulumun binary'sini değiştirir"
 
   # binary_version PATH: binary'nin bildirdiği SemVer'i yazar; sürüm bildirmiyorsa (bozuk ya da
   # bir HealthBeat agent'ı değil) başarısız olur.
@@ -285,36 +291,36 @@ if [[ "$ACTION" == upgrade || "$ACTION" == rollback ]]; then
   }
 
   CUR_VER="$(binary_version "$BIN_PATH" || true)"
-  CUR_DESC="${CUR_VER:-unknown (no version reported)}"
+  CUR_DESC="${CUR_VER:-bilinmiyor (sürüm bildirmiyor)}"
 
   if [[ "$ACTION" == rollback ]]; then
-    [[ -x "$PREV_PATH" ]] || die "no previous binary at $PREV_PATH: nothing to roll back to"
+    [[ -x "$PREV_PATH" ]] || die "önceki binary yok ($PREV_PATH): geri dönülecek bir şey yok"
     PREV_VER="$(binary_version "$PREV_PATH" || true)"
-    info "rollback: $CUR_DESC -> ${PREV_VER:-unknown (no version reported)}"
-    if [[ $DRY_RUN -eq 1 ]]; then info "dry run: nothing was changed"; exit 0; fi
+    info "Geri alma: $CUR_DESC -> ${PREV_VER:-bilinmiyor (sürüm bildirmiyor)}"
+    if [[ $DRY_RUN -eq 1 ]]; then info "Deneme (--dry-run): hiçbir şey değiştirilmedi"; exit 0; fi
 
     was_active=0; service_active && was_active=1
     # Yalnızca geri dönülecek binary --check-config biliyorsa (1.2.0+) yapılandırma denetlenir.
     prev_help="$("$PREV_PATH" --help 2>&1 || true)"
     if [[ "$prev_help" == *-check-config* ]]; then
-      "$PREV_PATH" -config "$CONF_PATH" -check-config >/dev/null 2>&1 || die "the previous binary does not accept the current config; not rolling back"
+      "$PREV_PATH" -config "$CONF_PATH" -check-config >/dev/null 2>&1 || die "önceki binary mevcut yapılandırmayı kabul etmiyor; geri alınmadı"
     fi
     cp -p "$BIN_PATH" "$BIN_PATH.swap"   # geri alınanı, rollback'in rollback'i için sakla
     swap_in "$PREV_PATH"
     mv -f "$BIN_PATH.swap" "$PREV_PATH"
     if [[ $NO_RESTART -eq 1 || $SERVICE_CONTROL -eq 0 ]]; then
-      info "binary swapped; restart the service to use it: systemctl restart ${SERVICE_NAME}"
+      info "Binary değiştirildi; kullanmak için servisi yeniden başlatın: systemctl restart ${SERVICE_NAME}"
     elif [[ $was_active -eq 1 ]]; then
       if restart_and_verify; then
-        info "rolled back; the service is running ($CUR_DESC binary kept as $PREV_PATH)"
+        info "Geri alındı; servis çalışıyor ($CUR_DESC binary'si $PREV_PATH olarak saklandı)"
       else
         # Geri alınan binary de ayakta kalmadı: eski durumu tekrar kur ve yüksek sesle bildir.
         cp -p "$BIN_PATH" "$BIN_PATH.swap"; swap_in "$PREV_PATH"; mv -f "$BIN_PATH.swap" "$PREV_PATH"
         svc restart "${SERVICE_NAME}.service" || true
-        die "the service did not stay healthy after the rollback; the previous state was restored (check: journalctl -u ${SERVICE_NAME})"
+        die "servis geri almadan sonra sağlıklı kalmadı; önceki durum geri kuruldu (bkz. journalctl -u ${SERVICE_NAME})"
       fi
     else
-      info "binary swapped; the service was not running, so it was not started"
+      info "Binary değiştirildi; servis çalışmıyordu, başlatılmadı"
     fi
     exit 0
   fi
@@ -325,30 +331,30 @@ if [[ "$ACTION" == upgrade || "$ACTION" == rollback ]]; then
       [[ -x "$candidate" ]] && { BINARY="$candidate"; break; }
     done
   fi
-  [[ -n "$BINARY" && -x "$BINARY" ]] || die "new agent binary not found; build it (cd agent && go build -o healthbeat-agent ./cmd/agent) or pass --binary PATH"
+  [[ -n "$BINARY" && -x "$BINARY" ]] || die "yeni agent binary'si bulunamadı; derleyin (cd agent && go build -o healthbeat-agent ./cmd/agent) ya da --binary DOSYA verin"
 
-  NEW_VER="$(binary_version "$BINARY")" || die "the new binary does not report a version ('$BINARY --version' failed): it is built for another architecture, or not a HealthBeat agent; refusing to install it"
+  NEW_VER="$(binary_version "$BINARY")" || die "yeni binary sürüm bildirmiyor ('$BINARY --version' başarısız): başka bir mimari için derlenmiş ya da bir HealthBeat agent'ı değil; kurulmadı"
   if ! check_out="$("$BINARY" -config "$CONF_PATH" -check-config 2>&1)"; then
-    die "the new binary does not accept the EXISTING config ($CONF_PATH); nothing was changed: ${check_out}"
+    die "yeni binary MEVCUT yapılandırmayı ($CONF_PATH) kabul etmiyor; hiçbir şey değiştirilmedi: ${check_out}"
   fi
 
   if [[ -n "$CUR_VER" && "$CUR_VER" == "$NEW_VER" ]] && cmp -s "$BINARY" "$BIN_PATH"; then
-    info "already up to date ($NEW_VER); nothing to do"
+    info "Zaten güncel ($NEW_VER); yapılacak bir şey yok"
     exit 0
   fi
   if [[ -n "$CUR_VER" && $ALLOW_DOWNGRADE -eq 0 ]] && core_lt "$NEW_VER" "$CUR_VER"; then
-    die "refusing to downgrade $CUR_VER -> $NEW_VER (pass --allow-downgrade if that is intended)"
+    die "sürüm düşürülmedi: $CUR_VER -> $NEW_VER (isteniyorsa --allow-downgrade verin)"
   fi
 
   unit_drift=0
   if [[ -f "$UNIT_PATH" ]] && ! cmp -s "$SELF_DIR/healthbeat-agent.service" "$UNIT_PATH"; then unit_drift=1; fi
 
-  info "upgrade: $CUR_DESC -> $NEW_VER (config check: ok)"
+  info "Yükseltme: $CUR_DESC -> $NEW_VER (yapılandırma denetimi: tamam)"
   if [[ $unit_drift -eq 1 ]]; then
-    if [[ $UPDATE_UNIT -eq 1 ]]; then info "the systemd unit differs from the shipped one and WILL be updated (--update-unit)"
-    else info "note: the installed systemd unit differs from the one shipped next to this script; it was left alone (add --update-unit to replace it)"; fi
+    if [[ $UPDATE_UNIT -eq 1 ]]; then info "Kurulu systemd unit'i betiğin yanındakinden farklı ve GÜNCELLENECEK (--update-unit)"
+    else info "Not: kurulu systemd unit'i betiğin yanındakinden farklı; dokunulmadı (değiştirmek için --update-unit)"; fi
   fi
-  if [[ $DRY_RUN -eq 1 ]]; then info "dry run: nothing was changed"; exit 0; fi
+  if [[ $DRY_RUN -eq 1 ]]; then info "Deneme (--dry-run): hiçbir şey değiştirilmedi"; exit 0; fi
 
   was_active=0; service_active && was_active=1
 
@@ -364,22 +370,22 @@ if [[ "$ACTION" == upgrade || "$ACTION" == rollback ]]; then
   fi
 
   if [[ $NO_RESTART -eq 1 || $SERVICE_CONTROL -eq 0 ]]; then
-    info "installed $NEW_VER; restart the service to use it: systemctl restart ${SERVICE_NAME}"
+    info "$NEW_VER kuruldu; kullanmak için servisi yeniden başlatın: systemctl restart ${SERVICE_NAME}"
   elif [[ $was_active -eq 1 ]]; then
-    info "restarting ${SERVICE_NAME} and watching it for ${VERIFY_SECONDS}s"
+    info "${SERVICE_NAME} yeniden başlatılıyor ve ${VERIFY_SECONDS} sn izleniyor"
     if ! restart_and_verify; then
-      info "the service did not stay healthy with $NEW_VER; restoring $CUR_DESC"
+      info "Servis $NEW_VER ile sağlıklı kalmadı; $CUR_DESC geri konuyor"
       swap_in "$PREV_PATH"
       if [[ -n "$unit_backup" ]]; then mv -f "$unit_backup" "$UNIT_PATH"; svc daemon-reload || true; fi
       svc restart "${SERVICE_NAME}.service" || true
-      die "upgrade to $NEW_VER failed and was rolled back automatically; the config was not touched (check: journalctl -u ${SERVICE_NAME})"
+      die "$NEW_VER yükseltmesi başarısız oldu ve kendiliğinden geri alındı; yapılandırmaya dokunulmadı (bkz. journalctl -u ${SERVICE_NAME})"
     fi
   else
-    info "the service was not running, so it was not started (it will use $NEW_VER when you start it)"
+    info "Servis çalışmıyordu, başlatılmadı (başlatıldığında $NEW_VER kullanılır)"
   fi
 
-  info "upgraded $CUR_DESC -> $NEW_VER"
-  info "previous binary kept as $PREV_PATH (undo with: install.sh rollback); verify in the panel that this server now shows $NEW_VER"
+  info "Yükseltildi: $CUR_DESC -> $NEW_VER"
+  info "Önceki binary $PREV_PATH olarak saklandı (geri almak için: install.sh rollback); panelde bu sunucunun $NEW_VER gösterdiğini kontrol edin"
   plain_secret_notice "$BIN_PATH" "./install.sh encrypt"
   exit 0
 fi
@@ -390,26 +396,9 @@ interactive() { [[ -t 0 && -t 1 ]]; }
 # configure: hiç seçenek verilmediyse ve bir terminaldeyse adım adım sorar (wizard gibi).
 if [[ $CONFIGURE_ONLY -eq 1 && $WIZARD -eq 0 && -z "$MODE" ]] && interactive; then WIZARD=1; fi
 
-if [[ $WIZARD -eq 1 ]]; then
-  interactive || die "wizard requires an interactive terminal (no stdin/stdout tty); use 'install' with flags instead (see --help)"
-  echo "HealthBeat agent -- guided install. Press Enter to accept a default shown in [brackets]."
-fi
-
-# wizard: bir soru sormadan önce ne için sorulduğunu kısaca açıkla.
-note() { printf '\n%s\n' "$*"; }
-
-# wizard: confirm "soru" varsayılan(y|n) -> "evet"se 0 (başarı)
-confirm() {
-  local prompt="$1" default="${2:-y}" reply suffix
-  if [[ "$default" == y ]]; then suffix="Y/n"; else suffix="y/N"; fi
-  read -r -p "$prompt [$suffix]: " reply
-  reply="${reply:-$default}"
-  [[ "$reply" =~ ^[Yy] ]]
-}
-
 ask() { # ask DEĞİŞKEN "istem" [varsayılan]
   local var="$1" prompt="$2" default="${3:-}" reply
-  interactive || die "$prompt: missing (pass it as an option; not running interactively)"
+  interactive || die "$prompt: eksik (seçenek olarak verin; etkileşimli çalışmıyor)"
   read -r -p "$prompt${default:+ [$default]}: " reply
   printf -v "$var" '%s' "${reply:-$default}"
 }
@@ -417,12 +406,12 @@ ask() { # ask DEĞİŞKEN "istem" [varsayılan]
 read_secret() { # read_secret DEĞİŞKEN ORTAMADI DOSYA "istem"
   local var="$1" envname="$2" file="$3" prompt="$4" value=""
   if [[ -n "$file" ]]; then
-    [[ -r "$file" ]] || die "cannot read $file"
+    [[ -r "$file" ]] || die "$file okunamıyor"
     value="$(head -n1 "$file" | tr -d '\r\n')"
   elif [[ -n "${!envname:-}" ]]; then
     value="${!envname}"
   else
-    interactive || die "$prompt missing: set $envname, pass a file option, or run interactively"
+    interactive || die "$prompt eksik: $envname ortam değişkenini ya da dosya seçeneğini verin veya etkileşimli çalıştırın"
     read -r -s -p "$prompt: " value
     echo
   fi
@@ -432,7 +421,7 @@ read_secret() { # read_secret DEĞİŞKEN ORTAMADI DOSYA "istem"
 # Değerler printf ile yazılan bir JSON belgesinin içine girer; bu yüzden kaçırılmak yerine
 # sıkı bir karakter kümesine karşı doğrulanır.
 require_match() { # require_match DEĞER REGEX ne
-  [[ "$1" =~ $2 ]] || die "invalid $3: '$1'"
+  [[ "$1" =~ $2 ]] || die "geçersiz $3: '$1'"
 }
 readonly RE_UUID='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 readonly RE_SECRET='^[A-Za-z0-9_-]{20,}$'
@@ -444,12 +433,13 @@ readonly RE_PATH='^/[A-Za-z0-9._/-]*$'
 # systemd'siz bir konteyner) uyarıp düz bırakır (agent düz değeri de kabul eder); "strict" ise (encrypt) hata verir.
 encrypt_secret() {
   local enc
-  if enc="$(printf '%s\n' "$SECRET" | "$AGENT_BIN" -encrypt-token 2>&1)" && [[ "$enc" =~ ^enc:v1:[A-Za-z0-9_-]+$ ]]; then
+  [[ "$SECRET" != enc:v1:* ]] || return 0
+  if enc="$(printf '%s\n' "$SECRET" | "${ENCRYPT_BIN:-$AGENT_BIN}" -encrypt-token 2>&1)" && [[ "$enc" =~ ^enc:v1:[A-Za-z0-9_-]+$ ]]; then
     SECRET="$enc"
   elif [[ "${1:-}" == strict ]]; then
-    die "could not encrypt the secret (${enc##*encrypt-token: }); $CONF_PATH was not changed"
+    die "değer şifrelenemedi (${enc##*encrypt-token: }); $CONF_PATH değiştirilmedi"
   else
-    echo "install.sh: WARNING: could not encrypt the secret, it is written in plain text (${enc##*encrypt-token: })" >&2
+    echo "install.sh: UYARI: değer şifrelenemedi, düz metin olarak yazılıyor (${enc##*encrypt-token: })" >&2
   fi
 }
 
@@ -468,27 +458,27 @@ json_array() { # json_array a,b,c -> ["a","b","c"]
 # alanın yerine yazılır (öteki ayarlara, izinlere ve sahibe dokunulmaz), sonuç gerçek agent'a denetletilir, servis
 # yeniden başlatılır. Yedek alınmaz: eski dosya eski (belki düz) sırrı taşırdı.
 if [[ "$ACTION" == token || "$ACTION" == encrypt ]]; then
-  [[ -f "$CONF_PATH" ]] || die "no configuration at $CONF_PATH; configure the agent first (healthbeat-agent-setup)"
-  [[ -x "$AGENT_BIN" ]] || die "no agent binary is installed ($AGENT_BIN)"
+  [[ -f "$CONF_PATH" ]] || die "yapılandırma yok ($CONF_PATH); önce agent'ı yapılandırın (healthbeat-agent-setup)"
+  [[ -x "$AGENT_BIN" ]] || die "kurulu agent binary'si yok ($AGENT_BIN)"
   if grep -Eq '"mode"[[:space:]]*:[[:space:]]*"pull"' "$CONF_PATH"; then
     field=pull_secret what="pull secret" envname=HEALTHBEAT_PULL_SECRET file="$SECRET_FILE"
   else
     field=api_token what="API token" envname=HEALTHBEAT_API_TOKEN file="$TOKEN_FILE"
   fi
   re_field="(\"$field\"[[:space:]]*:[[:space:]]*\")[^\"]*\""
-  grep -Eq "$re_field" "$CONF_PATH" || die "$CONF_PATH has no $field field; rewrite the configuration with: healthbeat-agent-setup --force"
+  grep -Eq "$re_field" "$CONF_PATH" || die "$CONF_PATH içinde $field alanı yok; yapılandırmayı yeniden yazın: healthbeat-agent-setup --force"
 
   if [[ "$ACTION" == token ]]; then
-    read_secret SECRET "$envname" "$file" "New $what"
-    require_match "$SECRET" "$RE_SECRET" "$what (expected the URL-safe value shown once by the panel)"
+    read_secret SECRET "$envname" "$file" "Yeni $what"
+    require_match "$SECRET" "$RE_SECRET" "$what (panelin bir kez gösterdiği değer beklenir)"
     encrypt_secret
   else
     SECRET="$(sed -nE "s/.*\"$field\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p" "$CONF_PATH" | head -n1)"
     if [[ "$SECRET" == enc:v1:* ]]; then
-      info "$field is already encrypted, nothing to do"
+      info "$field zaten şifreli; yapılacak bir şey yok"
       exit 0
     fi
-    [[ "$SECRET" =~ $RE_SECRET ]] || die "the $field in $CONF_PATH is not a valid $what; set it again with: healthbeat-agent-setup token"
+    [[ "$SECRET" =~ $RE_SECRET ]] || die "$CONF_PATH içindeki $field geçerli bir $what değil; yeniden verin: healthbeat-agent-setup token"
     encrypt_secret strict
   fi
 
@@ -497,181 +487,660 @@ if [[ "$ACTION" == token || "$ACTION" == encrypt ]]; then
   sed -E "s|$re_field|\1$SECRET\"|" "$CONF_PATH" >"$tmp"
   chmod 0640 "$tmp"
   [[ $STAGING -eq 1 ]] || chown "root:$SERVICE_USER" "$tmp"
-  "$AGENT_BIN" -config "$tmp" -check-config >/dev/null 2>&1 || die "the agent rejected the updated configuration; $CONF_PATH was not changed"
+  "$AGENT_BIN" -config "$tmp" -check-config >/dev/null 2>&1 || die "agent güncellenen yapılandırmayı kabul etmedi; $CONF_PATH değiştirilmedi"
   mv -f "$tmp" "$CONF_PATH"
-  if [[ "$ACTION" == token ]]; then info "$field updated in $CONF_PATH"; else info "$field encrypted in $CONF_PATH"; fi
+  if [[ "$ACTION" == token ]]; then info "$field güncellendi: $CONF_PATH"; else info "$field şifrelendi: $CONF_PATH"; fi
   if [[ $NO_RESTART -eq 1 || $STAGING -eq 1 ]]; then
-    info "restart the service to use it: systemctl restart ${SERVICE_NAME}"
+    info "Kullanmak için servisi yeniden başlatın: systemctl restart ${SERVICE_NAME}"
   elif systemctl is-enabled --quiet "${SERVICE_NAME}.service" 2>/dev/null || systemctl is-active --quiet "${SERVICE_NAME}.service"; then
     systemctl restart "${SERVICE_NAME}.service"
-    info "service restarted; follow the log with: journalctl -u ${SERVICE_NAME} -f"
+    info "Servis yeniden başlatıldı; logu izlemek için: journalctl -u ${SERVICE_NAME} -f"
   fi
   exit 0
 fi
 
-# ---------------------------------------------------------------- topla + doğrula
-if [[ $WIZARD -eq 1 && -z "$MODE" ]]; then
-  note "Two modes: 'push' -- the agent connects OUT to the server (works behind NAT/firewalls, no
-inbound port needed here -- the recommended default). 'pull' -- the server connects IN to the
-agent (an inbound port must be opened on this host)."
+# ---------------------------------------------------------------- sihirbaz
+# Adım adım kurulum (install.sh wizard; paketle kurulu agent'ta seçeneksiz healthbeat-agent-setup). Değişkenleri
+# doldurur, bağlantıyı dener ve özeti onaylatır; yazma ve başlatma aşağıdaki ortak kurulum yolundan geçer.
+# Görünüm: satırlar en çok 72 karakter, soru kendi satırında ve cevap altındaki "> " satırında, menüler alt alta
+# numaralı. Var olan bir yapılandırmanın değerleri varsayılan olur.
+WIZARD_DONE=0 KEEP_TLS=0 TOKEN_TAIL="" EXISTING_SECRET="" EXISTING_MODE="" CHECK_BIN=""
+if [[ $WIZARD -eq 1 ]]; then
+  interactive || die "sihirbaz bir terminal gerektirir; etkileşimsiz kurulum için seçenekleri verin (bkz. --help)"
+
+  if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-dumb}" != dumb ]]; then
+    C_B=$'\e[1m' C_D=$'\e[2m' C_G=$'\e[32m' C_R=$'\e[31m' C_0=$'\e[0m'
+  else
+    C_B="" C_D="" C_G="" C_R="" C_0=""
+  fi
+
+  # w_len METİN: görünen karakter sayısı (LC_ALL=C altında ${#} bayt sayar; UTF-8 devam baytları düşülür).
+  w_len() {
+    local cont
+    cont="$(printf '%s' "$1" | tr -dc '\200-\277' | wc -c)"
+    echo $((${#1} - cont))
+  }
+  w_pad() { printf '%s%*s' "$1" $(($2 - $(w_len "$1"))) ''; }
+  # w_section: ok tuşlu terminalde ekran temizlenir, her adım tek başına görünür (kaydırma geçmişi silinmez).
+  w_section() {
+    local head="── Adım $1/6 · $2 " n
+    n=$((60 - $(w_len "$head")))
+    if [[ "${TERM:-dumb}" != dumb ]]; then
+      printf '\e[H\e[2J%sHealthBeat agent kurulumu%s\n\n' "$C_B" "$C_0"
+    fi
+    if [[ $1 -eq 1 ]]; then
+      printf '%s\n' "${W_INTRO[@]}"
+      echo
+    fi
+    printf '%s%s' "$C_B" "$head"
+    printf '─%.0s' $(seq 1 "$n")
+    printf '%s\n\n' "$C_0"
+  }
+  w_ok() { printf '  %s✓%s %s\n' "$C_G" "$C_0" "$1"; }
+  w_fail() {
+    printf '  %s✗%s %s\n' "$C_R" "$C_0" "$1"
+    shift
+    local d
+    for d in "$@"; do printf '    %s\n' "$d"; done
+  }
+  # w_err: geçersiz girişin altına (cevap satırına hizalı) yazılan hata.
+  w_err() {
+    printf '    %s✗%s %s\n' "$C_R" "$C_0" "$1"
+    shift
+    local d
+    for d in "$@"; do printf '      %s\n' "$d"; done
+    echo
+  }
+  w_text() {
+    local l
+    for l in "$@"; do printf '  %s\n' "$l"; done
+  }
+  w_ask() { # w_ask DEĞİŞKEN "soru" [varsayılan]
+    local var="$1" q="$2" def="${3:-}" reply
+    if [[ -n "$def" ]]; then printf '  %s [%s]\n' "$q" "$def"; else printf '  %s\n' "$q"; fi
+    read -r -p "  > " reply || exit 1
+    printf -v "$var" '%s' "${reply:-$def}"
+  }
+  w_pick() { # w_pick DEĞİŞKEN varsayılan seçenek_sayısı: alt alta yazılmış menüden seçim okur
+    local var="$1" def="$2" n="$3" reply
+    while :; do
+      read -r -p "  Seçiminiz [$def]: " reply || exit 1
+      reply="${reply:-$def}"
+      [[ "$reply" =~ ^[0-9]+$ && "$reply" -ge 1 && "$reply" -le "$n" ]] && break
+      printf '    %s✗%s 1 ile %d arasında bir sayı yazın.\n' "$C_R" "$C_0" "$n"
+    done
+    printf -v "$var" '%s' "$reply"
+    echo
+  }
+  w_menu() { # w_menu DEĞİŞKEN "soru" varsayılan seçenek...
+    local var="$1" q="$2" def="$3" i=1 o
+    shift 3
+    printf '  %s\n' "$q"
+    for o in "$@"; do printf '    %d) %s\n' "$i" "$o"; i=$((i + 1)); done
+    w_pick "$var" "$def" $#
+  }
+  w_yesno() { # w_yesno "soru" e|h -> evet ise 0
+    local q="$1" def="$2" reply hint="e/H"
+    [[ "$def" == e ]] && hint="E/h"
+    while :; do
+      read -r -p "  $q [$hint]: " reply || exit 1
+      reply="${reply:-$def}"
+      case "${reply,,}" in
+        e | evet | y | yes) echo; return 0 ;;
+        h | hayır | hayir | n | no) echo; return 1 ;;
+      esac
+    done
+  }
+  conf_str() { sed -nE "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p" "$CONF_PATH" | head -n1; }
+  conf_raw() { sed -nE "s/.*\"$1\"[[:space:]]*:[[:space:]]*([^,}\" ]+).*/\1/p" "$CONF_PATH" | head -n1; }
+  conf_list() { sed -nE "s/.*\"$1\"[[:space:]]*:[[:space:]]*\[([^]]*)\].*/\1/p" "$CONF_PATH" | head -n1 | tr -d '" '; }
+
+  # --- sorular
+  # w_back_prompt DEĞİŞKEN "soru" "şu anki değer": menüden açılan soru; varsayılan yok, boş Enter geri döner (1).
+  w_back_prompt() {
+    local var="$1" reply
+    printf '  %s (boş: geri dön)\n' "$2"
+    [[ -z "$3" ]] || printf '  Şu anki değer: %s\n' "$3"
+    read -r -p "  > " reply || exit 1
+    printf -v "$var" '%s' "$reply"
+    [[ -n "$reply" ]] || { echo; return 1; }
+  }
+  # w_ask_url [geri]: "geri" ile menüden açılır; boş Enter menüye döner (1).
+  w_ask_url() {
+    local v changed q="Server adresi (https://adres:port)"
+    [[ -z "$SERVER_URL" ]] || q="Server adresi"
+    while :; do
+      changed=0
+      if [[ "${1:-}" == geri ]]; then
+        w_back_prompt v "Server adresi" "$SERVER_URL" || return 1
+      else
+        w_ask v "$q" "$SERVER_URL"
+      fi
+      v="${v%/}"
+      if [[ "$v" == http://* ]]; then
+        w_err "Adres https:// ile başlamalı; http token'ı" "şifresiz gönderirdi."
+        continue
+      fi
+      [[ "$v" == *://* ]] || { v="https://$v"; changed=1; }
+      if [[ ! "$v" =~ $RE_URL ]]; then
+        w_err "Geçersiz adres. Örnek: https://hb.sirket.local:8443"
+        continue
+      fi
+      [[ $changed -eq 0 ]] || printf '    %s olarak kullanılacak.\n' "$v"
+      SERVER_URL="$v"
+      echo
+      return
+    done
+  }
+  # w_ask_host_id [geri]: "geri" ile menüden açılır; boş Enter menüye döner (1).
+  w_ask_host_id() {
+    local v q="Host ID (panelde sunucu eklenirken gösterildi)"
+    [[ -z "$HOST_ID" ]] || q="Host ID"
+    while :; do
+      if [[ "${1:-}" == geri ]]; then
+        w_back_prompt v "Host ID" "$HOST_ID" || return 1
+      else
+        w_ask v "$q" "$HOST_ID"
+      fi
+      if [[ "$v" =~ $RE_UUID ]]; then HOST_ID="$v"; echo; return; fi
+      w_err "Host ID bir UUID olmalı, örneğin:" "96bddcba-a745-47b0-b11b-fff2ed2f0f5a"
+    done
+  }
+  w_ask_secret() { # w_ask_secret "API token" | "Pull secret" [ask]: ortam değişkeni ya da dosya verildiyse sormaz ("ask" hariç)
+    local what="$1" v envname=HEALTHBEAT_API_TOKEN file="$TOKEN_FILE"
+    [[ "$what" == "API token" ]] || { envname=HEALTHBEAT_PULL_SECRET file="$SECRET_FILE"; }
+    if [[ "${2:-}" != ask && ( -n "$file" || -n "${!envname:-}" ) ]]; then
+      read_secret v "$envname" "$file" "$what"
+      if [[ "$v" =~ $RE_SECRET ]]; then
+        SECRET="$v" TOKEN_TAIL="${v: -4}"
+        if [[ -n "$file" ]]; then w_text "$what dosyadan alındı."; else w_text "$what $envname değişkeninden alındı."; fi
+        echo
+        ENCRYPT_BIN="$CHECK_BIN" encrypt_secret
+        return
+      fi
+      w_err "Verilen $what geçersiz; elle girin."
+    fi
+    while :; do
+      if [[ -n "$EXISTING_SECRET" ]]; then
+        printf '  %s (Enter: mevcut değer korunur)\n' "$what"
+      elif [[ "${2:-}" == ask ]]; then
+        printf '  %s (yazdığınız görünmez; boş: geri dön)\n' "$what"
+      else
+        printf '  %s (yazdığınız görünmez)\n' "$what"
+      fi
+      read -r -s -p "  > " v || exit 1
+      if [[ -z "$v" && -z "$EXISTING_SECRET" && "${2:-}" == ask ]]; then
+        printf '\n\n'
+        return 1
+      fi
+      if [[ -z "$v" && -n "$EXISTING_SECRET" ]]; then
+        printf '(mevcut)\n\n'
+        SECRET="$EXISTING_SECRET" TOKEN_TAIL=""
+        break
+      fi
+      printf '••••••••••••••••\n'
+      if [[ "$v" =~ $RE_SECRET ]]; then
+        SECRET="$v" TOKEN_TAIL="${v: -4}"
+        echo
+        break
+      fi
+      w_err "Geçersiz değer: panelin bir kez gösterdiği değeri" "olduğu gibi yapıştırın."
+    done
+    ENCRYPT_BIN="$CHECK_BIN" encrypt_secret
+  }
+  # w_ask_ca: boş Enter menüye döner (1 döndürür).
+  w_ask_ca() {
+    local v
+    while :; do
+      w_ask v "CA sertifikası (PEM dosya yolu; boş: geri dön)" "$CA_CERT"
+      [[ -n "$v" ]] || { echo; return 1; }
+      if [[ -r "$v" ]] && grep -q 'BEGIN CERTIFICATE' "$v"; then CA_CERT="$v" INSECURE=0; echo; return 0; fi
+      w_err "Dosya okunamadı ya da PEM sertifikası içermiyor."
+    done
+  }
+
+  # w_check: girilen değerlerle geçici bir yapılandırma yazıp agent -check-connection'ı çalıştırır; çıkış kodunu döndürür.
+  w_check() {
+    local d rc ca_field=""
+    d="$(mktemp -d)"
+    [[ -z "$CA_CERT" ]] || printf -v ca_field '  "ca_cert_file": "%s",\n' "$CA_CERT"
+    (
+      umask 0077
+      printf '{\n  "mode": "push",\n  "server_url": "%s",\n  "host_id": "%s",\n  "api_token": "%s",\n  "interval_seconds": %s,\n%s  "insecure_skip_verify": %s\n}\n' \
+        "$SERVER_URL" "$HOST_ID" "$SECRET" "$INTERVAL" "$ca_field" "$([[ $INSECURE -eq 1 ]] && echo true || echo false)" >"$d/agent.json"
+    )
+    set +e
+    if [[ -n "$C_G" ]]; then
+      "$CHECK_BIN" -config "$d/agent.json" -check-connection 2>"$d/err" | sed -u "s/✓/${C_G}✓${C_0}/; s/✗/${C_R}✗${C_0}/"
+    else
+      "$CHECK_BIN" -config "$d/agent.json" -check-connection 2>"$d/err"
+    fi
+    rc=${PIPESTATUS[0]}
+    set -e
+    if [[ $rc -eq 1 || $rc -eq 2 ]]; then
+      w_fail "Bağlantı denenemedi:" "$(sed -E 's/^[0-9\/]+ [0-9:]+ //' "$d/err" | grep -v 'plain text' | head -n2 | cut -c1-64)"
+    fi
+    rm -rf "$d"
+    echo
+    return $rc
+  }
+  w_continue() {
+    read -r -p "  Devam etmek için Enter'a basın." _ || exit 1
+  }
+  w_cancel() {
+    w_text "İptal edildi; hiçbir şey değiştirilmedi."
+    exit 0
+  }
+
+  # w_disks: disk listesi (agent -list-mounts) ve seçim; DISK_MOUNTS'u ayarlar.
+  w_disks() {
+    local -a paths=() labels=() sel=()
+    local line p t b u size m i
+    while IFS=$'\t' read -r p t b u; do
+      [[ "$p" =~ $RE_PATH ]] || continue
+      size="$(awk -v b="$b" 'BEGIN {
+        if (b >= 1099511627776) printf "%.1f TB", b / 1099511627776
+        else if (b >= 10737418240) printf "%.0f GB", b / 1073741824
+        else if (b >= 1073741824) printf "%.1f GB", b / 1073741824
+        else printf "%.0f MB", b / 1048576 }')"
+      paths+=("$p")
+      labels+=("$(printf '%-12s %-6s %7s  %%%s dolu' "$p" "$t" "$size" "$u")")
+    done < <("$CHECK_BIN" -list-mounts 2>/dev/null || true)
+    # Yapılandırmada olup şu an bağlı olmayan diskler kaybolmasın.
+    IFS=',' read -r -a _cur <<<"$DISK_MOUNTS"
+    for m in "${_cur[@]}"; do
+      [[ "$m" == auto || -z "$m" ]] && continue
+      if [[ " ${paths[*]} " != *" $m "* ]]; then
+        paths+=("$m")
+        labels+=("$(printf '%-12s (şu an bağlı değil)' "$m")")
+      fi
+    done
+    [[ ${#paths[@]} -gt 0 ]] || { paths=("/"); labels=("/"); }
+    for p in "${paths[@]}"; do
+      if [[ ",$DISK_MOUNTS," == *",$p,"* ]]; then sel+=(1); else sel+=(0); fi
+    done
+    paths+=(auto)
+    labels+=("Hepsi: sonradan takılan diskler de eklenir")
+    if [[ ",$DISK_MOUNTS," == *",auto,"* ]]; then sel+=(1); else sel+=(0); fi
+
+    local n=${#paths[@]} last=$((${#paths[@]} - 1)) cur=0 key rest any
+    w_text "Raporlanacak diskler"
+    if [[ "${TERM:-dumb}" == dumb ]]; then
+      # Ok tuşu olmayan terminal: numaralı liste.
+      for ((i = 0; i < n; i++)); do
+        printf '    %d) [%s] %s\n' $((i + 1)) "$([[ ${sel[i]} -eq 1 ]] && echo x || echo ' ')" "${labels[i]}"
+      done
+      local reply ok
+      while :; do
+        read -r -p "  Seçilecek numaralar (ör. 1 2) [işaretliler]: " reply || exit 1
+        [[ -z "$reply" ]] && break
+        ok=1
+        for i in $reply; do [[ "$i" =~ ^[0-9]+$ && "$i" -ge 1 && "$i" -le $n ]] || ok=0; done
+        if [[ $ok -eq 1 ]]; then
+          for ((i = 0; i < n; i++)); do sel[i]=0; done
+          for i in $reply; do sel[i - 1]=1; done
+          break
+        fi
+        printf '    %s✗%s 1 ile %d arasında numaralar yazın.\n' "$C_R" "$C_0" "$n"
+      done
+    else
+      w_text "↑/↓ gezin · Boşluk seç/bırak · Enter onayla"
+      echo
+      w_draw() {
+        local i mark box
+        for ((i = 0; i < n; i++)); do
+          mark=" "
+          [[ $i -eq $cur ]] && mark="❯"
+          if [[ ${sel[last]} -eq 1 && $i -ne $last ]]; then
+            box="${C_D}[x]"
+          elif [[ ${sel[i]} -eq 1 ]]; then
+            box="[x]"
+          else
+            box="[ ]"
+          fi
+          printf '\e[2K  %s %s %s%s\n' "$mark" "$box" "${labels[i]}" "$C_0"
+        done
+      }
+      printf '\e[?25l'
+      trap 'printf "\e[?25h"' EXIT
+      w_draw
+      while :; do
+        IFS= read -rsn1 key || exit 1
+        case "$key" in
+          $'\e')
+            rest=""
+            IFS= read -rsn2 -t 0.05 rest || true
+            case "$rest" in
+              '[A') [[ $cur -gt 0 ]] && cur=$((cur - 1)) ;;
+              '[B') [[ $cur -lt $last ]] && cur=$((cur + 1)) ;;
+            esac
+            ;;
+          k) [[ $cur -gt 0 ]] && cur=$((cur - 1)) ;;
+          j) [[ $cur -lt $last ]] && cur=$((cur + 1)) ;;
+          ' ')
+            if [[ ${sel[last]} -eq 0 || $cur -eq $last ]]; then
+              sel[cur]=$((1 - sel[cur]))
+            fi
+            ;;
+          '')
+            any=0
+            for ((i = 0; i < n; i++)); do [[ ${sel[i]} -eq 1 ]] && any=1; done
+            [[ $any -eq 1 ]] && break
+            ;;
+        esac
+        printf '\e[%dA' "$n"
+        w_draw
+      done
+      printf '\e[?25h'
+      trap - EXIT
+    fi
+    echo
+    if [[ ${sel[last]} -eq 1 ]]; then
+      DISK_MOUNTS=auto
+    else
+      DISK_MOUNTS=""
+      for ((i = 0; i < last; i++)); do
+        [[ ${sel[i]} -eq 1 ]] && DISK_MOUNTS+="${DISK_MOUNTS:+,}${paths[i]}"
+      done
+      [[ -n "$DISK_MOUNTS" ]] || DISK_MOUNTS="/"
+    fi
+    w_text "Hangi disklerin alert üreteceği panelden seçilir."
+    echo
+  }
+
+  # --- agent binary'si (bağlantı denemesi, disk listesi ve şifreleme için)
+  if [[ $CONFIGURE_ONLY -eq 1 ]]; then
+    CHECK_BIN="$AGENT_BIN"
+    [[ -x "$CHECK_BIN" ]] || die "kurulu agent binary'si bulunamadı ($CHECK_BIN): önce paketi kurun"
+  else
+    if [[ -z "$BINARY" ]]; then
+      for candidate in "$SELF_DIR/healthbeat-agent" "$SELF_DIR/../healthbeat-agent"; do
+        [[ -x "$candidate" ]] && { BINARY="$candidate"; break; }
+      done
+    fi
+    while [[ -z "$BINARY" || ! -x "$BINARY" ]]; do
+      w_text "Bu betiğin yanında derlenmiş bir healthbeat-agent bulunamadı" "(derlemek için: cd agent && go build -o healthbeat-agent ./cmd/agent)."
+      w_ask BINARY "healthbeat-agent binary'sinin yolu"
+      echo
+    done
+    CHECK_BIN="$BINARY"
+  fi
+
+  # Giriş notu ilk adımın başında gösterilir (ekran temizlense de görünsün).
+  W_INTRO=("Varsayılanı kabul etmek için Enter'a basın.")
+  [[ "${TERM:-dumb}" != dumb ]] || printf '\n%sHealthBeat agent kurulumu%s\n' "$C_B" "$C_0"
+
+  # --- var olan yapılandırma: değerleri varsayılan olur
+  if [[ -f "$CONF_PATH" ]]; then
+    W_INTRO+=("/etc/healthbeat/agent.json zaten var; mevcut değerler" "varsayılan olarak gösterilir. Değiştirmeyeceğiniz" "alanlarda Enter'a basın.")
+    [[ -n "$MODE" ]] || MODE="$(conf_str mode)"
+    [[ -n "$SERVER_URL" ]] || SERVER_URL="$(conf_str server_url)"
+    [[ -n "$HOST_ID" ]] || HOST_ID="$(conf_str host_id)"
+    [[ "$INTERVAL" != 30 ]] || INTERVAL="$(conf_raw interval_seconds)"
+    INTERVAL="${INTERVAL:-30}"
+    [[ "$(conf_raw insecure_skip_verify)" != true ]] || INSECURE=1
+    [[ -n "$CA_CERT" || -z "$(conf_str ca_cert_file)" || ! -f "$CONF_DIR/ca.pem" ]] || CA_CERT="$CONF_DIR/ca.pem"
+    [[ "$DISK_MOUNTS" != "/" ]] || DISK_MOUNTS="$(conf_list disk_mounts)"
+    DISK_MOUNTS="${DISK_MOUNTS:-/}"
+    [[ -n "$ALLOWED_IPS" ]] || ALLOWED_IPS="$(conf_list allowed_server_ips)"
+    [[ "$LISTEN" != "0.0.0.0:9443" || -z "$(conf_str listen_addr)" ]] || LISTEN="$(conf_str listen_addr)"
+    [[ "$ENDPOINT" != "/api/v1/status" || -z "$(conf_str pull_endpoint)" ]] || ENDPOINT="$(conf_str pull_endpoint)"
+    [[ ! -f "$DROPIN_DIR/docker.conf" ]] || DOCKER=1
+    EXISTING_MODE="$(conf_str mode)"
+    EXISTING_MODE="${EXISTING_MODE:-push}"
+  fi
+
+  # --- 1. mod
+  w_section 1 "Çalışma modu"
+  w_text "1) push  Agent server'a bağlanıp rapor gönderir." \
+    "         Bu makinede port açmak gerekmez. (önerilen)" \
+    "2) pull  Server bu makineye bağlanıp sorgular." \
+    "         Bu makinede gelen bağlantı için port açılır."
+  echo
+  choice=1
+  [[ "$MODE" != pull ]] || choice=2
+  w_pick choice "$choice" 2
+  if [[ "$choice" == 2 ]]; then MODE=pull; else MODE=push; fi
+  if [[ -f "$CONF_PATH" && "$MODE" == "$EXISTING_MODE" ]]; then
+    if [[ "$MODE" == push ]]; then EXISTING_SECRET="$(conf_str api_token)"; else EXISTING_SECRET="$(conf_str pull_secret)"; fi
+  fi
+
+  # --- 2. bağlantı bilgileri
+  w_section 2 "Server bağlantısı"
+  if [[ "$MODE" == push ]]; then
+    w_ask_url
+    w_ask_host_id
+    w_ask_secret "API token"
+  else
+    while :; do
+      w_ask ALLOWED_IPS "Sorgulamasına izin verilen server IP'leri (virgülle)" "$ALLOWED_IPS"
+      ok=1
+      IFS=',' read -r -a _ips <<<"$ALLOWED_IPS"
+      [[ ${#_ips[@]} -gt 0 ]] || ok=0
+      for ip in "${_ips[@]}"; do [[ "$ip" =~ $RE_IPCIDR ]] || ok=0; done
+      [[ $ok -eq 1 ]] && { echo; break; }
+      w_err "IP ya da CIDR yazın, örneğin: 10.20.0.5 ya da 10.20.0.0/24"
+    done
+    w_ask_secret "Pull secret"
+  fi
+
+  # --- 3. bağlantı denemesi
+  w_section 3 "Bağlantı denemesi"
+  if [[ "$MODE" == pull ]]; then
+    w_text "Pull modunda bağlantıyı server başlatır. Kurulumdan sonra" \
+      "panelde sunucunun çevrimiçi olduğunu kontrol edin."
+    echo
+    w_continue
+  else
+    recheck=1
+    while :; do
+      if [[ $recheck -eq 1 ]]; then
+        rc=0
+        w_check || rc=$?
+      fi
+      recheck=1
+      case $rc in
+        0)
+          w_continue
+          break
+          ;;
+        10 | 11)
+          w_menu act "Ne yapılsın?" 1 "Server adresini yeniden gir" "Yine de kaydet (server'a sonra ulaşılacak)" "Vazgeç"
+          case $act in 1) { w_ask_url geri || recheck=0; } ;; 2) break ;; 3) w_cancel ;; esac
+          ;;
+        12)
+          w_menu act "Ne yapılsın?" 1 "CA sertifikası dosyasını ver" "Sertifika doğrulamasını kapat (yalnızca test)" \
+            "Server adresini yeniden gir" "Vazgeç"
+          case $act in 1) w_ask_ca || recheck=0 ;; 2) INSECURE=1 CA_CERT="" ;; 3) { w_ask_url geri || recheck=0; } ;; 4) w_cancel ;; esac
+          ;;
+        13)
+          w_menu act "Ne yapılsın?" 1 "Server adresini yeniden gir" "Sertifika doğrulamasını kapat (yalnızca test)" "Vazgeç"
+          case $act in 1) { w_ask_url geri || recheck=0; } ;; 2) INSECURE=1 CA_CERT="" ;; 3) w_cancel ;; esac
+          ;;
+        15)
+          w_menu act "Ne yapılsın?" 1 "Token'ı yeniden gir" "Host ID'yi yeniden gir" \
+            "Yine de kaydet (server'a sonra ulaşılacak)" "Vazgeç"
+          case $act in 1) EXISTING_SECRET="" && { w_ask_secret "API token" ask || recheck=0; } ;; 2) { w_ask_host_id geri || recheck=0; } ;; 3) break ;; 4) w_cancel ;; esac
+          ;;
+        *)
+          w_menu act "Ne yapılsın?" 1 "Yeniden dene" "Server adresini yeniden gir" "Yine de kaydet" "Vazgeç"
+          case $act in 1) ;; 2) { w_ask_url geri || recheck=0; } ;; 3) break ;; 4) w_cancel ;; esac
+          ;;
+      esac
+    done
+  fi
+
+  # --- 4. izlenecekler
+  w_section 4 "İzlenecekler"
+  w_disks
+  # HB_DOCKER_SOCK testlerin Docker sorusunu kapatması içindir.
+  if [[ -S "${HB_DOCKER_SOCK:-/var/run/docker.sock}" ]] && getent group docker >/dev/null; then
+    running=""
+    if command -v docker >/dev/null; then
+      running="$(timeout 5 docker ps -q 2>/dev/null | wc -l || true)"
+    fi
+    if [[ -n "$running" ]]; then
+      w_text "Docker bu makinede kurulu ($running container çalışıyor)."
+    else
+      w_text "Docker bu makinede kurulu."
+    fi
+    w_text "İzlenirse agent servisi 'docker' grubuna eklenir."
+    echo
+    def=h
+    [[ $DOCKER -eq 0 ]] || def=e
+    if w_yesno "Container'lar izlensin mi?" "$def"; then DOCKER=1; else DOCKER=0; fi
+  else
+    DOCKER=0
+  fi
+
+  # --- 5. gelişmiş ayarlar
+  w_section 5 "Gelişmiş ayarlar"
+  if [[ "$MODE" == push ]]; then
+    while :; do
+      read -r -p "  Gönderim aralığı, saniye [$INTERVAL]: " v || exit 1
+      v="${v:-$INTERVAL}"
+      if [[ "$v" =~ ^[0-9]+$ && "$v" -ge 1 && "$v" -le 86400 ]]; then INTERVAL="$v"; echo; break; fi
+      w_err "1 ile 86400 arasında bir sayı yazın."
+    done
+  else
+    while :; do
+      w_ask v "Dinleme adresi (adres:port, port 1024 ve üstü)" "$LISTEN"
+      if [[ "$v" =~ ^[][A-Za-z0-9.:-]*:([0-9]{1,5})$ ]] && [[ "${BASH_REMATCH[1]}" -ge 1024 && "${BASH_REMATCH[1]}" -le 65535 ]]; then
+        LISTEN="$v"
+        echo
+        break
+      fi
+      w_err "adres:port biçiminde yazın; port 1024 ile 65535 arası." "Örnek: 0.0.0.0:9443"
+    done
+    while :; do
+      w_ask v "Status yolu" "$ENDPOINT"
+      if [[ "$v" =~ $RE_PATH ]]; then ENDPOINT="$v"; echo; break; fi
+      w_err "/ ile başlayan bir yol yazın, örneğin: /api/v1/status"
+    done
+    if [[ -f "$TLS_DIR/cert.pem" && -f "$TLS_DIR/key.pem" && -z "$TLS_CERT" ]] && w_yesno "Mevcut TLS sertifikası korunsun mu?" e; then
+      KEEP_TLS=1
+    else
+      w_text "Agent HTTPS için bir sertifika kullanır; verilmezse" "kendinden imzalı bir sertifika üretilir (server onu" "doğrulamaz)."
+      echo
+      if w_yesno "Kendi sertifikanızı vermek ister misiniz?" h; then
+        while :; do
+          w_ask TLS_CERT "Sertifika (PEM dosya yolu)" "$TLS_CERT"
+          [[ -r "$TLS_CERT" ]] && { echo; break; }
+          w_err "Dosya okunamadı."
+        done
+        while :; do
+          w_ask TLS_KEY "Özel anahtar (PEM dosya yolu)" "$TLS_KEY"
+          [[ -r "$TLS_KEY" ]] && { echo; break; }
+          w_err "Dosya okunamadı."
+        done
+      fi
+    fi
+  fi
+
+  # --- 6. özet
+  w_section 6 "Özet"
+  if [[ -n "$TOKEN_TAIL" ]]; then token_view="••••••••…$TOKEN_TAIL (şifreli saklanacak)"; else token_view="mevcut değer korunuyor"; fi
+  w_kv() { printf '  %s %s\n' "$(w_pad "$1" 16)" "$2"; }
+  w_kv "Mod" "$MODE"
+  if [[ "$MODE" == push ]]; then
+    w_kv "Server" "$SERVER_URL"
+    w_kv "Host ID" "$HOST_ID"
+    w_kv "Token" "$token_view"
+    if [[ -n "$CA_CERT" ]]; then
+      w_kv "CA sertifikası" "${CA_CERT#"$ROOT"}"
+    elif [[ $INSECURE -eq 1 ]]; then
+      w_kv "Sertifika" "doğrulanmıyor (yalnızca test)"
+    fi
+  else
+    w_kv "İzinli IP'ler" "${ALLOWED_IPS//,/, }"
+    w_kv "Secret" "$token_view"
+    w_kv "Dinleme" "$LISTEN$ENDPOINT"
+    if [[ $KEEP_TLS -eq 1 ]]; then
+      w_kv "TLS sertifikası" "mevcut korunuyor"
+    elif [[ -n "$TLS_CERT" ]]; then
+      w_kv "TLS sertifikası" "$TLS_CERT"
+    else
+      w_kv "TLS sertifikası" "kendinden imzalı üretilecek"
+    fi
+  fi
+  if [[ "$DISK_MOUNTS" == auto ]]; then w_kv "Diskler" "hepsi (auto)"; else w_kv "Diskler" "${DISK_MOUNTS//,/, }"; fi
+  if [[ $DOCKER -eq 1 ]]; then w_kv "Docker" "izleniyor"; else w_kv "Docker" "izlenmiyor"; fi
+  [[ "$MODE" != push ]] || w_kv "Aralık" "$INTERVAL sn"
+  echo
+  w_yesno "Bu ayarlarla devam edilsin mi?" e || w_cancel
+
+  [[ ! -f "$CONF_PATH" ]] || FORCE=1
+  WIZARD=0 WIZARD_DONE=1
 fi
-[[ -n "$MODE" ]] || ask MODE "Mode (push or pull)" push
-[[ "$MODE" == push || "$MODE" == pull ]] || die "--mode must be push or pull"
+
+# ---------------------------------------------------------------- topla + doğrula
+[[ -n "$MODE" ]] || ask MODE "Mod (push ya da pull)" push
+[[ "$MODE" == push || "$MODE" == pull ]] || die "--mode push ya da pull olmalı"
 
 if [[ $CONFIGURE_ONLY -eq 1 ]]; then
-  [[ -z "$BINARY" ]] || die "--binary does not apply to configure (it only writes the configuration; the binary comes from the package)"
-  [[ -x "${ROOT}/usr/bin/healthbeat-agent" || -x "$BIN_PATH" ]] || die "no agent binary is installed (looked for ${ROOT}/usr/bin/healthbeat-agent and $BIN_PATH): install the package first, or use 'install.sh install' for a tarball install"
+  [[ -z "$BINARY" ]] || die "--binary configure'da kullanılmaz (yalnızca yapılandırma yazılır; binary paketten gelir)"
+  [[ -x "${ROOT}/usr/bin/healthbeat-agent" || -x "$BIN_PATH" ]] || die "kurulu agent binary'si yok (${ROOT}/usr/bin/healthbeat-agent ve $BIN_PATH arandı): önce paketi kurun ya da tarball kurulumu için 'install.sh install' kullanın"
 else
   if [[ -z "$BINARY" ]]; then
     for candidate in "$SELF_DIR/healthbeat-agent" "$SELF_DIR/../healthbeat-agent"; do
       [[ -x "$candidate" ]] && { BINARY="$candidate"; break; }
     done
   fi
-  if [[ $WIZARD -eq 1 && ( -z "$BINARY" || ! -x "$BINARY" ) ]]; then
-    note "Could not find a compiled healthbeat-agent binary next to this script (build it with:
-cd agent && go build -o healthbeat-agent ./cmd/agent)."
-    ask BINARY "Path to the compiled healthbeat-agent binary"
-  fi
-  [[ -n "$BINARY" && -x "$BINARY" ]] || die "agent binary not found; build it (cd agent && go build -o healthbeat-agent ./cmd/agent) or pass --binary PATH"
+  [[ -n "$BINARY" && -x "$BINARY" ]] || die "agent binary'si bulunamadı; derleyin (cd agent && go build -o healthbeat-agent ./cmd/agent) ya da --binary DOSYA verin"
 fi
 
-if [[ $WIZARD -eq 1 && "$DISK_MOUNTS" == "/" ]]; then
-  note "Which filesystems should the agent report metrics for? This only controls what is
-reported/graphed -- which of them raise alerts is chosen per-server later, in the panel.
-Comma-separated absolute paths, or 'auto' for every real filesystem (skips virtual/tmpfs/snap
-mounts)."
-  ask DISK_MOUNTS "Mount points to report" "/"
-fi
 # Listelenen her mount düz, mutlak bir yol olmalı.
 IFS=',' read -r -a _mounts <<<"$DISK_MOUNTS"
-for m in "${_mounts[@]}"; do [[ "$m" == auto ]] || require_match "$m" "$RE_PATH" "disk mount (an absolute path or auto)"; done
+for m in "${_mounts[@]}"; do [[ "$m" == auto ]] || require_match "$m" "$RE_PATH" "disk (mutlak yol ya da auto)"; done
 
 if [[ "$MODE" == push ]]; then
-  if [[ $WIZARD -eq 1 && -z "$SERVER_URL" ]]; then
-    note "The HealthBeat server's address, as this agent will reach it. Must be https:// (plain
-http would send the API token unencrypted)."
-  fi
-  [[ -n "$SERVER_URL" ]] || ask SERVER_URL "HealthBeat server URL (https://host[:port])"
-  if [[ $WIZARD -eq 1 && -z "$HOST_ID" ]]; then
-    note "The agent ID the panel showed when you added this server (Organizations -> your
-organization -> Add server)."
-  fi
-  [[ -n "$HOST_ID" ]] || ask HOST_ID "Host ID (from the panel)"
+  [[ -n "$SERVER_URL" ]] || ask SERVER_URL "HealthBeat server adresi (https://adres[:port])"
+  [[ -n "$HOST_ID" ]] || ask HOST_ID "Host id (panelde gösterilir)"
   SERVER_URL="${SERVER_URL%/}"
-  require_match "$SERVER_URL" "$RE_URL" "--server-url (must be https://host[:port]; plain http would send the token unencrypted)"
-  require_match "$HOST_ID" "$RE_UUID" "--host-id (expected a UUID)"
-  if [[ $WIZARD -eq 1 && $INTERVAL -eq 30 ]]; then
-    note "How often the agent sends a metrics snapshot to the server, in seconds."
-    ask INTERVAL "Push interval, seconds" 30
-  fi
-  [[ "$INTERVAL" =~ ^[0-9]+$ && "$INTERVAL" -ge 1 && "$INTERVAL" -le 86400 ]] || die "--interval must be 1..86400 seconds"
-  if [[ $WIZARD -eq 1 && -z "$CA_CERT" && $INSECURE -eq 0 ]]; then
-    note "If the server's TLS certificate was signed by your own (private/corporate) CA rather
-than a public one, give its PEM file here so the agent can verify the server. Leave empty for a
-public CA (Let's Encrypt etc.) -- that's the common case."
-    ask CA_CERT "Path to a private CA certificate (PEM), or leave empty"
-  fi
+  require_match "$SERVER_URL" "$RE_URL" "--server-url (https://adres[:port] olmalı; düz http token'ı şifresiz gönderirdi)"
+  require_match "$HOST_ID" "$RE_UUID" "--host-id (UUID beklenir)"
+  [[ "$INTERVAL" =~ ^[0-9]+$ && "$INTERVAL" -ge 1 && "$INTERVAL" -le 86400 ]] || die "--interval 1..86400 saniye olmalı"
   if [[ -n "$CA_CERT" ]]; then
-    [[ $INSECURE -eq 0 ]] || die "--ca-cert and --insecure-skip-verify contradict each other: verify the server with the CA, or skip verification, not both"
-    [[ -r "$CA_CERT" ]] || die "cannot read --ca-cert $CA_CERT"
-    grep -q 'BEGIN CERTIFICATE' "$CA_CERT" || die "--ca-cert $CA_CERT does not contain a PEM certificate"
-  elif [[ $WIZARD -eq 1 && $INSECURE -eq 0 ]]; then
-    if ! confirm "Verify the server's TLS certificate normally? (answer no only for local testing with a self-signed cert)" y; then
-      INSECURE=1
-      note "insecure_skip_verify will be enabled -- ANY server certificate will be accepted. Do not use this in production."
-    fi
+    [[ $INSECURE -eq 0 ]] || die "--ca-cert ile --insecure-skip-verify çelişiyor: server'ı CA ile doğrulayın ya da doğrulamayı kapatın, ikisini birden değil"
+    [[ -r "$CA_CERT" ]] || die "--ca-cert okunamıyor: $CA_CERT"
+    grep -q 'BEGIN CERTIFICATE' "$CA_CERT" || die "--ca-cert $CA_CERT PEM sertifika içermiyor"
   fi
-  [[ $WIZARD -eq 0 ]] || note "Paste the API token the panel showed you (input is hidden). If you
-don't have it, generate one from the server's detail page in the panel first (rotate credentials)."
-  read_secret SECRET HEALTHBEAT_API_TOKEN "$TOKEN_FILE" "API token"
-  require_match "$SECRET" "$RE_SECRET" "API token (expected the URL-safe token shown once by the panel)"
+  # Sihirbaz değeri zaten sordu (ve şifreledi ya da mevcut şifreli değeri korudu).
+  [[ -n "$SECRET" ]] || read_secret SECRET HEALTHBEAT_API_TOKEN "$TOKEN_FILE" "API token"
+  [[ "$SECRET" == enc:v1:* ]] || require_match "$SECRET" "$RE_SECRET" "API token (panelin bir kez gösterdiği token beklenir)"
 else
-  [[ -z "$CA_CERT" ]] || die "--ca-cert only applies to push mode (it verifies the server the agent connects to)"
-  if [[ $WIZARD -eq 1 && -z "$ALLOWED_IPS" ]]; then
-    note "Which server IP(s) are allowed to poll this agent? Connections from any other address
-are refused before TLS. Comma-separated IPs or CIDRs."
-  fi
-  [[ -n "$ALLOWED_IPS" ]] || ask ALLOWED_IPS "HealthBeat server IP allowed to poll this agent (comma-separated)"
+  [[ -z "$CA_CERT" ]] || die "--ca-cert yalnızca push modunda geçerli (agent'ın bağlandığı server'ı doğrular)"
+  [[ -n "$ALLOWED_IPS" ]] || ask ALLOWED_IPS "Bu agent'ı sorgulayacak HealthBeat server IP'si (virgülle ayrılmış)"
   IFS=',' read -r -a _ips <<<"$ALLOWED_IPS"
-  for ip in "${_ips[@]}"; do require_match "$ip" "$RE_IPCIDR" "allowed IP/CIDR"; done
-  if [[ $WIZARD -eq 1 && "$LISTEN" == "0.0.0.0:9443" ]]; then
-    note "Address and port the agent listens on for the server's poll requests (must be >= 1024;
-the service runs unprivileged). Remember to open this port in the firewall for the server's IP."
-    ask LISTEN "Listen address" "0.0.0.0:9443"
-  fi
+  for ip in "${_ips[@]}"; do require_match "$ip" "$RE_IPCIDR" "izin verilen IP/CIDR"; done
   # "]" köşeli ifadede ilk, "-" ise son olmalı ki gerçek karakter olsun.
-  [[ "$LISTEN" =~ ^[][A-Za-z0-9.:-]*:([0-9]{1,5})$ ]] || die "--listen must look like host:port"
+  [[ "$LISTEN" =~ ^[][A-Za-z0-9.:-]*:([0-9]{1,5})$ ]] || die "--listen adres:port biçiminde olmalı"
   port="${BASH_REMATCH[1]}"
-  [[ "$port" -ge 1024 && "$port" -le 65535 ]] || die "--listen port must be 1024..65535 (the service runs unprivileged)"
-  if [[ $WIZARD -eq 1 && "$ENDPOINT" == "/api/v1/status" ]]; then
-    ask ENDPOINT "Status path" "/api/v1/status"
-  fi
+  [[ "$port" -ge 1024 && "$port" -le 65535 ]] || die "--listen portu 1024..65535 olmalı (servis yetkisiz kullanıcıyla çalışır)"
   require_match "$ENDPOINT" "$RE_PATH" "--endpoint"
-  if [[ $WIZARD -eq 1 && -z "$TLS_CERT" ]]; then
-    note "The agent needs a TLS certificate to serve HTTPS. Leave this empty to have the installer
-generate a self-signed one now (the server does not verify it -- authentication is the shared
-secret + IP allow-list above), or provide your own."
-    if confirm "Provide your own certificate/key instead of a self-signed one?" n; then
-      ask TLS_CERT "Path to certificate (PEM)"
-      ask TLS_KEY "Path to private key (PEM)"
-    fi
-  fi
   if [[ -n "$TLS_CERT" || -n "$TLS_KEY" ]]; then
-    [[ -r "$TLS_CERT" && -r "$TLS_KEY" ]] || die "--tls-cert and --tls-key must both be readable files"
+    [[ -r "$TLS_CERT" && -r "$TLS_KEY" ]] || die "--tls-cert ve --tls-key ikisi de okunabilir dosya olmalı"
   fi
-  [[ $WIZARD -eq 0 ]] || note "Paste the pull secret the panel showed you (input is hidden)."
-  read_secret SECRET HEALTHBEAT_PULL_SECRET "$SECRET_FILE" "Pull secret"
-  require_match "$SECRET" "$RE_SECRET" "pull secret (expected the URL-safe secret shown once by the panel)"
+  [[ -n "$SECRET" ]] || read_secret SECRET HEALTHBEAT_PULL_SECRET "$SECRET_FILE" "Pull secret"
+  [[ "$SECRET" == enc:v1:* ]] || require_match "$SECRET" "$RE_SECRET" "pull secret (panelin bir kez gösterdiği secret beklenir)"
 fi
 
-if [[ $WIZARD -eq 1 && $DOCKER -eq 0 ]]; then
-  note "Optional: let the agent read /var/run/docker.sock to report Docker container status.
-Access to the Docker socket is effectively ROOT on this host, so only enable this on hosts you
-actually want to monitor Docker on (see docs/AGENT.md)."
-  confirm "Monitor Docker containers on this host?" n && DOCKER=1
-fi
 if [[ $DOCKER -eq 1 && $STAGING -eq 0 ]]; then
-  getent group docker >/dev/null || die "--docker requested but this host has no 'docker' group"
+  getent group docker >/dev/null || die "--docker istendi ama bu makinede 'docker' grubu yok"
 fi
 if [[ -e "$CONF_PATH" && $FORCE -eq 0 ]]; then
-  if [[ $WIZARD -eq 1 ]] && confirm "$CONF_PATH already exists. Overwrite it? (the current file is backed up first)" n; then
-    FORCE=1
-  else
-    die "$CONF_PATH already exists; pass --force to replace it (a backup is kept)"
-  fi
-fi
-
-if [[ $WIZARD -eq 1 ]]; then
-  echo
-  if [[ $CONFIGURE_ONLY -eq 1 ]]; then echo "About to write the configuration:"; else echo "About to install:"; fi
-  echo "  mode:         $MODE"
-  if [[ "$MODE" == push ]]; then
-    echo "  server:       $SERVER_URL"
-    echo "  host id:    $HOST_ID"
-    echo "  interval:     ${INTERVAL}s"
-    [[ -n "$CA_CERT" ]] && echo "  private CA:   $CA_CERT"
-    [[ $INSECURE -eq 1 ]] && echo "  WARNING:      server certificate will NOT be verified"
-  else
-    echo "  listen:       $LISTEN$ENDPOINT"
-    echo "  allowed IPs:  $ALLOWED_IPS"
-    if [[ -n "$TLS_CERT" ]]; then echo "  certificate:  $TLS_CERT"; else echo "  certificate:  self-signed (generated now)"; fi
-  fi
-  echo "  disk mounts:  $DISK_MOUNTS"
-  if [[ $DOCKER -eq 1 ]]; then echo "  docker:       enabled"; else echo "  docker:       disabled"; fi
-  [[ $CONFIGURE_ONLY -eq 1 ]] || echo "  binary:       $BINARY"
-  echo
-  confirm "Proceed with these settings?" y || { info "cancelled, nothing was changed"; exit 0; }
+  die "$CONF_PATH zaten var; üzerine yazmak için --force verin (yedek alınır)"
 fi
 
 # ---------------------------------------------------------------- kurulum
 if [[ $STAGING -eq 0 ]] && ! id "$SERVICE_USER" >/dev/null 2>&1; then
-  info "creating system user '$SERVICE_USER'"
   useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
+  info "Sistem kullanıcısı oluşturuldu: $SERVICE_USER"
 fi
 
 if [[ $CONFIGURE_ONLY -eq 0 ]]; then
-  info "installing the agent to $BIN_PATH"
   install -D -m 0755 "$BINARY" "$BIN_PATH"
+  info "Agent kuruldu: ${BIN_PATH#"$ROOT"}"
 fi
 
 install -d -m 0750 "$CONF_DIR"
@@ -680,7 +1149,7 @@ install -d -m 0750 "$CONF_DIR"
 if [[ -e "$CONF_PATH" ]]; then
   backup="$CONF_PATH.bak.$(date +%Y%m%d%H%M%S)"
   cp -p "$CONF_PATH" "$backup"
-  info "existing config backed up to $backup"
+  info "Önceki yapılandırma yedeklendi: ${backup#"$ROOT"}"
 fi
 
 encrypt_secret
@@ -688,7 +1157,7 @@ write_config() {
   umask 0077
   if [[ "$MODE" == push ]]; then
     local ca_field=""
-    [[ -z "$CA_CERT" ]] || ca_field="$(printf '  "ca_cert_file": "%s",\n' "$LIVE_CA_PATH")"
+    [[ -z "$CA_CERT" ]] || printf -v ca_field '  "ca_cert_file": "%s",\n' "$LIVE_CA_PATH"
     printf '{\n  "mode": "push",\n  "server_url": "%s",\n  "host_id": "%s",\n  "api_token": "%s",\n  "interval_seconds": %s,\n%s  "insecure_skip_verify": %s,\n  "disk_mounts": %s\n}\n' \
       "$SERVER_URL" "$HOST_ID" "$SECRET" "$INTERVAL" "$ca_field" "$([[ $INSECURE -eq 1 ]] && echo true || echo false)" "$(json_array "$DISK_MOUNTS")" >"$CONF_PATH"
   else
@@ -699,9 +1168,11 @@ write_config() {
   [[ $STAGING -eq 1 ]] || chown "root:$SERVICE_USER" "$CONF_PATH"
 }
 write_config
+info "Yapılandırma yazıldı: /etc/healthbeat/agent.json"
 
-if [[ -n "$CA_CERT" ]]; then
-  info "installing the CA certificate to ${CONF_DIR}/ca.pem"
+# Yeniden yapılandırmada CA zaten yerindeyse (sihirbaz onu varsayılan yapar) kopyalanmaz.
+if [[ -n "$CA_CERT" && "$CA_CERT" != "$CONF_DIR/ca.pem" ]]; then
+  info "CA sertifikası kuruldu: /etc/healthbeat/ca.pem"
   install -m 0644 "$CA_CERT" "$CONF_DIR/ca.pem" # bir CA sertifikası herkese açıktır
   [[ $STAGING -eq 1 ]] || chown "root:$SERVICE_USER" "$CONF_DIR/ca.pem"
 fi
@@ -709,12 +1180,14 @@ fi
 if [[ "$MODE" == pull ]]; then
   install -d -m 0750 "$TLS_DIR"
   [[ $STAGING -eq 1 ]] || chown "root:$SERVICE_USER" "$TLS_DIR"
-  if [[ -n "$TLS_CERT" ]]; then
+  if [[ $KEEP_TLS -eq 1 ]]; then
+    : # sihirbazda mevcut sertifika korundu
+  elif [[ -n "$TLS_CERT" ]]; then
     install -m 0644 "$TLS_CERT" "$TLS_DIR/cert.pem"
     install -m 0640 "$TLS_KEY" "$TLS_DIR/key.pem"
   else
-    command -v openssl >/dev/null || die "openssl not found; install it or pass --tls-cert/--tls-key"
-    info "generating a self-signed certificate (the server does not verify it; authentication is the secret + IP allow-list)"
+    command -v openssl >/dev/null || die "openssl bulunamadı; kurun ya da --tls-cert/--tls-key verin"
+    info "Kendinden imzalı TLS sertifikası üretiliyor (server doğrulamaz)"
     host="$(hostname 2>/dev/null || echo healthbeat-agent)"
     (
       umask 0077
@@ -727,23 +1200,63 @@ if [[ "$MODE" == pull ]]; then
 fi
 
 if [[ $CONFIGURE_ONLY -eq 0 ]]; then
-  info "installing the systemd unit"
+  info "systemd servisi kuruldu"
   install -D -m 0644 "$SELF_DIR/healthbeat-agent.service" "$UNIT_PATH"
 fi
 if [[ $DOCKER -eq 1 ]]; then
   install -d -m 0755 "$DROPIN_DIR"
-  printf '[Service]\n# Reading /var/run/docker.sock is equivalent to root on this host.\nSupplementaryGroups=docker\n' >"$DROPIN_DIR/docker.conf"
-  info "WARNING: the agent can now talk to Docker, which is equivalent to root access on this host"
+  printf '[Service]\n# Docker soketine (/var/run/docker.sock) erişim bu makinede root yetkisine denktir.\nSupplementaryGroups=docker\n' >"$DROPIN_DIR/docker.conf"
+  if [[ $WIZARD_DONE -eq 1 ]]; then
+    info "Agent servisi 'docker' grubuna eklendi"
+  else
+    info "Agent servisi 'docker' grubuna eklendi; Docker soketine erişim bu makinede root yetkisine denktir"
+  fi
 else
   rm -rf "$DROPIN_DIR"
 fi
 
 run_systemctl daemon-reload
 if [[ $NO_START -eq 0 ]]; then
-  run_systemctl enable --now "${SERVICE_NAME}.service"
-  [[ $STAGING -eq 1 ]] || info "started; follow the log with: journalctl -u ${SERVICE_NAME} -f"
+  START_TS="$(date '+%Y-%m-%d %H:%M:%S')"
+  # restart: çalışan bir servis yeni yapılandırmayı ancak yeniden başlayınca okur (enable --now çalışanı başlatmaz).
+  run_systemctl enable "${SERVICE_NAME}.service"
+  run_systemctl restart "${SERVICE_NAME}.service"
+  [[ $STAGING -eq 1 ]] || info "Servis başlatıldı"
+  [[ $STAGING -eq 1 || $WIZARD_DONE -eq 1 ]] || info "Logu izlemek için: journalctl -u ${SERVICE_NAME} -f"
 fi
 
-info "done (mode: $MODE, config: /etc/healthbeat/agent.json)"
-[[ "$MODE" == pull ]] && info "remember to allow inbound TCP ${port} from the HealthBeat server in the firewall"
+if [[ $WIZARD_DONE -eq 1 ]]; then
+  # Sihirbaz: servisin ilk raporunu (pull'da dinlemeye başlamasını) journal'da ~40 sn bekler.
+  if [[ $NO_START -eq 0 && $STAGING -eq 0 ]] && command -v journalctl >/dev/null; then
+    [[ "$MODE" == push ]] && want="pushed metrics" || want="listening on"
+    seen=0
+    for ((i = 0; i < 20; i++)); do
+      out="$(journalctl -u "$SERVICE_NAME" --since "$START_TS" -o cat --no-pager 2>/dev/null || true)"
+      if grep -q "$want" <<<"$out"; then
+        [[ "$MODE" == push ]] && w_ok "İlk rapor gönderildi" || w_ok "Agent dinlemede ($LISTEN$ENDPOINT)"
+        seen=1
+        break
+      fi
+      line="$(grep -m1 -E 'push metrics:|yapılandırma hatası|pull server:' <<<"$out" || true)"
+      if [[ -n "$line" ]]; then
+        w_fail "Agent bir hata bildirdi:" "$(cut -c1-64 <<<"$line")"
+        seen=1
+        break
+      fi
+      sleep 2
+    done
+    [[ $seen -eq 1 ]] || w_fail "40 sn içinde rapor görülmedi; logu kontrol edin."
+  fi
+  echo
+  if [[ "$MODE" == push ]]; then
+    w_text "Sunucu birkaç saniye içinde panelde çevrimiçi görünür."
+  else
+    w_text "Panelde sunucunun çevrimiçi olduğunu kontrol edin. Bu makinede" "TCP ${port} portu server'a açık olmalı."
+  fi
+  w_text "Logu izlemek için:" "  journalctl -u ${SERVICE_NAME} -f"
+  exit 0
+fi
+
+info "Tamamlandı (mod: $MODE, yapılandırma: /etc/healthbeat/agent.json)"
+[[ "$MODE" == pull ]] && info "Güvenlik duvarında server'dan bu makineye TCP ${port} izni verin"
 exit 0

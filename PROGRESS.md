@@ -4,7 +4,13 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-13 — **Agent token'ı `agent.json`'da şifreli** (agent, kurulum betiği ve panel metinleri): kurulum
+**Son güncelleme:** 2026-10-14 — **Agent kurulum sihirbazı yenilendi, kurulum betiği Türkçe** (yalnızca agent):
+`install.sh wizard` / `healthbeat-agent-setup` 6 adımda soruyor ve kaydetmeden önce server'a bir deneme raporu gönderiyor
+(yeni `-check-connection`); sertifika güvenilmiyor, adres ya da token yanlışsa ne yapılacağını soruyor. Diskler boyut ve
+dolulukla seçilebilir listede (`-list-mounts`), var olan yapılandırmada mevcut değerler varsayılan. `install.sh`,
+paket uyarıları, agent `-help` ve yapılandırma hataları Türkçe; çalışma logları İngilizce kaldı. Server ve protokol
+değişmedi. hbe2e'de test-1 ile denendi: kendinden imzalı sertifikada CA verme ve doğrulamayı kapatma, yanlış token'da
+401 menüsü, yeniden yapılandırmada Enter ile değerlerin korunması; sihirbazın yazdığı yapılandırmayla agent rapor gönderdi. Önceki: 2026-10-13 — **Agent token'ı `agent.json`'da şifreli** (agent, kurulum betiği ve panel metinleri): kurulum
 API token'ı (pull'da secret'ı) makinenin kimliğine bağlı şifreli yazar (`enc:v1:…`, anahtar `/etc/machine-id`'den);
 kopyalanan dosyadan token okunamaz. Düz değer çalışmaya devam eder (uyarı loglanır). Panelde kimlik bilgisi yenilenince
 `healthbeat-agent-setup token` yalnızca token'ı değiştirir; panelin yenileme penceresi bu komutu söylüyor. Eski
