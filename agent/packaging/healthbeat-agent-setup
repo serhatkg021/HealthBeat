@@ -2,5 +2,14 @@
 # Paketle kurulan HealthBeat agent'ının yapılandırmasını yazar ve servisi başlatır (sihirbaz: install.sh configure).
 #   sudo healthbeat-agent-setup                       # adım adım sorar
 #   sudo healthbeat-agent-setup --mode push --server-url https://... --host-id <uuid>   # etkileşimsiz
+#   sudo healthbeat-agent-setup token                 # yalnızca API token'ı / pull secret'ı değiştirir (install.sh token)
+#   sudo healthbeat-agent-setup encrypt               # config'te düz duran token'ı / secret'ı şifreler (install.sh encrypt)
 # Seçenekler için: healthbeat-agent-setup --help
+case "${1:-}" in
+  token | encrypt)
+    action="$1"
+    shift
+    exec /usr/share/healthbeat/install.sh "$action" "$@"
+    ;;
+esac
 exec /usr/share/healthbeat/install.sh configure "$@"

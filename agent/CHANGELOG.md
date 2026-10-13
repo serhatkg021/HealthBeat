@@ -44,6 +44,13 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
     (seçili, aday, yanlış zaman veriyor, ulaşılamıyor, kullanılamaz). timesyncd ayrıntısı systemd 240+ gerektirir.
 - `--print-report`: agent'ın göndereceği tam raporu (protokol 4 alanları dahil) JSON olarak yazdırır; oranlar için iki
   ölçüm alır (~4 sn).
+- **Token `agent.json`'da şifreli:** kurulum API token'ı (pull'da secret'ı) bu makinenin kimliğine bağlı şifreli yazar
+  (`"enc:v1:…"`, anahtar `/etc/machine-id`'den türetilir); agent açılışta çözer. Kopyalanan dosyadan token okunamaz,
+  başka makinede çözülmez. Düz değer çalışmaya devam eder (açılışta uyarı loglanır). Eklenen komutlar:
+  `healthbeat-agent-setup token` (`install.sh token`) panelde yenilenen değeri verir; `healthbeat-agent-setup encrypt`
+  (`install.sh encrypt`) config'te düz duranı aynen şifreler (hiçbir şey sormaz, zaten şifreliyse bir şey yapmaz); `-encrypt-token` bayrağı sırrı stdin'den okuyup şifreli hâlini yazar. Paket ve tarball
+  yükseltmesi düz token'ı algılayınca config'e dokunmadan `encrypt` komutunu gösteren bir uyarı yazar. Bu özellikten önceki bir sürüme geri dönülürse token düz
+  yazılmalı (`docs/DISTRIBUTION.md` §5.3).
 
 ### Değişti
 - **Yavaş kaynaklar arka planda toplanıyor:** Docker ve envanterin komut gerektiren alanları (saat senkronu, başarısız

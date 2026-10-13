@@ -4,6 +4,7 @@ import { BellRing, CalendarPlus, KeyRound, Plug, RotateCw, Save, SlidersHorizont
 import { hostsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import type { Permission } from '../auth/permissions'
+import { CommandLine } from '../components/CommandLine'
 import { Modal } from '../components/Modal'
 import { SecretNotice } from '../components/SecretNotice'
 import { useTab } from '../components/useTab'
@@ -13,6 +14,8 @@ import { HostEffectiveRules } from './HostEffectiveRules'
 import { HostNotificationPreview } from './NotificationPreview'
 
 const SECTION_PARAM = 'bolum'
+// Panelde yenilenen kimlik bilgisini agent'ın sunucusunda veren komut (paketle kurulu agent; agent.json'a şifreli yazar).
+const SETUP_TOKEN_COMMAND = 'sudo healthbeat-agent-setup token'
 
 interface Section {
   id: string
@@ -56,7 +59,6 @@ export function HostSettings({
   const [confirmRotate, setConfirmRotate] = useState(false)
   const [rotating, setRotating] = useState(false)
   const credentialName = host.mode === 'pull' ? 'pull secret' : 'API token'
-  const credentialField = host.mode === 'pull' ? 'pull_secret' : 'api_token'
 
   async function handleRotate() {
     setRotating(true)
@@ -125,7 +127,12 @@ export function HostSettings({
                   Kimlik bilgisi
                 </h2>
                 <p className="card-desc">
-                  Yeni bir kimlik bilgisi üretmek eskisini hemen geçersiz kılar; agent'ın yapılandırmasını güncellemeniz gerekir.
+                  Yeni bir kimlik bilgisi üretmek eskisini hemen geçersiz kılar. Yeni değeri agent'ın sunucusunda bu komutla verin;
+                  değeri gizli sorar, şifreleyip yazar ve servisi yeniden başlatır:
+                </p>
+                <CommandLine command={SETUP_TOKEN_COMMAND} />
+                <p className="card-desc muted">
+                  Tarball ile kurulduysa: <code>sudo ./install.sh token</code>
                 </p>
                 {revealedSecret && (
                   <SecretNotice title="Yeni kimlik bilgisi (bir daha gösterilmeyecek)" text={revealedSecret} onClose={() => setRevealedSecret(null)} />
@@ -138,10 +145,10 @@ export function HostSettings({
 
               <Modal open={confirmRotate} size="sm" title="Kimlik bilgisi yenilensin mi?" onClose={() => !rotating && setConfirmRotate(false)}>
                 <p className="confirm-text">
-                  <strong>{host.title}</strong> sunucusunun şu anki {credentialName} değeri hemen geçersiz olur. Agent, yeni değer{' '}
-                  <code>/etc/healthbeat/agent.json</code> dosyasındaki <code>{credentialField}</code> alanına yazılıp servis yeniden
-                  başlatılana kadar {host.mode === 'pull' ? 'sorgulanamaz' : 'rapor gönderemez'}.
+                  <strong>{host.title}</strong> sunucusunun şu anki {credentialName} değeri hemen geçersiz olur. Agent, yeni değer
+                  sunucuda bu komutla verilene kadar {host.mode === 'pull' ? 'sorgulanamaz' : 'rapor gönderemez'}:
                 </p>
+                <CommandLine command={SETUP_TOKEN_COMMAND} />
                 <p className="confirm-text">Yeni değer yalnızca bir kez gösterilir.</p>
                 <div className="form-actions">
                   <button className="btn btn-danger" type="button" disabled={rotating} onClick={handleRotate}>

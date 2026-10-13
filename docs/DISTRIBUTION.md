@@ -121,6 +121,9 @@ sudo -E healthbeat-agent-setup --mode push --server-url https://hb.example.com -
 
 `--force` olmadan var olan yapılandırmanın üzerine yazılmaz. Tüm seçenekler: `healthbeat-agent-setup --help`.
 
+Token `agent.json`'a bu makineye bağlı şifreli yazılır. Panelde kimlik bilgisi yenilenince yalnızca token değiştirilir:
+`sudo healthbeat-agent-setup token` (yeni değeri gizli sorar, servisi yeniden başlatır; `docs/AGENT.md` bölüm 6.c).
+
 ## 5. Güncelleme (yeni sürüm dağıtımı)
 
 **Zorunlu değildir:** eski agent'lar yeni server'a çalışmaya devam eder (`docs/COMPATIBILITY.md`). Panelde
@@ -143,6 +146,16 @@ belirlediğin gruplarla); her sunucudan sonra sayaç düşmeli.
 - **Paket yükseltmesi** yapılandırmaya, kullanıcıya ve `docker.conf` drop-in'ine dokunmaz. Servis etkin ve
   yapılandırılmışsa paket yeniden başlatır. `apt`/`dnf` standart davranışıdır: **yeni sürüm çökerse otomatik
   geri alma yoktur** — Geri alma (bölüm 5.3) ile dön.
+- **Eski kurulumlarda token düz durur.** Yükseltme bunu algılar, config'e dokunmadan bir uyarı yazar:
+
+  ```
+  healthbeat-agent: WARNING: the api_token in /etc/healthbeat/agent.json is stored in plain text.
+    Encrypt it for this machine (the value stays the same; the service restarts):
+      sudo healthbeat-agent-setup encrypt
+  ```
+
+  `encrypt` aynı token'ı bu makineye bağlı şifreler; hiçbir şey sormaz, zaten şifreliyse bir şey yapmaz, server'da bir
+  şey değişmez. Tarball'da komut `sudo ./install.sh encrypt`.
 - **Tarball yükseltmesi** (`install.sh upgrade`) ise yeni binary'yi ve mevcut yapılandırmayı önce doğrular,
   çökme durumunda otomatik geri alır (`docs/AGENT.md` bölüm 7.1).
 - Yükseltmeyi **gerçek bir terminalde** çalıştır: `sudo` parola soruyorsa terminalsiz (ör. `ssh host 'sudo …'`)
@@ -156,7 +169,9 @@ belirlediğin gruplarla); her sunucudan sonra sayaç düşmeli.
 | RHEL ailesi | `sudo dnf downgrade ./healthbeat-agent-<eski>-1.x86_64.rpm` |
 | Tarball | `sudo ./install.sh rollback` |
 
-Eski sürümün paketini elinde tut (GitHub Release'te kalır). Geri alma yapılandırmaya dokunmaz.
+Eski sürümün paketini elinde tut (GitHub Release'te kalır). Geri alma yapılandırmaya dokunmaz. Şifreli token'ı
+(`"enc:v1:…"`) okuyamayan, bu özellikten önceki bir sürüme dönülürse agent server'dan `401` alır: o sürümde token'ı
+`agent.json`'a düz yaz ya da `healthbeat-agent-setup --force` ile yeniden yapılandır.
 
 ## 6. Tarball kurulumundan pakete geçiş
 

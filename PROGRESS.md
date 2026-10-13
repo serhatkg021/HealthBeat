@@ -4,7 +4,15 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-13 — **Panel tasarım toparlaması** (yalnızca panel): zamanlar her yerde kurulumun saat
+**Son güncelleme:** 2026-10-13 — **Agent token'ı `agent.json`'da şifreli** (agent, kurulum betiği ve panel metinleri): kurulum
+API token'ı (pull'da secret'ı) makinenin kimliğine bağlı şifreli yazar (`enc:v1:…`, anahtar `/etc/machine-id`'den);
+kopyalanan dosyadan token okunamaz. Düz değer çalışmaya devam eder (uyarı loglanır). Panelde kimlik bilgisi yenilenince
+`healthbeat-agent-setup token` yalnızca token'ı değiştirir; panelin yenileme penceresi bu komutu söylüyor. Eski
+kurulumlarda yükseltme düz token'ı algılayıp uyarır; `healthbeat-agent-setup encrypt` aynı token'ı soru sormadan
+şifreler. Server ve
+protokol değişmedi. hbe2e'de test-1 ile
+denendi: şifreli token'la gönderim, panelden yenileme sonrası 401, `token` komutuyla geri gelme, başka makine
+kimliğinde açık hata. Önceki: 2026-10-13 — **Panel tasarım toparlaması** (yalnızca panel): zamanlar her yerde kurulumun saat
 diliminde ve tek biçimde (GG.AA.YYYY SS:DD:SS); düğme, rozet ve kart genişlikleri tutarlı. Sunucu sayfasının **Genel**
 sekmesi bir özet oldu: Durum · Açık alert'ler · Agent, bildirim/kural özeti ve Alert kuralları konularına göre 9 kart (son
 değer, durum çipi, açık alert, etkin kural sayısı; çevrimdışı sunucuda değerler renksiz ve "güncel değil"). Boş Docker

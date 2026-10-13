@@ -6,9 +6,12 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -29,7 +32,13 @@ func main() {
 	printInventory := flag.Bool("print-inventory", false, "print the machine inventory this agent would report (JSON) and exit; needs no config")
 	printReport := flag.Bool("print-report", false, "print a full report as this agent would send it (JSON; takes a few seconds to measure rates) and exit; reads -config if it exists for disk_mounts")
 	checkConfig := flag.Bool("check-config", false, "validate the config file and exit (0 = valid); install.sh upgrade uses it to test an existing config against a new binary")
+	encryptToken := flag.Bool("encrypt-token", false, "read a secret (API token or pull secret) from stdin, print it encrypted for this machine's config and exit; install.sh uses it")
 	flag.Parse()
+
+	if *encryptToken {
+		printEncryptedSecret()
+		return
+	}
 
 	if *showVersion {
 		fmt.Println(version.String())
@@ -60,6 +69,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+	if cfg.PlaintextSecret != "" {
+		log.Printf("warning: %s is stored in plain text in %s; encrypt it with: %s", cfg.PlaintextSecret, *configPath, config.EncryptHint)
+	}
 	if *checkConfig {
 		fmt.Printf("config OK (mode: %s)\n", cfg.Mode)
 		return
@@ -73,6 +85,20 @@ func main() {
 		return
 	}
 	runPushMode(ctx, cfg)
+}
+
+// printEncryptedSecret, stdin'deki sırrı (sondaki satır sonu atılır) bu makineye bağlı şifreli biçimde yazdırır. Sır
+// komut satırı argümanı olarak alınmaz: süreç listesinde ve kabuk geçmişinde görünürdü.
+func printEncryptedSecret() {
+	data, err := io.ReadAll(io.LimitReader(os.Stdin, 4096))
+	if err != nil {
+		log.Fatalf("encrypt-token: read stdin: %v", err)
+	}
+	enc, err := config.EncryptSecret(strings.TrimSpace(string(data)))
+	if err != nil {
+		log.Fatalf("encrypt-token: %v", err)
+	}
+	fmt.Println(enc)
 }
 
 // printFullReport, gönderilecek raporu yazdırır. Oranlar (disk G/Ç, ağ, swap, süreç CPU'su) iki ölçüm arasındaki farktır:

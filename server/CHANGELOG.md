@@ -135,6 +135,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
 
 ### Değişti
+- Panel: sunucu Ayarlar'ındaki Kimlik bilgisi kartı ve yenileme penceresi, yeni değeri sunucuda veren
+  `sudo healthbeat-agent-setup token` komutunu kopyalama düğmeli belirgin bir kutuda gösteriyor (kartta tarball için
+  `sudo ./install.sh token`); sunucu eklendikten sonraki not da kurulumun token'ı isteyeceğini söylüyor. Agent token'ı
+  `agent.json`'a artık şifreli yazdığı için dosyayı elle düzenleme tarifi kalktı.
 - Panel: tarih ve saatler her yerde **kurulumun saat diliminde** (Ayarlar → Saat dilimi; bakım pencereleri ve
   e-postalardakiyle aynı) ve tek biçimde (GG.AA.YYYY SS:DD:SS). Önceden alert, denetim kaydı, kuyruk ve log zamanları
   tarayıcının dilinde ve saat diliminde görünüyordu. Grafik ekseni ve Performans'taki aralık seçicileri de kurulumun
