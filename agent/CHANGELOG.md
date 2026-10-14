@@ -9,6 +9,27 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+## [1.1.0] - 2026-10-14
+
+Sistem sağlığı ve performans verilerinin (protokol 4) geldiği sürüm. Yeni verileri panelde görmek ve alert almak için
+server 2.1.0 gerekir; server 2.0.0 yeni alanları yok sayar, mevcut metrikler aynen gelmeye devam eder.
+
+### Öne çıkanlar
+- Protokol 4: CPU ve bellek ayrıntısı, kaynak baskısı, disk ve ağ G/Ç'si, systemd servisleri, sıcaklık, RAID, kapasite
+  sınırları, süreçler, bekleyen güncellemeler, saat senkronu ayrıntısı ve DNS yapılandırması.
+- Yavaş kaynaklar (Docker, komut gerektiren envanter) arka planda toplanıyor: çok container'lı makinelerde rapor artık
+  kaybolmuyor.
+- Token `agent.json`'da makineye bağlı şifreli saklanıyor; `token` ve `encrypt` komutları.
+- Kurulum sihirbazı yenilendi ve kaydetmeden önce bağlantıyı deniyor; `-check-connection` ile bağlantı sorunu adım adım
+  bulunuyor.
+- Kurulum betiği ve agent'ın kullanıcıya yazdıkları Türkçe; Go 1.27.2 ile derleniyor (Go 1.22'nin güvenlik açıkları
+  kapandı).
+
+### Güncellemeden önce
+- Kurulum mesajlarını metin olarak arayan betikler varsa güncellenmeli (mesajlar Türkçe oldu; çalışma logları değişmedi).
+- Yükseltme var olan düz token'ı şifrelemez (uyarı yazar; `encrypt` ile şifrelenir). Token şifrelendikten sonra 1.0.0'a
+  geri dönülürse token `agent.json`'a düz yazılmalı: 1.0.0 şifreli değeri okuyamaz (`docs/DISTRIBUTION.md` §5.3).
+
 ### Eklendi
 - **Protokol 4: sistem sağlığı ve performans verileri.** Hepsi yetkisiz okunur; okunamayan alan gönderilmez. Agent ingest
   protokolü 4 oldu. Panelde görmek ve alert almak için server'ın protokol 4'ü anlayan sürümü gerekir; yayımlanmış server'lar
