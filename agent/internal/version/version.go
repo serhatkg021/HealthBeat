@@ -12,7 +12,7 @@ import (
 
 // Version agent sürümüdür (SemVer). Elle artırılır; derleme sırasında
 // -ldflags "-X healthbeat-agent/internal/version.Version=1.0.1" ile de ezilebilir.
-var Version = "1.0.0"
+var Version = "1.1.0"
 
 // Protocol, agent'ın konuştuğu ingest protokolünün sürümüdür: "hangi alan kümesini gönderiyorum".
 // Uyumluluk kararları sürüm metnine değil buna bakar. Yeni bir alan kümesi eklendiğinde artırılır.
