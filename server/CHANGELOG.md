@@ -37,6 +37,8 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   CI paketi üretip açarak compose yapılandırmasını denetliyor. Server hattı `GITHUB_REPOSITORY_OWNER` ve
   `GITHUB_REPOSITORY` olmadan durur (yer tutuculu imaj adresiyle paket üretilmez).
 - Bağımlılıklar güncellendi — `x/crypto` 0.58.0 (`x/sync` 0.24.0, `x/text` 0.43.0).
+- Panel: bağımlılıklar güncellendi — `lucide-react` 1.55, `vite` 8.3.4, `@vitejs/plugin-react` 6.1.2, `oxlint` 1.87,
+  `@types/node` 24.19.2.
 
 ## [2.1.0] - 2026-10-14
 
