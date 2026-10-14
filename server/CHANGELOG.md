@@ -10,6 +10,28 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+## [2.2.0] - 2026-10-15
+
+Kurulum ve işletimin kolaylaştığı sürüm: server artık kaynak kod gerekmeden Release'teki imzalı kurulum paketiyle kurulup
+güncellenir, kalıcı veriler tek bir dizinde durur ve kendi sertifikan dosyaları koyup `docker compose up -d` demekle
+kullanılır. Server ve panel kodunda davranış değişikliği yok; migration yok. Agent'lar (1.0.0 ve 1.1.0) olduğu gibi çalışır.
+
+### Öne çıkanlar
+- Kurulum paketi `healthbeat-server_2.2.0.tar.gz` (+ `SHA256SUMS` ve GPG imzası): compose, sürümü dolu `.env.example`,
+  `init-env.sh` ve kısa `KURULUM.md`. Güncelleme, yeni paketi kurulum dizininin üzerine açmaktır.
+- Yeni kurulumlarda veritabanı, sertifika ve loglar `volumes/` altında (`HB_VOLUMES_DIR`).
+- `init` (eski `certs-init`) kendi sertifikayı denetler ve sahipliğini düzeltir: hatalı çift açık bir Türkçe hatayla durur.
+
+### Güncellemeden önce
+- **Docker Compose v2.18 ya da üstü gerekir** (`docker compose version`). Daha eskisi yeni `docker-compose.yml`'ı okuyamaz
+  (`invalid interpolation format`) ve hiçbir şey başlatmaz; önce Docker'ı güncelle.
+- Migration yok: geri dönüş, 2.1.0 compose'una ve `HB_VERSION=2.1.0`'a dönmektir.
+- `up -d --remove-orphans` ile başlat: eski `certs-init` container'ı böyle temizlenir.
+- Mevcut `.env`'de `HB_VOLUMES_DIR` olmadığından veriler Docker'ın adlandırılmış volume'lerinde kalır; bir şey yapmak
+  gerekmez. Dizine taşımak isteğe bağlıdır (`docs/DEPLOYMENT.md` bölüm 6, "Kalıcı veriler").
+- 2.1.0 kurulumunu git ile yaptıysan yeni dosyalar `git checkout server/v2.2.0` ile, elle kopyaladıysan kurulum paketinden
+  gelir (`docs/DISTRIBUTION.md` bölüm 8.2).
+
 ### Eklendi
 - Kurulum paketi: her server sürümünün GitHub Release'inde `healthbeat-server_X.Y.Z.tar.gz` (kaynak kod gerekmeden Docker
   Compose ile kurulum: `docker-compose.yml`, `HB_REGISTRY` ve `HB_VERSION`'ı dolu `.env.example`, `deploy/init-env.sh`,
