@@ -4,7 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-14 — **DNS bilgisi** (agent, server ve panel; protokol 4'e eklendi, sürüm artmadı): agent
+**Son güncelleme:** 2026-10-14 — Server + panel **2.1.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
+"Güncellemeden önce" notları): protokol 4, bakım pencereleri, sadeleşen bildirim modeli, konuya göre panel, Sistem
+Araçları. Birleşince `main`'den `server/v2.1.0` etiketi atılacak; ardından agent 1.1.0. Aynı gün: **DNS bilgisi** (agent, server ve panel; protokol 4'e eklendi, sürüm artmadı): agent
 DNS yapılandırmasını 5 dakikada bir topluyor (systemd-resolved ya da doğrudan `resolv.conf`; sunucular, kullanılan sunucu,
 alan adları, DNSSEC/DoT); server `system_state`'te saklıyor (migration yok). Yalnızca bilgi: ad çözme denemesi ve alert
 yok. Envanter'in üst sırası "Makine ve işletim sistemi" ↔ "Ağ" oldu; DNS Ağ kartında. hbe2e'de test-1 ile denendi;
@@ -66,8 +68,8 @@ geçici olarak Go 1.27.1 ile çalışıyor.
 
 ## Durum
 
-Sürümler: **server + panel 2.0.0**, **agent 1.0.0** (ayrı hatlar; 2.0.0 ingest protokolünü değiştirmedi). Yayınlanmamış kod
-ingest **protokol 4**'ü konuşur (agent ve server); eski agent'lar ve yayımlanmış server'larla uyumlu (`docs/COMPATIBILITY.md` §4). Monitoring, alert, bildirim kuralları, organizasyon ağacı, panel: tamam.
+Sürümler: **server + panel 2.1.0**, **agent 1.0.0** (ayrı hatlar; server 2.1.0 ingest **protokol 4**'ü işler, agent 1.1.0
+hazırlanıyor). Protokol 4 eski agent'lar ve server 2.0.0 ile uyumlu (`docs/COMPATIBILITY.md` §4). Monitoring, alert, bildirim kuralları, organizasyon ağacı, panel: tamam.
 Geliştirme sürecinden gelen tarih temizlendi: tek baseline migration, `client` → `agent`/`host` adlandırması, panel `server/panel/` altında.
 
 ## Ortam ve nasıl çalıştırılır

@@ -10,6 +10,25 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+## [2.1.0] - 2026-10-14
+
+Sistem sağlığı ve performans verilerinin (protokol 4), bakım pencerelerinin ve sadeleşen bildirim modelinin geldiği sürüm.
+1.0.0 agent'lar bu server'la olduğu gibi çalışır; yeni veriler (servisler, disk ve ağ G/Ç'si, sıcaklık, saat senkronu, DNS…)
+agent 1.1.0 ile gelir.
+
+### Öne çıkanlar
+- Protokol 4: CPU ve bellek ayrıntısı, kaynak baskısı, disk ve ağ G/Ç'si, systemd servisleri, sıcaklık, RAID, kapasite
+  sınırları, süreçler, bekleyen güncellemeler, saat senkronu ve DNS yapılandırması; yeni eşikler ve durum kuralları
+  (hepsi varsayılanda kapalı).
+- Bakım pencereleri (tek seferlik ya da tekrarlı): bakımda alert'ler kaydedilir, bildirim bakım bitince gider. Kurulum
+  geneli saat dilimi ayarı.
+- Bildirim modeli sadeleşti: kanal "nasıl", bildirim kuralı "kime" gider; sistem kuralları ve sistem kişileri; alıcılar
+  gönderim anında da erişime göre süzülür. "Bu alert kime gider?" önizlemesi.
+- Panel konuya göre düzenlendi: sunucu sayfasının Genel sekmesi özet, Performans ve Alert kuralları konu menülü, Envanter'de
+  Ağ ve DNS; Ctrl+K araması, tema seçimi, telefonda iki satırlık listeler.
+- Sistem Araçları (süper admin): bildirim kuyruğu, cache durumu ve log analiz, salt okunur.
+- Push sunucusunun host id'si sunucu Ayarlar'ında kopyalanabilir.
+
 ### Güncellemeden önce
 - **Yedek al.** Migration `000006` (Sistem Araçları izinleri) açılışta uygulanır; yalnızca izin satırları ekler. Eski sürüm
   bu veritabanıyla açılmaz: geri dönüş `000006_system_tools_permissions.down.sql` ile (yalnızca bu izinleri siler) ya da
