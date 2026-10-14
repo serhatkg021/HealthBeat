@@ -36,6 +36,7 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - `scripts/release.sh`: özet/imza ve yeniden üretilebilir tarball iki hat için ortak; `release_test.sh` paketi de sınıyor,
   CI paketi üretip açarak compose yapılandırmasını denetliyor. Server hattı `GITHUB_REPOSITORY_OWNER` ve
   `GITHUB_REPOSITORY` olmadan durur (yer tutuculu imaj adresiyle paket üretilmez).
+- Bağımlılıklar güncellendi — `x/crypto` 0.58.0 (`x/sync` 0.24.0, `x/text` 0.43.0).
 
 ## [2.1.0] - 2026-10-14
 
