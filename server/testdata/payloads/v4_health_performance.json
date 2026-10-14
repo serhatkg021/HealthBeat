@@ -78,5 +78,10 @@
     "stratum": 2, "leap": "normal", "offset_ms": 2.2285, "delay_ms": 49.513, "jitter_ms": 1.62, "root_distance_ms": 4.5920000000000005,
     "poll_s": 2048, "last_sync": "2026-10-07T18:27:53Z", "ignored": false,
     "sources": [{"name": "185.125.190.57", "state": "selected", "offset_ms": 2.2285}]
+  },
+  "dns": {
+    "resolver": "resolved", "mode": "stub", "current_server": "192.168.1.1", "current_interface": "enp4s0",
+    "servers": [{"address": "192.168.1.1", "interface": "enp4s0"}],
+    "routing_domains": ["lab.local"], "dnssec": "no", "dns_over_tls": "no"
   }
 }

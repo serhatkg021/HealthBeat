@@ -51,7 +51,7 @@ Protokol geçmişi:
 | **1** | Sürüm/protokol başlığı göndermeyen istemciler (server bunu 1 sayar; ilk sürüm 1.0.0 agent'ı protokol 3 konuşur) |
 | **2** | Donanım özeti (`cpu_cores`, `ram_total_mb`, `physical_disks`) + sürüm/protokol başlıkları |
 | **3** | Makine envanteri (`host_info`) + disk girdilerinde `inodes_used_pct` |
-| **4** | Sistem sağlığı ve performans: `cpu_detail`, `memory_detail`, `pressure` (PSI), `disk_io`, `net_io`, `tcp`, `temperatures`, `raid`, `capacity`, `processes`, `updates`, `services`, `time_sync`; disk girdilerinde `read_only`, container'larda `health`, `health_failing_streak`, `exit_code`, `oom_killed` |
+| **4** | Sistem sağlığı ve performans: `cpu_detail`, `memory_detail`, `pressure` (PSI), `disk_io`, `net_io`, `tcp`, `temperatures`, `raid`, `capacity`, `processes`, `updates`, `services`, `time_sync`, `dns`; disk girdilerinde `read_only`, container'larda `health`, `health_failing_streak`, `exit_code`, `oom_killed` |
 
 **Ne zaman artırılır?** Ingest'e yeni bir alan kümesi eklenince **protokol** artar (ve sürümün
 minor'ı); yalnızca hata düzeltmesi ise sürümün patch'i. Sürümü elle artır; `agent`/`server` içinde

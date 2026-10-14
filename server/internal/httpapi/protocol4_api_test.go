@@ -95,12 +95,16 @@ func TestProtocol4DataInAPI(t *testing.T) {
 			Updates *struct {
 				Security int `json:"security"`
 			} `json:"updates"`
+			DNS *struct {
+				CurrentServer string `json:"current_server"`
+			} `json:"dns"`
 		} `json:"system_state"`
 	}
 	a.expect(200, "GET", path(v4, ""), root, nil, &host)
 	st := host.SystemState
 	if st == nil || st.OOMKills == nil || *st.OOMKills != 2 || len(st.Temperatures) != 2 || st.Temperatures[0].Celsius != 32.85 ||
-		st.TimeSync == nil || st.TimeSync.OffsetMs != 2.2285 || st.Updates == nil || st.Updates.Security != 3 {
+		st.TimeSync == nil || st.TimeSync.OffsetMs != 2.2285 || st.Updates == nil || st.Updates.Security != 3 ||
+		st.DNS == nil || st.DNS.CurrentServer != "192.168.1.1" {
 		t.Fatalf("system_state = %+v", st)
 	}
 	var oldHost map[string]json.RawMessage

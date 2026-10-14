@@ -170,6 +170,27 @@ type TimeSync struct {
 	Sources           []TimeSource `json:"sources,omitempty"`
 }
 
+// DNS, makinenin DNS yapılandırmasıdır (yalnızca bilgi; agent ad çözme denemesi yapmaz).
+type DNS struct {
+	Resolver         string      `json:"resolver"`                    // resolved | resolv.conf
+	Mode             string      `json:"mode,omitempty"`              // resolved: stub | uplink | static
+	CurrentServer    string      `json:"current_server,omitempty"`    // resolved'ın o an sorduğu sunucu
+	CurrentInterface string      `json:"current_interface,omitempty"` // "" = genel
+	Servers          []DNSServer `json:"servers,omitempty"`
+	FallbackServers  []string    `json:"fallback_servers,omitempty"`
+	SearchDomains    []string    `json:"search_domains,omitempty"`
+	RoutingDomains   []string    `json:"routing_domains,omitempty"` // yalnızca yönlendirme alanları
+	DNSSEC           string      `json:"dnssec,omitempty"`          // yes | no | allow-downgrade
+	DNSOverTLS       string      `json:"dns_over_tls,omitempty"`    // yes | no | opportunistic
+	Options          []string    `json:"options,omitempty"`         // resolv.conf "options"
+}
+
+// DNSServer, tanımlı bir DNS sunucusudur; Interface "" = genel. Address IP, gerekirse ":port" ve "#tls-adı" taşır.
+type DNSServer struct {
+	Address   string `json:"address"`
+	Interface string `json:"interface,omitempty"`
+}
+
 type TimeSource struct {
 	Name     string   `json:"name"`
 	State    string   `json:"state"` // selected | candidate | falseticker | unreachable | unusable
@@ -196,6 +217,7 @@ type ingestWire struct {
 	Updates      json.RawMessage `json:"updates"`
 	Services     json.RawMessage `json:"services"`
 	TimeSync     json.RawMessage `json:"time_sync"`
+	DNS          json.RawMessage `json:"dns"`
 }
 
 // request, çekirdek alanları ve çözülebilen protokol 4 bölümlerini tek istekte toplar (temizlenmemiş).
@@ -214,6 +236,7 @@ func (w ingestWire) request() MetricsIngestRequest {
 		upd  Updates
 		svc  Services
 		ts   TimeSync
+		dns  DNS
 	)
 	if decode(w.CPUDetail, &cpu) {
 		r.CPUDetail = &cpu
@@ -241,6 +264,9 @@ func (w ingestWire) request() MetricsIngestRequest {
 	}
 	if decode(w.TimeSync, &ts) {
 		r.TimeSync = &ts
+	}
+	if decode(w.DNS, &dns) {
+		r.DNS = &dns
 	}
 	if !decode(w.DiskIO, &r.DiskIO) {
 		r.DiskIO = nil
@@ -283,6 +309,10 @@ const (
 	maxNTPPollSeconds  = 10_000_000
 	maxNTPReach        = 255
 	maxSwapPagesPerSec = 1e12
+	maxDNSEntries      = 16
+	maxDNSNameBytes    = 253
+	maxDNSAddressBytes = 300 // IPv6 + port + "#" + DNS-over-TLS sunucu adı
+	maxDNSOptionBytes  = 64
 )
 
 var (
@@ -290,6 +320,10 @@ var (
 	ntpDaemons       = map[string]bool{"timesyncd": true, "chrony": true, "ntpd": true, "none": true}
 	ntpLeaps         = map[string]bool{"normal": true, "insert": true, "delete": true, "alarm": true}
 	dockerHealth     = map[string]bool{"healthy": true, "unhealthy": true, "starting": true}
+	dnsResolvers     = map[string]bool{"resolved": true, "resolv.conf": true}
+	dnsModes         = map[string]bool{"stub": true, "uplink": true, "static": true}
+	dnssecModes      = map[string]bool{"yes": true, "no": true, "allow-downgrade": true}
+	dnsOverTLSModes  = map[string]bool{"yes": true, "no": true, "opportunistic": true}
 )
 
 // ValidDockerHealth, docker_containers.health üzerindeki CHECK kısıtını yansıtır ("" = healthcheck yok).
@@ -356,6 +390,7 @@ func sanitizeV4(r *MetricsIngestRequest) {
 	r.Updates = sanitizeUpdates(r.Updates)
 	r.Services = sanitizeServices(r.Services)
 	r.TimeSync = sanitizeTimeSync(r.TimeSync)
+	r.DNS = sanitizeDNS(r.DNS)
 }
 
 func sanitizeCPUDetail(in *CPUDetail) *CPUDetail {
@@ -638,6 +673,55 @@ func sanitizeTimeSync(in *TimeSync) *TimeSync {
 	return &out
 }
 
+// sanitizeDNS: çözümleyici tanınmıyorsa bölüm atılır (ne gösterileceği belli olmaz); tanınmayan mod ve güvenlik ayarları
+// boş bırakılır. Sunucusuz yapılandırma geçerlidir (bilerek DNS'siz makine).
+func sanitizeDNS(in *DNS) *DNS {
+	if in == nil || !dnsResolvers[in.Resolver] {
+		return nil
+	}
+	out := DNS{Resolver: in.Resolver, CurrentServer: cleanText(in.CurrentServer, maxDNSAddressBytes),
+		CurrentInterface: cleanText(in.CurrentInterface, maxStateText)}
+	if out.CurrentServer == "" {
+		out.CurrentInterface = ""
+	}
+	if dnsModes[in.Mode] {
+		out.Mode = in.Mode
+	}
+	if dnssecModes[in.DNSSEC] {
+		out.DNSSEC = in.DNSSEC
+	}
+	if dnsOverTLSModes[in.DNSOverTLS] {
+		out.DNSOverTLS = in.DNSOverTLS
+	}
+	for _, s := range in.Servers {
+		if len(out.Servers) == maxDNSEntries {
+			break
+		}
+		if addr := cleanText(s.Address, maxDNSAddressBytes); addr != "" {
+			out.Servers = append(out.Servers, DNSServer{Address: addr, Interface: cleanText(s.Interface, maxStateText)})
+		}
+	}
+	out.FallbackServers = cleanTextList(in.FallbackServers, maxDNSAddressBytes)
+	out.SearchDomains = cleanTextList(in.SearchDomains, maxDNSNameBytes)
+	out.RoutingDomains = cleanTextList(in.RoutingDomains, maxDNSNameBytes)
+	out.Options = cleanTextList(in.Options, maxDNSOptionBytes)
+	return &out
+}
+
+// cleanTextList, metinleri temizler, boşları atar ve listeyi maxDNSEntries ile sınırlar; boş liste nil olur.
+func cleanTextList(in []string, maxBytes int) []string {
+	var out []string
+	for _, s := range in {
+		if len(out) == maxDNSEntries {
+			break
+		}
+		if s = cleanText(s, maxBytes); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // ---------------------------------------------------------------- kayıt
 
 // SystemSample, metrics.system_json'a giren zaman serisidir: CPU ayrıntısı, bellek ayrıntısı (OOM sayacı hariç: o
@@ -686,11 +770,12 @@ type SystemState struct {
 	Processes         *Processes    `json:"processes,omitempty"`
 	Updates           *Updates      `json:"updates,omitempty"`
 	TimeSync          *TimeSync     `json:"time_sync,omitempty"`
+	DNS               *DNS          `json:"dns,omitempty"`
 }
 
 func (s SystemState) empty() bool {
 	return s.OOMKills == nil && s.OOMLastIncreaseAt == nil && s.Temperatures == nil && s.RAID == nil &&
-		s.Capacity == nil && s.Processes == nil && s.Updates == nil && s.TimeSync == nil
+		s.Capacity == nil && s.Processes == nil && s.Updates == nil && s.TimeSync == nil && s.DNS == nil
 }
 
 // NextSystemState, önceki anlık durum ve yeni rapordan saklanacak durumu kurar; hiçbir şey bilinmiyorsa nil (eski
@@ -699,7 +784,7 @@ func (s SystemState) empty() bool {
 // (açılıştan beri birikmiş olabilir).
 func NextSystemState(prev *SystemState, r MetricsIngestRequest, now time.Time) *SystemState {
 	s := SystemState{Temperatures: r.Temperatures, RAID: r.RAID, Capacity: r.Capacity, Processes: r.Processes,
-		Updates: r.Updates, TimeSync: r.TimeSync}
+		Updates: r.Updates, TimeSync: r.TimeSync, DNS: r.DNS}
 	if m := r.MemoryDetail; m != nil && m.OOMKills != nil {
 		n := *m.OOMKills
 		s.OOMKills = &n

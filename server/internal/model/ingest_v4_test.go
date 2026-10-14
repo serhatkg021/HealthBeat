@@ -55,6 +55,10 @@ func TestParseMetricsIngestV4Fixture(t *testing.T) {
 	if r.TimeSync == nil || r.TimeSync.Daemon != "timesyncd" || len(r.TimeSync.Sources) != 1 || *r.TimeSync.OffsetMs != 2.2285 {
 		t.Errorf("time_sync = %+v", r.TimeSync)
 	}
+	if d := r.DNS; d == nil || d.Resolver != "resolved" || d.Mode != "stub" || d.CurrentServer != "192.168.1.1" ||
+		len(d.Servers) != 1 || d.Servers[0].Interface != "enp4s0" || len(d.RoutingDomains) != 1 || d.DNSSEC != "no" {
+		t.Errorf("dns = %+v", d)
+	}
 	if ro := r.Disk[0].ReadOnly; ro == nil || *ro {
 		t.Errorf("disk read_only = %v", ro)
 	}
@@ -70,13 +74,13 @@ func TestParseMetricsIngestV4Fixture(t *testing.T) {
 // Yanlış tipteki bir protokol 4 bölümü raporu reddettirmez: yalnızca o bölüm atılır, gerisi alınır.
 func TestParseMetricsIngestDropsOnlyBrokenV4Sections(t *testing.T) {
 	body := `{"cpu_usage_pct": 10, "ram_usage_pct": 20, "disk": [], "docker_containers": [],
-		"cpu_detail": "yüksek", "disk_io": {"name": "sda"}, "services": [1, 2], "time_sync": 5,
+		"cpu_detail": "yüksek", "disk_io": {"name": "sda"}, "services": [1, 2], "time_sync": 5, "dns": "yok",
 		"tcp": {"established": 10}, "net_io": [{"interface": "eth0", "rx_bps": 1, "tx_bps": 2}]}`
 	r, unknown, err := ParseMetricsIngest([]byte(body))
 	if err != nil || unknown != nil {
 		t.Fatalf("err=%v unknown=%v, want the report accepted", err, unknown)
 	}
-	if r.CPUUsagePct != 10 || r.CPUDetail != nil || r.DiskIO != nil || r.Services != nil || r.TimeSync != nil {
+	if r.CPUUsagePct != 10 || r.CPUDetail != nil || r.DiskIO != nil || r.Services != nil || r.TimeSync != nil || r.DNS != nil {
 		t.Errorf("broken sections kept: %+v", r)
 	}
 	if r.TCP == nil || *r.TCP.Established != 10 || len(r.NetIO) != 1 {
@@ -104,6 +108,8 @@ func TestSanitizeV4(t *testing.T) {
 		Updates:      &Updates{Pending: 3, Security: -1},
 		Services:     &Services{Full: false, Items: []Service{{Name: "a.service", Active: "failed", Since: "dün", Restarts: ptr(-2)}, {Name: "b.service"}}},
 		TimeSync:     &TimeSync{Daemon: "systemd-magic", Leap: "alarm", Stratum: ptr(17), Sources: []TimeSource{{Name: "x"}}},
+		DNS: &DNS{Resolver: "resolved", Mode: "foreign", DNSSEC: "maybe", DNSOverTLS: "opportunistic", CurrentInterface: "eth0",
+			Servers: []DNSServer{{Address: " 10.0.0.2\x00 ", Interface: "eth0"}, {Address: ""}}, SearchDomains: []string{"", "sirket.local"}},
 	}
 	sanitizeV4(&r)
 
@@ -142,6 +148,30 @@ func TestSanitizeV4(t *testing.T) {
 	}
 	if ts := r.TimeSync; ts == nil || ts.Daemon != "" || ts.Leap != "alarm" || ts.Stratum != nil || len(ts.Sources) != 0 {
 		t.Errorf("time_sync = %+v", ts)
+	}
+	want := &DNS{Resolver: "resolved", DNSOverTLS: "opportunistic", Servers: []DNSServer{{Address: "10.0.0.2", Interface: "eth0"}},
+		SearchDomains: []string{"sirket.local"}}
+	if !reflect.DeepEqual(r.DNS, want) {
+		t.Errorf("dns = %+v, want %+v (mode/dnssec unknown, empty entries and orphan interface dropped)", r.DNS, want)
+	}
+}
+
+func TestSanitizeDNS(t *testing.T) {
+	if sanitizeDNS(&DNS{Resolver: "dnsmasq", Servers: []DNSServer{{Address: "10.0.0.2"}}}) != nil {
+		t.Error("an unknown resolver must drop the section")
+	}
+	if d := sanitizeDNS(&DNS{Resolver: "resolv.conf"}); d == nil || d.Servers != nil {
+		t.Errorf("a configuration without servers is valid: %+v", d)
+	}
+	var servers []DNSServer
+	var options []string
+	for i := 0; i < maxDNSEntries+5; i++ {
+		servers = append(servers, DNSServer{Address: "10.0.0.2"})
+		options = append(options, "rotate")
+	}
+	d := sanitizeDNS(&DNS{Resolver: "resolv.conf", Servers: servers, Options: options, SearchDomains: []string{strings.Repeat("a", 400)}})
+	if len(d.Servers) != maxDNSEntries || len(d.Options) != maxDNSEntries || len(d.SearchDomains[0]) != maxDNSNameBytes {
+		t.Errorf("limits: %d servers, %d options, domain %d bytes", len(d.Servers), len(d.Options), len(d.SearchDomains[0]))
 	}
 }
 
@@ -212,7 +242,7 @@ func TestNextSystemState(t *testing.T) {
 		t.Fatalf("first state = %+v, want oom_kills=2 without an increase (no baseline)", s)
 	}
 	if s.Temperatures[0].Celsius != 32.85 || *s.RAID[0].SyncPct != 37.54 || s.Processes.TopCPU[0].CPUPct != 1.2345 ||
-		*s.TimeSync.OffsetMs != 2.2285 || s.Updates.Security != 3 || *s.Capacity.Tasks != 2277 {
+		*s.TimeSync.OffsetMs != 2.2285 || s.Updates.Security != 3 || *s.Capacity.Tasks != 2277 || s.DNS == nil || s.DNS.CurrentServer != "192.168.1.1" {
 		t.Errorf("state not stored as reported: %+v", s)
 	}
 
@@ -252,8 +282,8 @@ func TestV4FieldsAreKnown(t *testing.T) {
 			}
 		}
 	}
-	if len(fields) != 13 {
-		t.Errorf("ingestWire has %d protocol 4 sections, want 13", len(fields))
+	if len(fields) != 14 {
+		t.Errorf("ingestWire has %d protocol 4 sections, want 14", len(fields))
 	}
 }
 

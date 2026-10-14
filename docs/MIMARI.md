@@ -333,8 +333,8 @@ Agent–server sürüm/protokol sözleşmesi: `docs/COMPATIBILITY.md`.
   sınırları. Bir konunun şu anki değerleri, alert kuralları, geçmiş grafikleri (tek zaman seçici, imleç ortak; ana grafikte
   eşik çizgileri) ve son raporu (süreçler, diskler, arayüzler, sensörler, kapasite, RAID) bir aradadır. Konu kataloğu ve
   alert türü → konu eşlemesi `server/panel/src/pages/perfTopics.ts`'tedir.
-- **Envanter** makinenin ne olduğu ve bakımıdır: Makine, İşletim sistemi ve ağ, Saat, Bakım (2×2; Saat ve Bakım'da ilgili
-  alert kuralları).
+- **Envanter** makinenin ne olduğu ve bakımıdır: Makine ve işletim sistemi, Ağ (adresler ve DNS yapılandırması), Saat,
+  Bakım (2×2; Saat ve Bakım'da ilgili alert kuralları).
 - **Alert kuralları** sayfası eşikleri, durum kurallarını ve disk alert seçimini sistem / organizasyon / sunucu kapsamında tek
   yerde düzenler. Üç kapsamda da kurallar konuya göre gruplanır (solda konu menüsü: CPU ve bellek, Disk, Sıcaklık, Servisler,
   Container, Saat, Sistem bakımı, Erişilebilirlik); bir konunun eşiği, durum kuralı, seçimi ve konuya özel değerleri yan

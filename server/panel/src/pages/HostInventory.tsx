@@ -8,13 +8,24 @@ import { useNow } from '../components/useNow'
 import { alertRulesPath } from '../navigation'
 import { agoText } from './cache'
 import { diskKindLabel, formatBytes, formatCores } from './hardwareTotals'
-import { SECURITY_MODULE_LABEL, formatUptime, ipMismatch, kernelLabel, osLabel, shortMachineId, supportsInventory, virtualizationLabel } from './inventory'
+import {
+  SECURITY_MODULE_LABEL,
+  formatUptime,
+  healthEmptyText,
+  ipMismatch,
+  kernelLabel,
+  osLabel,
+  shortMachineId,
+  supportsInventory,
+  virtualizationLabel,
+} from './inventory'
 import { RuleList } from './PerfPanels'
 import { isRuleItem, topicInfo, topicItems, type TopicId } from './ruleTopics'
 import { daemonLabel, reachText, timeSourceState, timeSyncIssues } from './systemState'
 import { formatCount, formatMs, formatOffsetMs } from './units'
 import { useHostRules } from './useHostRules'
 import { formatDateTime } from './datetime'
+import { dnsOverTLSLabel, dnssecLabel, domainItems, resolverLabel, serverGroups } from './dns'
 import { MonoValue } from '../components/MonoValue'
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -26,9 +37,21 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   )
 }
 
-// Envanter kartı: başlık, satırlar ve (varsa) kartın dibine yaslanan alert kuralları listesi. Aynı satırdaki iki kart aynı
-// yüksekliktedir; listeler bu yüzden aynı hizada başlar.
-function Card({ title, icon: Icon, children, footer }: { title: string; icon: LucideIcon; children: ReactNode; footer?: ReactNode }) {
+// Envanter kartı: başlık, satırlar, (varsa) ara başlıklı ek bölüm ve kartın dibine yaslanan alert kuralları listesi. Aynı
+// satırdaki iki kart aynı yüksekliktedir; listeler bu yüzden aynı hizada başlar.
+function Card({
+  title,
+  icon: Icon,
+  children,
+  sub,
+  footer,
+}: {
+  title: string
+  icon: LucideIcon
+  children: ReactNode
+  sub?: { title: string; rows: ReactNode }
+  footer?: ReactNode
+}) {
   return (
     <section className="card inventory-card">
       <h2 className="card-title">
@@ -36,6 +59,12 @@ function Card({ title, icon: Icon, children, footer }: { title: string; icon: Lu
         {title}
       </h2>
       <dl className="info-list single">{children}</dl>
+      {sub && (
+        <>
+          <h3 className="info-subhead">{sub.title}</h3>
+          <dl className="info-list single">{sub.rows}</dl>
+        </>
+      )}
       {footer && <div className="inventory-card-footer">{footer}</div>}
     </section>
   )
@@ -44,7 +73,7 @@ function Card({ title, icon: Icon, children, footer }: { title: string; icon: Lu
 const when = (at: string, now: number) => <span title={formatDateTime(at)}>{agoText(at, now)}</span>
 
 // Sunucu sayfasının "Envanter" sekmesi: makinenin ne olduğu ve bakımı, 2×2 kart. Yan yana kartlar içerik miktarı yakın
-// olacak şekilde eşleşir (Makine ↔ İşletim sistemi ve ağ, Saat ↔ Bakım). Kaynak kullanımı (sıcaklık, süreçler, RAID,
+// olacak şekilde eşleşir (Makine ve işletim sistemi ↔ Ağ ve DNS, Saat ↔ Bakım). DNS yalnızca bilgidir. Kaynak kullanımı (sıcaklık, süreçler, RAID,
 // bellek yetmezliği, sistem sınırları, yük) Performans'tadır; Docker ve servisler Servisler sekmesindedir. IP uyuşmazlığı
 // alert üretmez, satırda uyarı rozetidir.
 export function HostInventory({ host, thresholds }: { host: Host; thresholds: HostThresholdsResponse | null }) {
@@ -88,7 +117,7 @@ export function HostInventory({ host, thresholds }: { host: Host; thresholds: Ho
   return (
     <div className="stack-col">
       <div className="inventory-grid">
-        <Card title="Makine" icon={MonitorCog}>
+        <Card title="Makine ve işletim sistemi" icon={MonitorCog}>
           <Row label="Donanım">{h ? virtualizationLabel(h) : '—'}</Row>
           <Row label="CPU">{[h?.cpu_model, cores].filter(Boolean).join(' · ') || '—'}</Row>
           <Row label="Bellek">
@@ -118,9 +147,6 @@ export function HostInventory({ host, thresholds }: { host: Host; thresholds: Ho
               '—'
             )}
           </Row>
-        </Card>
-
-        <Card title="İşletim sistemi ve ağ" icon={Network}>
           <Row label="İşletim sistemi">{h ? osLabel(h) : '—'}</Row>
           <Row label="Kernel · mimari">
             <MonoValue value={h ? kernelLabel(h) : null} />
@@ -128,6 +154,9 @@ export function HostInventory({ host, thresholds }: { host: Host; thresholds: Ho
           <Row label="Init · güvenlik modülü">
             {h?.init || '—'} · {h?.security_module ? (SECURITY_MODULE_LABEL[h.security_module] ?? h.security_module) : '—'}
           </Row>
+        </Card>
+
+        <Card title="Ağ" icon={Network} sub={{ title: 'DNS', rows: <DNSRows host={host} /> }}>
           <Row label="Hostname">
             <MonoValue value={h?.hostname} />
           </Row>
@@ -258,5 +287,77 @@ export function HostInventory({ host, thresholds }: { host: Host; thresholds: Ho
         </Card>
       </div>
     </div>
+  )
+}
+
+// Ağ kartının DNS bölümü. Eski agent DNS bilgisini göndermez (protokol 4 öncesi) ya da henüz bildirmemiştir.
+function DNSRows({ host }: { host: Host }) {
+  const d = host.system_state?.dns
+  if (!d) {
+    return (
+      <Row label="Durum">
+        <span className="muted">{healthEmptyText(host, 'DNS bilgisi')}</span>
+      </Row>
+    )
+  }
+  const groups = serverGroups(d)
+  const domains = domainItems(d)
+  const resolved = d.resolver === 'resolved'
+  return (
+    <>
+      <Row label="Çözümleyici">{resolverLabel(d)}</Row>
+      {resolved && (
+        <Row label="Kullanılan sunucu">
+          {d.current_server ? (
+            <span className="mono">
+              {d.current_server}
+              {d.current_interface && <span className="muted"> ({d.current_interface})</span>}
+            </span>
+          ) : (
+            '—'
+          )}
+        </Row>
+      )}
+      <Row label="Sunucular">
+        {groups.length > 0 ? (
+          <ul className="info-addresses">
+            {groups.map((g) => (
+              <li key={g.iface ?? ''} className="mono">
+                <span className="muted">{g.iface ?? 'genel'} </span>
+                {g.addresses.join(', ')}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <span className="muted">DNS sunucusu tanımlı değil</span>
+        )}
+      </Row>
+      {resolved && (
+        <Row label="Yedek sunucular">
+          {d.fallback_servers && d.fallback_servers.length > 0 ? <span className="mono">{d.fallback_servers.join(', ')}</span> : '—'}
+        </Row>
+      )}
+      <Row label="Alan adları">
+        {domains.length > 0 ? (
+          <ul className="info-addresses">
+            {domains.map((x) => (
+              <li key={`${x.name}|${x.routingOnly}`}>
+                <span className="mono">{x.name}</span>
+                {x.routingOnly && <span className="muted"> (yalnızca yönlendirme)</span>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          '—'
+        )}
+      </Row>
+      {resolved ? (
+        <Row label="DNSSEC · DoT">
+          {dnssecLabel(d.dnssec)} · {dnsOverTLSLabel(d.dns_over_tls)}
+        </Row>
+      ) : (
+        <Row label="Seçenekler">{d.options && d.options.length > 0 ? <span className="mono">{d.options.join(' ')}</span> : '—'}</Row>
+      )}
+    </>
   )
 }

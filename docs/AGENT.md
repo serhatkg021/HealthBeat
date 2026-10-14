@@ -520,6 +520,7 @@ Doğrulama durumu (dürüst kayıt): unit `systemd-analyze verify` ile temiz. Ag
 `--print-report` çalıştırılarak doğrulandı (2026-10-06, protokol 4): kök ve `/proc/sys` salt okunur, `/tmp` ve `/dev`
 ayrı, capability kümeleri boş, `NoNewPrivs=1`, seccomp filtre modunda, isim alanı açılamıyor; raporun bütün alanları
 (servisler, süreçler, güncellemeler, saat senkronu, sıcaklık, disk G/Ç, ağ dahil) sandbox'sız çalıştırmayla aynı geldi.
+DNS toplayıcısı (systemd-resolved'a D-Bus ile) 2026-10-14'te aynı yöntemle doğrulandı; çıktı sandbox'sızla aynı.
 Docker alanları yalnızca `healthbeat` kullanıcısı `docker` grubundaysa gelir (§3).
 **Not:** kullanıcı systemd örneği (`systemd-run --user`) dosya sistemi direktiflerini (`ProtectSystem`, `ProtectHome`,
 `PrivateTmp`) sessizce uygulamaz; o yöntemle yalnızca seccomp, adres ailesi ve `NoNewPrivileges` sınanabilir.
@@ -646,9 +647,14 @@ ya da eski agent için "agent güncellenince görünür" yazar. Değerler yuvarl
 | `processes` | en çok CPU ve RAM kullanan 5 süreç grubu (yalnızca **ad**), toplam ve zombi sayısı | `/proc/<pid>/stat` | 60 sn |
 | `updates` | bekleyen paket ve güvenlik güncellemesi sayısı, paket listelerinin son güncellenmesi | `apt list --upgradable` (yalnızca apt ailesi) | saatte bir |
 | `time_sync` | daemon, NTP sunucusu, stratum, fark, gecikme, jitter, son senkron, leap, kaynakların durumu | `timedatectl`/`busctl` (timesyncd, systemd 240+), `chronyc`, `ntpq` (yerel) | 5 dk |
+| `dns` | DNS yapılandırması: çözümleyici (systemd-resolved ya da doğrudan `resolv.conf`), arayüz başına ve genel sunucular, o an kullanılan sunucu, yedek sunucular, arama ve yalnızca yönlendirme alanları, DNSSEC/DNS-over-TLS ayarı ya da `resolv.conf` seçenekleri | `busctl` ile systemd-resolved (D-Bus), `/etc/resolv.conf`, arayüz adları için `/sys/class/net` | 5 dk |
 
 - **Oranlar** (G/Ç, ağ, swap, iowait) iki rapor arasındaki farktır: agent'ın ilk raporunda ve sayaç geri gittiğinde (yeniden
   açılış) gönderilmez.
+- **DNS** yalnızca bilgidir: agent ad çözme denemesi yapmaz, alert üretilmez. resolved'ın yönettiği makinede `resolv.conf`
+  yalnızca `127.0.0.53`'ü gösterdiği için gerçek sunucular resolved'dan okunur; `resolv.conf`'u resolved yönetmiyorsa
+  (NetworkManager gibi) uygulamalar onu doğrudan kullanır ve o raporlanır. Hiç sunucu tanımlı olmaması da raporlanır
+  (bilerek DNS'siz makineler var). Panelde Envanter → Ağ kartında.
 - **Servisler** panelde Servisler → Sistem servisleri'nde görünür; alert yalnızca **izlenen** servisler için açılır (seçim
   sunucu sayfasında). Kurulu olmayan (`not-found`) ve `masked` servisler raporlanmaz.
 - **Alert'ler** bu verilerden server'da üretilir (disk gecikmesi, sıcaklık, servis yeniden başlatma döngüsü, saat farkı,

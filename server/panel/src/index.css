@@ -1220,6 +1220,16 @@ input[type='checkbox'], input[type='radio'] {
   overflow-wrap: anywhere;
 }
 
+/* Envanter kartında ara başlık (Ağ kartının DNS bölümü). */
+.info-subhead {
+  margin: 14px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .info-addresses {
   list-style: none;
   margin: 0;
