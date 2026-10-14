@@ -25,6 +25,13 @@ ağaçtır; alert alıcıları organizasyon/sunucu bazında bildirim kurallarıy
 Mimari ve tasarım kararları: [`docs/MIMARI.md`](docs/MIMARI.md) · veritabanı: [`docs/VERITABANI.md`](docs/VERITABANI.md).
 Geliştirme durumu ve açık işler: [`PROGRESS.md`](PROGRESS.md).
 
+## Kurulum (üretim)
+
+Kaynak kod gerekmez. **Server + panel:** [Releases](https://github.com/serhatkg021/HealthBeat/releases)'teki
+`healthbeat-server_X.Y.Z.tar.gz` kurulum paketi (Docker Compose; içindeki `KURULUM.md`, ayrıntı
+[docs/DISTRIBUTION.md](docs/DISTRIBUTION.md#8-server-dağıtımı) bölüm 8). **Agent:** aynı sayfadaki `.deb` / `.rpm` paketleri
+ya da tarball ([docs/AGENT.md](docs/AGENT.md)). Her iki hat da `SHA256SUMS` + GPG imzasıyla yayınlanır.
+
 ## Hızlı başlangıç (geliştirme)
 
 Gereksinimler: Go ≥ 1.27, **PostgreSQL ≥ 15**, Node ≥ 22, `openssl`.

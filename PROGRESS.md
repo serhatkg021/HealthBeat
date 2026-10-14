@@ -4,7 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-15 — **Kalıcı veriler tek dizinde, `certs-init` → `init`** (yalnızca Docker Compose
+**Son güncelleme:** 2026-10-15 — **Server kurulum paketi**: her server sürümünde Release'e
+`healthbeat-server_X.Y.Z.tar.gz` (compose, sürümü dolu `.env.example`, `init-env.sh`, `KURULUM.md`, `LICENSE`) +
+`SHA256SUMS` + GPG imzası; `release.yml` server işi imzalayıp yüklüyor. Kurulum ve güncelleme belgeleri pakete göre
+(git clone alternatif). Paket ve imza yerelde geçici bir anahtarla denendi; Release'e gerçek yükleme ilk server sürümünde
+görülecek. Aynı gün: **Kalıcı veriler tek dizinde, `certs-init` → `init`** (yalnızca Docker Compose
 dağıtımı; server ve panel kodu değişmedi): `.env`'de `HB_VOLUMES_DIR` (yeni kurulumlarda `./volumes`) altında `pgdata/`,
 `certs/`, `logs/`; boşsa adlandırılmış volume'ler. `init` her `up`'ta kendi sertifikayı denetleyip sahipliğini düzeltir,
 log dizinini server'a verir; db onu beklemez. Compose ≥ v2.18. Geçici projelerde denendi: kendi sertifika (kullanıcıya ait,

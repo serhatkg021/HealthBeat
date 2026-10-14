@@ -11,6 +11,10 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 ## [Yayınlanmamış]
 
 ### Eklendi
+- Kurulum paketi: her server sürümünün GitHub Release'inde `healthbeat-server_X.Y.Z.tar.gz` (kaynak kod gerekmeden Docker
+  Compose ile kurulum: `docker-compose.yml`, `HB_REGISTRY` ve `HB_VERSION`'ı dolu `.env.example`, `deploy/init-env.sh`,
+  `KURULUM.md`, `LICENSE`) ve agent'taki gibi `SHA256SUMS` + GPG imzası. Güncellemede yeni paket kurulum dizininin üzerine
+  açılır; `.env` ve `volumes/` korunur (`docs/DISTRIBUTION.md` bölüm 8).
 - Kalıcı veriler tek bir dizinde: `.env`'deki `HB_VOLUMES_DIR` (yeni kurulumlarda `./volumes`) altında `pgdata/`,
   `certs/` ve `logs/`. Boş bırakılırsa eskisi gibi Docker'ın adlandırılmış volume'leri kullanılır; mevcut `.env`'lerde
   değer olmadığı için güncellemede veri yeri değişmez (`docs/DEPLOYMENT.md` bölüm 6).
@@ -29,6 +33,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ### İç değişiklikler (davranış değişmedi)
 - CI: `deploy/init/init_test.sh` ve compose yapılandırmasının iki veri modu için denetimi.
+- `scripts/release.sh`: özet/imza ve yeniden üretilebilir tarball iki hat için ortak; `release_test.sh` paketi de sınıyor,
+  CI paketi üretip açarak compose yapılandırmasını denetliyor. Server hattı `GITHUB_REPOSITORY_OWNER` ve
+  `GITHUB_REPOSITORY` olmadan durur (yer tutuculu imaj adresiyle paket üretilmez).
 
 ## [2.1.0] - 2026-10-14
 
