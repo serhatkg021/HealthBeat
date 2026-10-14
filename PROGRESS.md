@@ -4,7 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-15 — **Server kurulum paketi**: her server sürümünde Release'e
+**Son güncelleme:** 2026-10-15 — Server + panel **2.2.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
+"Güncellemeden önce" notları): kurulum paketi, kalıcı veriler tek dizinde, `init`; migration yok, Compose ≥ v2.18.
+Birleşince `main`'den `server/v2.2.0` etiketi atılacak; `healthbeat-init` GHCR paketi ilk yayında herkese açılmalı.
+Önceki: 2026-10-15 — **Server kurulum paketi**: her server sürümünde Release'e
 `healthbeat-server_X.Y.Z.tar.gz` (compose, sürümü dolu `.env.example`, `init-env.sh`, `KURULUM.md`, `LICENSE`) +
 `SHA256SUMS` + GPG imzası; `release.yml` server işi imzalayıp yüklüyor. Kurulum ve güncelleme belgeleri pakete göre
 (git clone alternatif). Paket ve imza yerelde geçici bir anahtarla denendi; Release'e gerçek yükleme ilk server sürümünde
