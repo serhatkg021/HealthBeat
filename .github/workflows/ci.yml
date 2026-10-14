@@ -133,6 +133,16 @@ jobs:
             | jq -e '[.services[].volumes[]?.type] | unique == ["volume"]'
           HB_VOLUMES_DIR=./volumes docker compose --env-file /dev/null config --format json \
             | jq -e '[.services[].volumes[]? | select(.type == "bind" and (.source | endswith("/volumes/pgdata") or endswith("/volumes/certs") or endswith("/volumes/logs")))] | length == 6'
+      # Release'teki paketin aynısı: kaynak kodsuz bir dizinde .env üretilip compose yapılandırması çözülebilmeli.
+      - name: kurulum paketi (üret, aç, .env, compose config)
+        run: |
+          v="$(sed -n 's/^var Version = "\(.*\)"$/\1/p' server/internal/version/version.go)"
+          scripts/release.sh server "$v" --skip-tests --out "$RUNNER_TEMP/dist"
+          mkdir "$RUNNER_TEMP/x" && tar xzf "$RUNNER_TEMP/dist/healthbeat-server_$v.tar.gz" -C "$RUNNER_TEMP/x"
+          cd "$RUNNER_TEMP/x/healthbeat"
+          ./deploy/init-env.sh ci@example.test >/dev/null
+          docker compose config --format json | jq -e --arg r "ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/healthbeat-" --arg v ":$v" \
+            '([.services[] | select(.build)] | length == 0) and ([.services[].image | select(startswith($r))] | length == 3 and all(endswith($v)))'
 
   panel:
     name: panel (tsc, test, build)

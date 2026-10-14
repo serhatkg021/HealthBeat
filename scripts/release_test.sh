@@ -17,6 +17,13 @@ fixture() {
   printf '{\n  "name": "panel",\n  "version": "1.4.0",\n  "packages": { "": { "version": "1.4.0" } }\n}\n' >"$d/server/panel/package-lock.json"
   printf '# Agent\n\n## [Yayınlanmamış]\n\n## [1.3.1] - 2026-01-02\n\n### Eklendi\n- agent notu\n\n## [1.0.0] - 2026-01-01\n\n- eski agent notu\n' >"$d/agent/CHANGELOG.md"
   printf '# Server\n\n## [Yayınlanmamış]\n\n## [1.4.0] - 2026-01-03\n\n### Eklendi\n- server notu\n\n## [1.0.0] - 2026-01-01\n\n- eski server notu\n' >"$d/server/CHANGELOG.md"
+  # Server kurulum paketinin kaynakları (gerçek dosyaların en küçük biçimi).
+  mkdir -p "$d/deploy"
+  printf 'services:\n  server:\n    image: ${HB_REGISTRY:-healthbeat}/healthbeat-server:${HB_VERSION:-local}\n    build: ./server\n  panel:\n    build: ./server/panel\n' >"$d/docker-compose.yml"
+  printf 'POSTGRES_PASSWORD=CHANGE_ME\n# HB_REGISTRY=\n# HB_VERSION=\n' >"$d/.env.example"
+  printf '#!/bin/sh\necho env\n' >"$d/deploy/init-env.sh"
+  printf '# Server @VERSION@\n\n@REGISTRY@ https://github.com/@REPO@/releases\n' >"$d/deploy/KURULUM.md"
+  printf 'MIT\n' >"$d/LICENSE"
   (cd "$d" && git init -q && git config user.email t@t && git config user.name t && git add -A && git commit -q -m init)
 }
 
@@ -84,6 +91,40 @@ n="$(cd "$D" && scripts/release-notes.sh server 1.4.0)"
 [[ "$n" == *"server notu"* && "$n" != *"agent notu"* && "$n" != *"eski server notu"* ]] && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: server notları yalnızca 1.4.0 bölümü ve yalnız server günlüğü"; echo "$n"; }
 (cd "$D" && scripts/release-notes.sh agent 9.9.9 >/dev/null 2>&1) && { fail=$((fail+1)); echo "FAIL: olmayan sürümün notu hata vermeli"; } || pass=$((pass+1))
 (cd "$D" && scripts/release-notes.sh 1.3.1 >/dev/null 2>&1) && { fail=$((fail+1)); echo "FAIL: hat adı olmadan not istenemez"; } || pass=$((pass+1))
+
+# --- server kurulum paketi (healthbeat-server_X.Y.Z.tar.gz)
+chk() { # chk <ad> <komut...> : komut başarılı olmalı
+  local name="$1"; shift
+  if "$@" >/dev/null 2>&1; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $name"; fi
+}
+O1="$TMP/out1" O2="$TMP/out2" X="$TMP/x"
+# umask 002: dizin izinlerinin pakette sabitlendiği, CI'ın 022'sinde de sınansın.
+OUT="$(cd "$D" && umask 002 && GITHUB_REPOSITORY_OWNER=Acme GITHUB_REPOSITORY=Acme/HB scripts/release.sh server 1.4.0 --skip-tests --out "$O1" 2>&1)"; RC=$?
+ok "server: kurulum paketi üretilir"
+B="$O1/healthbeat-server_1.4.0.tar.gz"
+chk "server paketi: tarball var" test -s "$B"
+mkdir -p "$X" && tar xzf "$B" -C "$X" 2>/dev/null
+got="$(cd "$X" && find . -type f | LC_ALL=C sort | tr '\n' ' ')"
+[[ "$got" == "./healthbeat/.env.example ./healthbeat/KURULUM.md ./healthbeat/LICENSE ./healthbeat/deploy/init-env.sh ./healthbeat/docker-compose.yml " ]] \
+  && pass=$((pass+1)) || { fail=$((fail+1)); echo "FAIL: server paketi içeriği: $got"; }
+chk "server paketi: compose'da build: kalmaz" bash -c "! grep -q -E '^[[:space:]]+build:' '$X/healthbeat/docker-compose.yml'"
+chk "server paketi: compose imaj satırı korunur" grep -q 'healthbeat-server:${HB_VERSION:-local}' "$X/healthbeat/docker-compose.yml"
+chk "server paketi: HB_VERSION dolu" grep -qx 'HB_VERSION=1.4.0' "$X/healthbeat/.env.example"
+chk "server paketi: HB_REGISTRY dolu (küçük harf)" grep -qx 'HB_REGISTRY=ghcr.io/acme' "$X/healthbeat/.env.example"
+chk "server paketi: KURULUM.md yer tutucuları dolu" grep -qx '@*ghcr.io/acme https://github.com/Acme/HB/releases' "$X/healthbeat/KURULUM.md"
+chk "server paketi: init-env.sh çalıştırılabilir" test -x "$X/healthbeat/deploy/init-env.sh"
+chk "server paketi: dizinler 755 (umask'tan bağımsız)" bash -c "[ \"\$(tar tzvf '$B' | awk '/^d/ {print \$1}' | sort -u)\" = drwxr-xr-x ]"
+chk "server paketi: SHA256SUMS paketi doğrular" bash -c "cd '$O1' && sha256sum -c --quiet SHA256SUMS"
+chk "server paketi: SHA256SUMS'ta notlar yok" bash -c "! grep -q RELEASE_NOTES '$O1/SHA256SUMS'"
+(cd "$D" && GITHUB_REPOSITORY_OWNER=Acme GITHUB_REPOSITORY=Acme/HB scripts/release.sh server 1.4.0 --skip-tests --out "$O2" >/dev/null 2>&1)
+chk "server paketi: yeniden üretilebilir (aynı SHA256SUMS)" cmp "$O1/SHA256SUMS" "$O2/SHA256SUMS"
+OUT="$(cd "$D" && env -u GITHUB_REPOSITORY_OWNER -u GITHUB_REPOSITORY scripts/release.sh server 1.4.0 --skip-tests --out "$TMP/out5" 2>&1)"; RC=$?
+bad "server paketi: depo sahibi verilmezse durur (yer tutuculu paket üretilmez)" "set GITHUB_REPOSITORY_OWNER"
+export GITHUB_REPOSITORY_OWNER=Acme GITHUB_REPOSITORY=Acme/HB
+mutate "$D" .env.example '/^# HB_VERSION=$/d'
+run "$D" server 1.4.0 --skip-tests --allow-dirty --out "$TMP/out3"; bad "server paketi: .env.example'da '# HB_VERSION=' yoksa durur" "has no 'HB_VERSION=1.4.0'"; reset "$D"
+mutate "$D" docker-compose.yml 's/^    build: .*/    build:\n      context: .\/server/'
+run "$D" server 1.4.0 --skip-tests --allow-dirty --out "$TMP/out4"; bad "server paketi: çok satırlı build: varsa durur" "multi-line build:"; reset "$D"
 
 echo "release_test: $pass geçti, $fail başarısız"
 [[ $fail -eq 0 ]]
