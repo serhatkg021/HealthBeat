@@ -6,7 +6,7 @@
 #   git tag server/v1.1.0 && git push origin server/v1.1.0    server + panel hattı
 #       1) ci.yml (server + panel) geçmeli
 #       2) server-verify: sürüm tutarlılığı (server/panel sürümü = etiket, değişiklik günlüğü)
-#       3) images: server/panel/certs-init imajları (amd64+arm64) -> GHCR (ve Docker Hub, isteğe bağlı)
+#       3) images: server/panel/init imajları (amd64+arm64) -> GHCR (ve Docker Hub, isteğe bağlı)
 #       4) server-release: imajlar yayınlandıktan SONRA GitHub Release (sürüm notları + imaj adları)
 #
 # Gerekli ayarlar (Settings > Secrets and variables > Actions):
@@ -128,8 +128,9 @@ jobs:
             context: server
           - image: panel
             context: server/panel
-          - image: certs-init
-            context: deploy/certs-init
+          # 2.1.x'e kadar adı certs-init'ti; eski GHCR paketi (healthbeat-certs-init) eski sürümler için yerinde kalır.
+          - image: init
+            context: deploy/init
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: imaj adlarını belirle

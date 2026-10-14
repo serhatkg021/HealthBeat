@@ -17,5 +17,8 @@
 # Veritabanı yedekleri (docs/DISTRIBUTION.md §8.2)
 /backups/
 
+# Docker Compose kalıcı verileri (HB_VOLUMES_DIR=./volumes): veritabanı, sertifika, loglar
+/volumes/
+
 # Sürüm artifact'ları (scripts/release.sh)
 /dist/

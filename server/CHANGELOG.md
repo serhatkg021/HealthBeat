@@ -2,13 +2,33 @@
 
 Biçim [Keep a Changelog](https://keepachangelog.com/) ilkelerini izler; sürümler [SemVer](https://semver.org/)'dir.
 Server ve panel **birlikte** yayınlanır ve tek sürüm numarası taşır: `server/vX.Y.Z` etiketiyle (server, panel ve
-certs-init imajları aynı sürümle GHCR'a gider; bkz. `docs/DISTRIBUTION.md`). Agent'tan bağımsızdır: agent'ın kendi
+init imajları — 2.1.x'e kadar certs-init — aynı sürümle GHCR'a gider; bkz. `docs/DISTRIBUTION.md`). Agent'tan bağımsızdır: agent'ın kendi
 günlüğü `agent/CHANGELOG.md`. Her sürümün başlığı `## [X.Y.Z] - YYYY-AA-GG` biçimindedir:
 `scripts/release-notes.sh server X.Y.Z` release notlarını buradan çıkarır. Panel değişiklikleri "Panel:" ile başlar.
 Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç değişiklikler (davranış değişmedi)" başlığında listelenir
 (bkz. `CONTRIBUTING.md` §3).
 
 ## [Yayınlanmamış]
+
+### Eklendi
+- Kalıcı veriler tek bir dizinde: `.env`'deki `HB_VOLUMES_DIR` (yeni kurulumlarda `./volumes`) altında `pgdata/`,
+  `certs/` ve `logs/`. Boş bırakılırsa eskisi gibi Docker'ın adlandırılmış volume'leri kullanılır; mevcut `.env`'lerde
+  değer olmadığı için güncellemede veri yeri değişmez (`docs/DEPLOYMENT.md` bölüm 6).
+- Kendi sertifikan `certs/` içine `cert.pem` + `key.pem` olarak konup `docker compose up -d` ile kullanılır: hazırlık adımı
+  çifti denetler (eksik, okunamayan, şifreli ya da sertifikayla eşleşmeyen anahtar açık bir Türkçe hatayla durur ve server
+  başlamaz; süresi dolmuş ya da 30 günden az kalmış sertifika uyarıdır) ve sahipliği/izinleri server'ın okuyacağı hale
+  getirir. Elle kopyalanan dosyalar için `chown` gerekmez; yenilemede de `docker compose up -d` yeterli (panel için
+  `docker compose restart panel`).
+
+### Değişti
+- `certs-init` servisi ve imajı `init` / `healthbeat-init` oldu (sertifika ve log dizinini hazırlar). Güncellemede eski
+  container'ı `docker compose up -d --remove-orphans` temizler; GHCR'daki `healthbeat-certs-init` paketi eski sürümler için
+  yerinde kalır. Veritabanı (`db`) artık bu adımı beklemez: sertifika sorunu veritabanını durdurmaz.
+- `docker-compose.yml` Docker Compose **v2.18** ya da üstünü gerektirir (daha eskileri `invalid interpolation format` deyip
+  hiçbir şey başlatmaz). Dosyada port satırlarının iç tarafının değiştirilmemesi gerektiği yazıyor; portlar `.env`'den.
+
+### İç değişiklikler (davranış değişmedi)
+- CI: `deploy/init/init_test.sh` ve compose yapılandırmasının iki veri modu için denetimi.
 
 ## [2.1.0] - 2026-10-14
 

@@ -4,7 +4,12 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-14 — Agent **1.1.0** sürümü hazırlandı (`agent/CHANGELOG.md`: öne çıkanlar ve
+**Son güncelleme:** 2026-10-15 — **Kalıcı veriler tek dizinde, `certs-init` → `init`** (yalnızca Docker Compose
+dağıtımı; server ve panel kodu değişmedi): `.env`'de `HB_VOLUMES_DIR` (yeni kurulumlarda `./volumes`) altında `pgdata/`,
+`certs/`, `logs/`; boşsa adlandırılmış volume'ler. `init` her `up`'ta kendi sertifikayı denetleyip sahipliğini düzeltir,
+log dizinini server'a verir; db onu beklemez. Compose ≥ v2.18. Geçici projelerde denendi: kendi sertifika (kullanıcıya ait,
+600) → API ve panel sundu; yenileme `up -d` + `restart panel`; eşleşmeyen anahtar → server başlamadı, db çalıştı; 2.1.0
+compose'undan geçiş → veri ve sertifika korundu, `--remove-orphans` eski container'ı sildi. Önceki: 2026-10-14 — Agent **1.1.0** sürümü hazırlandı (`agent/CHANGELOG.md`: öne çıkanlar ve
 "Güncellemeden önce" notları): protokol 4, arka planda toplama, şifreli token, yeni kurulum sihirbazı, Türkçe kurulum.
 Birleşince `main`'den `agent/v1.1.0` etiketi atılacak. Aynı gün server + panel **2.1.0** yayınlandı (`server/v2.1.0`):
 protokol 4, bakım pencereleri, sadeleşen bildirim modeli, konuya göre panel, Sistem Araçları. Aynı gün: **DNS bilgisi** (agent, server ve panel; protokol 4'e eklendi, sürüm artmadı): agent

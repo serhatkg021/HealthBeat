@@ -42,7 +42,7 @@ flowchart LR
 | `PULL_CA_CERT_FILE` | hayır | Pull agent sertifikalarını doğrulayacak CA (PEM). Verilmezse doğrulama kapalıdır. Bkz. "Özel (kurum içi) CA". |
 | `HTTP_ADDR` | hayır | Varsayılan `:8443`. |
 | `LOG_FORMAT` | hayır | `text` (varsayılan, `key=value`) ya da `json` (log toplayıcılar için). |
-| `LOG_FILE` | hayır | Logun stdout'a ek olarak yazıldığı **kalıcı dosya** (saklama sınırları panelden, bkz. 2.1); o dizinde günlük dosyalar tutulur (`server-YYYY-MM-DD.log`, eski günler `.log.gz`). Boş = kapalı (bare-metal varsayılanı). Docker Compose varsayılanı `/var/log/healthbeat/server.log` (`logs` volume'ü). Açılamazsa server yine başlar, log'a `log file disabled` yazar. Bkz. "Loglama". |
+| `LOG_FILE` | hayır | Logun stdout'a ek olarak yazıldığı **kalıcı dosya** (saklama sınırları panelden, bkz. 2.1); o dizinde günlük dosyalar tutulur (`server-YYYY-MM-DD.log`, eski günler `.log.gz`). Boş = kapalı (bare-metal varsayılanı). Docker Compose varsayılanı `/var/log/healthbeat/server.log` (`logs` dizini, bölüm 6). Açılamazsa server yine başlar, log'a `log file disabled` yazar. Bkz. "Loglama". |
 
 2.0.0'dan önce ortamda olan `SMTP_*`, `PANEL_BASE_URL`, `LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION`,
 `*_RETENTION_DAYS`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL`, `RATE_LIMIT_*`, `LOG_LEVEL`, `LOG_ERROR_BODY_BYTES` ve
@@ -141,9 +141,9 @@ satırları birlikte — o dizindeki günlük dosyalara da yazılır:
 - **Saklama:** bugün dahil son "log dosyası geçmişi" kadar gün (varsayılan 14) tutulur; toplam boyut "log dosyaları toplamı"nı
   (varsayılan 1024 MB) aşarsa en eski günler daha erken silinir (ikisi de Ayarlar → Loglama). Server yeniden başlarsa aynı günün dosyasına devam eder.
   Gün sınırı container saatine göredir (varsayılan UTC; log zaman damgaları da UTC).
-- **Kalıcılık (Docker Compose):** dosyalar `logs` volume'ündedir: `docker compose down` / `restart` ve sürüm
-  güncellemeleri (`up -d --build`, yeni imaj) onları silmez; yalnızca `docker compose down -v` siler. `docker compose logs`
-  ise container'a bağlıdır ve güncellemede sıfırlanır — geçmiş için dosyalara bak.
+- **Kalıcılık (Docker Compose):** dosyalar `logs` dizinindedir (`$HB_VOLUMES_DIR/logs`, varsayılan `./volumes/logs`;
+  `HB_VOLUMES_DIR` boşsa `logs` volume'ü, bölüm 6): `docker compose down` / `restart` ve sürüm güncellemeleri onları silmez.
+  `docker compose logs` ise container'a bağlıdır ve güncellemede sıfırlanır — geçmiş için dosyalara bak.
 - **Okuma:**
   ```sh
   # bugünün dosyasında bir istek kimliği
@@ -154,8 +154,8 @@ satırları birlikte — o dizindeki günlük dosyalara da yazılır:
   docker compose cp server:/var/log/healthbeat ./server-logs
   ```
   `LOG_FORMAT=json` ile her satır bir JSON nesnesidir: `zcat server-*.log.gz | jq 'select(.status >= 500)'`.
-- **Hostta bir klasörde tutmak** istersen `docker-compose.yml`'da `logs:/var/log/healthbeat` satırını
-  `./logs:/var/log/healthbeat` yap ve klasörü server kullanıcısına ver: `mkdir -p logs && sudo chown 10001:10001 logs`.
+- **Hostta:** `HB_VOLUMES_DIR` doluyken dosyalar zaten hostta, `volumes/logs/` altındadır (sahibi server kullanıcısı, 10001;
+  okumak için `sudo`). Sahipliği her `docker compose up`'ta `init` adımı ayarlar.
 - Dosyaya yazılamazsa (disk dolu, izin) server durmaz: log stdout'ta devam eder, sorun bir kez stderr'e yazılır.
 - Bare-metal'de `LOG_FILE` boş varsayılandır; systemd servisi olarak çalışan server'ın logu zaten journal'dadır.
 - **Panelden okuma:** bu dosyalar panelde **Sistem Araçları → Log Analiz** sekmesinde gün gün incelenir (seviye, metin,
@@ -332,8 +332,8 @@ gider (Vite dev proxy'si böyle çalışır).
 ### Docker ile
 
 Panel kendi TLS'ini kendi sonlandırır — `/certs/cert.pem` + `/certs/key.pem` okur, tıpkı server gibi
-(bölüm 3, "Gerçek sertifika kullanmak"). Compose kullanıyorsan bu, server'la **aynı** `certs`
-volume'üdür (bölüm 6); panel'i tek başına çalıştırıyorsan kendi sertifika çiftini mount et:
+(bölüm 6, "Kendi sertifikanı kullanmak"). Compose kullanıyorsan bu, server'la **aynı** `certs`
+dizinidir (bölüm 6); panel'i tek başına çalıştırıyorsan kendi sertifika çiftini mount et:
 
 ```sh
 cd server/panel
@@ -385,7 +385,7 @@ olmadığından CORS'tan etkilenmez.
 - [ ] `CORS_ALLOWED_ORIGINS` yalnızca panel origin'ini içeriyor
 - [ ] Server bir proxy arkasındaysa `TRUSTED_PROXIES` yalnızca o proxy'yi içeriyor; iki farklı istemciden giriş yapılıp
       denetim kaydında (`/audit`) iki farklı IP görüldü
-- [ ] Panel gerçek bir sertifika sunuyor (kendinden imzalı değil) — bkz. "Gerçek sertifika kullanmak"
+- [ ] Panel gerçek bir sertifika sunuyor (kendinden imzalı değil) — bkz. bölüm 6, "Kendi sertifikanı kullanmak"
 - [ ] Bildirim → Kanallar'nda e-posta kanalı kuruldu, "Deneme gönder" ile doğrulandı ve kanal açıldı
 - [ ] Bildirim → Kişiler'e alert'leri alacak sistem kişileri (ya da ortak adresler) eklendi, Bildirim kuralları → Sistem'de
       onlara kural yazıldı (alt çubuktaki uyarı şeridi kalmadı) ve bir test alert'iyle e-postanın gittiği görüldü
@@ -403,14 +403,18 @@ olmadığından CORS'tan etkilenmez.
 
 Yukarıdaki bölümler server ve panel'i ayrı ayrı, elle dağıtmayı anlatır. Tek makinede hızlı
 kurulum (ya da küçük bir üretim) için proje kökündeki `docker-compose.yml`, PostgreSQL + API
-server + panel'i tek komutla ayağa kaldırır:
+server + panel'i tek komutla ayağa kaldırır. **Docker Compose v2.18 ya da üstü** gerekir (dosya iç içe değişken
+kullanır; eski sürümler `invalid interpolation format` deyip hiçbir şey başlatmaz).
 
 ```sh
 ./deploy/init-env.sh        # .env üretir (rastgele sırlar); yalnızca bir kez
 docker compose up -d --build
 ```
 
-- **Panel:** `https://localhost` (`HB_PANEL_PORT`, varsayılan `443`) · **API:** `https://localhost:8443` (`HB_API_PORT`, agent'lar buraya bağlanır). İkisi de aynı kendinden imzalı sertifikayı sunar (aşağıdaki "Gerçek sertifika kullanmak"); tarayıcı ilk seferde bir güven uyarısı gösterir.
+- **Panel:** `https://localhost` (`HB_PANEL_PORT`, varsayılan `443`) · **API:** `https://localhost:8443` (`HB_API_PORT`, agent'lar buraya bağlanır). İkisi de aynı sertifikayı sunar; kendi sertifikan yoksa kendinden imzalıdır ve tarayıcı ilk seferde bir güven uyarısı gösterir (aşağıdaki "Kendi sertifikanı kullanmak").
+- **`docker-compose.yml`'ı düzenlemen gerekmez:** portlar, adresler ve dizinler `.env`'den gelir. Port satırlarındaki sağ
+  taraf (`:8443`) container'ın içidir; panel server'a ve sağlık denetimleri ona bu porttan bağlanır — değiştirilirse
+  servisler birbirine ulaşamaz. Dışarıya açılan portu `HB_PANEL_PORT` / `HB_API_PORT` belirler.
 - `init-env.sh` var olan bir `.env`'e **dokunmaz** — sırları yeniden üretmek istersen dosyayı
   sil ve yeniden çalıştır (bu, saklı pull secret'ları ve mevcut oturumları geçersiz kılar).
 - Çıktıdaki geçici admin şifresi yalnızca o an gösterilir (`.env`'de `BOOTSTRAP_ADMIN_PASSWORD`
@@ -424,43 +428,69 @@ docker compose up -d --build
 
 | Servis | Ne yapar |
 | --- | --- |
-| `db` | PostgreSQL 16, `pgdata` volume'ünde. |
-| `certs-init` | Tek seferlik: `certs` volume'ünde sertifika yoksa kendinden imzalı bir çift yazar, sonra çıkar. Sertifika **varsa dokunmaz**. |
-| `server` | API server; `db` sağlıklı ve `certs-init` tamamlanınca başlar. |
-| `panel` | Panel; kendi TLS'ini `certs` volume'ünden (server'la aynı sertifika) sonlandırır. `API_PROXY_URL=https://server:8443` ile panel `/api/` isteklerini server'a **kendi origin'inden** proxy'ler (CORS ve sertifika onayı gerekmez — bkz. `server/panel/deploy/docker-entrypoint.d/15-healthbeat-config.sh`). Panel ile API'yi ayrı alan adlarında sunacaksan `.env`'de `API_PROXY_URL=` (boş) yap, `API_BASE_URL` ve `CORS_ALLOWED_ORIGINS` ver (bölüm 4). |
+| `db` | PostgreSQL 16, `pgdata` dizininde. Kendi dizinini kendisi hazırlar; `init`'i **beklemez** (sertifika sorunu veritabanını durdurmaz, yedek/geri yükleme için yalnızca `db` kaldırılabilir). |
+| `init` | Her `up`'ta root olarak bir kez çalışıp çıkar (`deploy/init/init.sh`). `certs`: sertifika yoksa `HB_TLS_HOSTS` için kendinden imzalı bir çift üretir; varsa denetler (çift tam mı, anahtar şifresiz mi, sertifikayla eşleşiyor mu) ve sahipliği/izinleri server'ın okuyacağı hale getirir (`10001`, anahtar `640`). Kullanılamayan bir çiftte açık bir hatayla durur, server başlamaz; süresi dolmuş/dolmak üzere olan sertifika yalnızca uyarıdır. `logs`: sahibini server kullanıcısı yapar. 2.1.x'e kadar adı `certs-init`'ti. |
+| `server` | API server; `db` sağlıklı ve `init` başarıyla bitince başlar. |
+| `panel` | Panel; kendi TLS'ini `certs` dizininden (server'la aynı sertifika) sonlandırır. `API_PROXY_URL=https://server:8443` ile panel `/api/` isteklerini server'a **kendi origin'inden** proxy'ler (CORS ve sertifika onayı gerekmez — bkz. `server/panel/deploy/docker-entrypoint.d/15-healthbeat-config.sh`). Panel ile API'yi ayrı alan adlarında sunacaksan `.env`'de `API_PROXY_URL=` (boş) yap, `API_BASE_URL` ve `CORS_ALLOWED_ORIGINS` ver (bölüm 4). |
 
-**Kalıcı veriler** adlandırılmış volume'lerdedir; `docker compose down` / `up` onları **silmez**:
-`pgdata` (tüm kullanıcılar, sunucular, metrikler, alert'ler), `certs` (server VE panelin okuduğu TLS
-sertifikası — ikisi de aynı domain'i sunduğu için tek çift yeter) ve `logs` (server'ın kalıcı log dosyaları,
-bölüm 2 "Loglama"). Volume'leri silmek yalnızca
-`docker compose down -v` ile olur.
+**Kalıcı veriler** `.env`'deki `HB_VOLUMES_DIR`'in altındadır (`init-env.sh`'ın ürettiği `.env`'de `./volumes`, yani
+proje dizininde; mutlak yol da olur):
+
+```
+volumes/
+  pgdata/   PostgreSQL veri dizini: tüm kullanıcılar, sunucular, metrikler, alert'ler (sahibi postgres, 70)
+  certs/    cert.pem + key.pem (+ isteğe bağlı ca.pem): server VE panelin sunduğu tek sertifika çifti
+  logs/     server'ın kalıcı log dosyaları (bölüm 2 "Loglama")
+```
+
+- Dizinler yoksa oluşturulur; sahiplik ve izinleri `init` ve postgres imajı ayarlar — elle `chown` gerekmez. Docker'ın
+  oluşturduğu dizinler `root`'a ait olduğundan içlerine dosya koymak/silmek için `sudo` gerekir.
+- `docker compose down` dizinlere dokunmaz. `HB_VOLUMES_DIR` **boşsa** (2.1.x ve öncesinin varsayılanı, eski `.env`'ler)
+  aynı üçü Docker'ın adlandırılmış volume'leridir (`<proje>_pgdata`, …); onları yalnızca `docker compose down -v` siler.
+- `HB_VOLUMES_DIR`'i kurulumdan sonra değiştirmek verileri **taşımaz**: yeni dizinde boş bir veritabanıyla açılır. Taşımak
+  için önce yedek al, `docker compose down`, eski yerin içeriğini sahiplik korunarak kopyala (`sudo cp -a`), sonra değeri
+  değiştirip `up -d` (adlandırılmış volume'ün yeri: `docker volume inspect <proje>_pgdata`).
 
 **Panel her zaman HTTPS'tir**, kendinden imzalı ya da gerçek bir sertifikayla — hiçbir zaman düz HTTP
 sunmaz, bu yüzden `HB_PANEL_BIND` varsayılanı `0.0.0.0`'dır. Gerçek sertifikan yoksa tarayıcı kendinden
 imzalı olana bir kez güven uyarısı gösterir; bağlantı yine de uçtan uca şifrelidir.
 
-**Gerçek sertifika kullanmak** (önerilir — nereden geldiği bu projenin ilgi alanı dışında: satın alınmış,
-müşterinin verdiği, bir CA'ya imzalattığın, fark etmez) için `certs-init` ilk çalışmadan önce (ya da
-volume'ü temizleyip yeniden) `cert.pem` + `key.pem`'i `certs` volume'üne koy — dosya varsa `certs-init`
-dokunmaz, **server ve panel aynı çifti okur.** Sunucunun/panelin hangi domain(ler) için geçerli olacağını
-kendinden imzalı sertifika için `HB_TLS_HOSTS`'a yaz (yalnızca **ilk** oluşturmada okunur, virgülle ayrılmış
-DNS/IP; tarayıcının VE agent'ların bağlanacağı gerçek domain'i buraya ekle, ör.
-`HB_TLS_HOSTS=healthbeat.xxx.com`). Yenilemede aynı iki dosyayı değiştirirsin; server bunu kendiliğinden
-algılar, panel (nginx) container'ının yeniden başlatılması gerekir.
+**Kendi sertifikanı kullanmak** (önerilir — nereden geldiği bu projenin ilgi alanı dışında: satın alınmış,
+müşterinin verdiği, bir CA'ya imzalattığın, fark etmez): `cert.pem` (PEM, **tam zincir**: önce sunucu sertifikası, sonra ara
+sertifikalar) ve `key.pem`'i (PEM, **şifresiz**) `$HB_VOLUMES_DIR/certs/` içine koy ve `docker compose up -d` çalıştır.
+Sertifika, tarayıcıların ve agent'ların bağlanacağı adresi (DNS ya da IP SAN) içermeli. **Server ve panel aynı çifti okur.**
+
+```sh
+sudo install -d volumes/certs
+sudo cp /yol/fullchain.pem volumes/certs/cert.pem
+sudo cp /yol/privkey.pem   volumes/certs/key.pem
+docker compose up -d        # init denetler ve sahipliği düzeltir; sorun varsa: docker compose logs init
+```
+
+- İlk kurulumda dosyaları **ilk `up`'tan önce** koyarsan kendinden imzalı sertifika hiç üretilmez. Sonradan koyarsan
+  üretilmiş olanın yerine geçer.
+- **Yenileme:** aynı iki dosyayı değiştir, `docker compose up -d` (init sahipliği yeniden düzeltir; server yeni sertifikayı
+  yeniden başlamadan, yaklaşık bir dakika içinde kullanır), ardından `docker compose restart panel` (nginx kendiliğinden
+  algılamaz). certbot kullanıyorsan bu üç adımı bir `--deploy-hook`'a koy.
+- **Kendinden imzalı sertifika** `HB_TLS_HOSTS`'taki adresler için üretilir (virgülle ayrılmış DNS/IP; tarayıcının VE
+  agent'ların bağlanacağı gerçek domain'i buraya ekle, ör. `HB_TLS_HOSTS=healthbeat.xxx.com`), 825 gün geçerlidir ve yalnızca
+  `certs/` boşken üretilir: adresleri değiştirmek için iki dosyayı silip `docker compose up -d`. Push agent'lar onu ancak
+  `--ca-cert` ile bu `cert.pem` verilirse doğrular.
 
 **Yedekleme:** `mkdir -p -m 700 backups && (umask 077; docker compose exec -T db pg_dump -U healthbeat healthbeat > backups/backup.sql)`
-(`backups/` gitignore'dadır; veya volume'ü doğrudan yedekle). `.env`'deki `JWT_*`, `SECRETS_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`'ü
-de ayrıca güvenli bir yerde tut.
+(`backups/` gitignore'dadır; `pgdata/` dizinini çalışırken kopyalamak tutarlı bir yedek değildir). `.env`'deki `JWT_*`,
+`SECRETS_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`'ü de ayrıca güvenli bir yerde tut.
 
-**Güncelleme:** `git pull && docker compose up -d --build` — server açılışta bekleyen
-migration'ları kendisi uygular (`AUTO_MIGRATE`, bölüm 2).
+**Güncelleme:** `git pull && docker compose up -d --build --remove-orphans` — server açılışta bekleyen
+migration'ları kendisi uygular (`AUTO_MIGRATE`, bölüm 2). `--remove-orphans`, adı değişen servislerin eski container'larını
+temizler (ör. 2.1.x'ten gelirken `certs-init`); yoksa Compose yalnızca uyarır.
 
 **Log'lar:** iki yerde tutulur.
 
-| | `docker compose logs -f server` (ya da `panel`, `db`) | `logs` volume'ü (`LOG_FILE`, yalnızca server) |
+| | `docker compose logs -f server` (ya da `panel`, `db`, `init`) | `logs` dizini (`LOG_FILE`, yalnızca server) |
 | --- | --- | --- |
 | Ne için | canlı akış, son olaylar | geçmiş: bir `request_id`'yi günler sonra bulmak |
 | Sınır | servis başına `HB_DOCKER_LOG_MAX_FILE` × `HB_DOCKER_LOG_MAX_SIZE` (varsayılan 3 × 10 MB, eskiler gzip'li); dolunca en eski parça silinir | bugün dahil son 14 gün, toplam 1 GB |
-| Güncelleme / `down` | container yeniden oluşturulunca **sıfırlanır** | kalır (yalnızca `down -v` siler) |
+| Güncelleme / `down` | container yeniden oluşturulunca **sıfırlanır** | kalır |
 
 Seviye, biçim, hata ayrıntısı ve dosyaları okuma: bölüm 2, "Loglama".
