@@ -112,6 +112,28 @@ jobs:
         working-directory: server
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
+  deploy:
+    name: dağıtım (init.sh, docker-compose.yml)
+    if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'server' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: init.sh testleri
+        run: deploy/init/init_test.sh
+      # HB_VOLUMES_DIR boşken adlandırılmış volume'ler, doluyken dizinler kullanılmalı (iç içe değişken, Compose >= 2.18).
+      - name: docker compose yapılandırması (adlandırılmış volume / dizin)
+        env:
+          POSTGRES_PASSWORD: x
+          JWT_ACCESS_SECRET: x
+          JWT_REFRESH_SECRET: x
+          SECRETS_ENCRYPTION_KEY: x
+        run: |
+          docker compose version
+          HB_VOLUMES_DIR= docker compose --env-file /dev/null config --format json \
+            | jq -e '[.services[].volumes[]?.type] | unique == ["volume"]'
+          HB_VOLUMES_DIR=./volumes docker compose --env-file /dev/null config --format json \
+            | jq -e '[.services[].volumes[]? | select(.type == "bind" and (.source | endswith("/volumes/pgdata") or endswith("/volumes/certs") or endswith("/volumes/logs")))] | length == 6'
+
   panel:
     name: panel (tsc, test, build)
     if: ${{ !inputs.components || inputs.components == 'all' || inputs.components == 'server' }}

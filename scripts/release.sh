@@ -3,7 +3,7 @@
 # yayınlanır (docs/DISTRIBUTION.md):
 #
 #   agent   etiket agent/vX.Y.Z    statik binary'ler, tarball'lar, .deb/.rpm, SHA256SUMS (+ GPG imzası)
-#   server  etiket server/vX.Y.Z   server + panel + certs-init imajları (imajları GitHub Actions yayınlar)
+#   server  etiket server/vX.Y.Z   server + panel + init imajları (imajları GitHub Actions yayınlar)
 #
 # Sunuculara hiçbir şey dağıtmaz ve hiçbir şey yayınlamaz: çıktı dist/<hat>-vX.Y.Z/ altındadır.
 #
@@ -96,7 +96,7 @@ if [[ "$COMPONENT" == server ]]; then
   {
     scripts/release-notes.sh server "$VERSION"
     printf '\n## İmajlar\n\n'
-    printf '```\nghcr.io/%s/healthbeat-server:%s\nghcr.io/%s/healthbeat-panel:%s\nghcr.io/%s/healthbeat-certs-init:%s\n```\n' \
+    printf '```\nghcr.io/%s/healthbeat-server:%s\nghcr.io/%s/healthbeat-panel:%s\nghcr.io/%s/healthbeat-init:%s\n```\n' \
       "$owner" "$VERSION" "$owner" "$VERSION" "$owner" "$VERSION"
     printf '\nKurulum/güncelleme: `docs/DEPLOYMENT.md` ve `docs/DISTRIBUTION.md` bölüm 8 (`HB_VERSION=%s`). ' "$VERSION"
     printf 'Agent bu sürümden bağımsızdır: agent sürümleri `agent/vX.Y.Z` etiketiyle ayrıca yayınlanır.\n'

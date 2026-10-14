@@ -29,8 +29,8 @@ updates:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
-  - package-ecosystem: docker # server, panel ve certs-init imajlarının taban imajları
-    directories: [/server, /server/panel, /deploy/certs-init]
+  - package-ecosystem: docker # server, panel ve init imajlarının taban imajları
+    directories: [/server, /server/panel, /deploy/init]
     schedule:
       interval: monthly
     commit-message:

@@ -9,7 +9,7 @@ dağıtım ya da agent'ın kendini güncellemesi yoktur (gerekçe: bölüm 9). U
 ## 1. Bir bakışta
 
 - **İki bağımsız sürüm hattı** (ayrıntı bölüm 11): **agent** `agent/vX.Y.Z` etiketiyle (binary, `.deb`/`.rpm`, tarball) ve
-  **server + panel** `server/vX.Y.Z` etiketiyle (server, panel, certs-init Docker imajları, tek sürüm numarası) yayınlanır. Biri
+  **server + panel** `server/vX.Y.Z` etiketiyle (server, panel, init Docker imajları, tek sürüm numarası) yayınlanır. Biri
   çıkınca diğerinin numarası değişmez; panelde bir düzeltme yapmak agent'ı ("güncelleme var" diye) etkilemez. Her hattın
   kendi değişiklik günlüğü vardır: `agent/CHANGELOG.md`, `server/CHANGELOG.md`.
 - **Tek kaynak:** agent tek bir **statik binary**'dir (CGO yok, dağıtıma özgü kütüphane bağımlılığı yok).
@@ -202,17 +202,18 @@ Sunucuyu panelden de silmeyi unutma (Sunucu sayfası → Ayarlar); aksi halde ç
 
 ## 8. Server dağıtımı
 
-Server, panel ve sertifika-init **Docker imajları** olarak, `server/vX.Y.Z` etiketiyle ve **tek bir sürüm numarasıyla**
+Server, panel ve init (hazırlık adımı) **Docker imajları** olarak, `server/vX.Y.Z` etiketiyle ve **tek bir sürüm numarasıyla**
 yayınlanır (amd64 + arm64); GitHub Releases'te "HealthBeat Server X.Y.Z" olarak sürüm notlarıyla görünür. Agent'ın
 sürümünden bağımsızdır (bölüm 11):
 
 ```
-ghcr.io/<sahip>/healthbeat-server:X.Y.Z      ghcr.io/<sahip>/healthbeat-panel:X.Y.Z      ghcr.io/<sahip>/healthbeat-certs-init:X.Y.Z
+ghcr.io/<sahip>/healthbeat-server:X.Y.Z      ghcr.io/<sahip>/healthbeat-panel:X.Y.Z      ghcr.io/<sahip>/healthbeat-init:X.Y.Z
 ```
 
 (`<sahip>`: GitHub kullanıcı/organizasyon adı, küçük harf. Docker Hub da kullanılıyorsa aynı adlar `docker.io/<namespace>/…`.)
 `docker-compose.yml` imaj adlarını `HB_REGISTRY` ve `HB_VERSION` ile alır; ikisi boşsa yerelde derlenen
-imajlar (`healthbeat/…:local`) kullanılır.
+imajlar (`healthbeat/…:local`) kullanılır. 2.1.x'e kadar üçüncü imajın adı `healthbeat-certs-init`'ti; o paket eski
+sürümler için GHCR'da yerinde kalır. Docker Compose **v2.18** ya da üstü gerekir (`docs/DEPLOYMENT.md` bölüm 6).
 
 ### 8.1 İlk kurulum (yayınlanmış sürümle)
 
@@ -223,6 +224,7 @@ Depo/paketler **özelse** (GHCR paketleri de varsayılan olarak özeldir) sunucu
 ```sh
 ./deploy/init-env.sh                                   # .env üretir (rastgele sırlar); bir kez
 # .env içine ekle:  HB_REGISTRY=ghcr.io/<sahip>   HB_VERSION=X.Y.Z
+# Kendi sertifikan varsa şimdi: volumes/certs/cert.pem + key.pem (docs/DEPLOYMENT.md bölüm 6)
 docker compose pull && docker compose up -d
 ```
 
@@ -233,8 +235,11 @@ docker compose pull && docker compose up -d
 #    backups/ gitignore'dadır; yedek parola özetleri içerir, bu yüzden yalnızca sahibi okuyabilir (700/600)
 mkdir -p -m 700 backups
 (umask 077; docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' > backups/backup-$(date +%F-%H%M).sql)
-# 2) yeni sürüm: .env içindeki HB_VERSION satırını X.Y.Z yap, sonra
-docker compose pull && docker compose up -d
+# 2) yeni sürümün kurulum dosyaları (docker-compose.yml ve deploy/ sürümle değişebilir; .env ve volumes/ korunur):
+git fetch --depth 1 origin tag server/vX.Y.Z && git checkout server/vX.Y.Z
+#    .env içindeki HB_VERSION satırını X.Y.Z yap, sonra
+#    (--remove-orphans: adı değişen servislerin eski container'larını siler, ör. 2.1.x'ten gelirken certs-init)
+docker compose pull && docker compose up -d --remove-orphans
 # 3) doğrula
 docker compose ps                                       # hepsi healthy
 docker compose logs server | grep -E "migrat|listening"  # "now at 0000NN" ve "listening"
@@ -242,10 +247,14 @@ docker compose logs server | grep -E "migrat|listening"  # "now at 0000NN" ve "l
 
 Server açılışta bekleyen migration'ları uygular (`AUTO_MIGRATE`). Panel giriş yapılınca eski sekmeyi yenile.
 
+`.env` güncellemede değişmez: 2.1.x ve öncesinden gelen bir `.env`'de `HB_VOLUMES_DIR` olmadığı için veriler Docker'ın
+adlandırılmış volume'lerinde kalmaya devam eder. Dizine taşımak ayrı ve isteğe bağlı bir iştir (`docs/DEPLOYMENT.md`
+bölüm 6, "Kalıcı veriler").
+
 ### 8.3 Geri alma
 
-**İki sürüm arasında yeni migration yoksa** yalnızca kodu geri almak yeter: `HB_VERSION`'ı eski sürüme çevirip
-`docker compose up -d`. Hangi sürümün migration içerdiği `server/CHANGELOG.md`'de yazar; uygulanmış olanları
+**İki sürüm arasında yeni migration yoksa** yalnızca kodu geri almak yeter: kurulum dosyalarını eski sürümün etiketine
+döndürüp (`git checkout server/v<eski>`) `HB_VERSION`'ı eski sürüme çevir ve `docker compose up -d --remove-orphans`. Hangi sürümün migration içerdiği `server/CHANGELOG.md`'de yazar; uygulanmış olanları
 `docker compose exec server healthbeat-server migrate status` listeler.
 
 **Yeni migration varsa eski server açılmaz** — bilmediği bir migration uygulanmış veritabanını reddeder ("the database has
@@ -319,7 +328,7 @@ GHCR paketlerini herkese açmak istiyorsan ilk yayından sonra paket ayarlarınd
 | Sürüm kaynağı | `agent/internal/version/version.go` (`Version`) | `server/internal/version/version.go` (`Version`) **ve** `server/panel/package.json` + `server/panel/package-lock.json` (aynı numara; `cd server/panel && npm version X.Y.Z --no-git-tag-version`) |
 | Ayrıca | Yayından sonra panelde Ayarlar → Agent sürümleri'nde en güncel sürüm X.Y.Z yapılır (her kurulumda; server'a gömülü değildir) | — |
 | Değişiklik günlüğü | `agent/CHANGELOG.md` → `## [X.Y.Z] - YYYY-AA-GG` | `server/CHANGELOG.md` → `## [X.Y.Z] - YYYY-AA-GG` (panel maddeleri "Panel:" ile başlar) |
-| Yayınlananlar | binary, tarball, `.deb`/`.rpm`, `SHA256SUMS` + GPG imzası → GitHub Release | `healthbeat-server`, `-panel`, `-certs-init` imajları (`X.Y.Z`, `X.Y`, `latest`) → GHCR → GitHub Release (notlar + imaj adları) |
+| Yayınlananlar | binary, tarball, `.deb`/`.rpm`, `SHA256SUMS` + GPG imzası → GitHub Release | `healthbeat-server`, `-panel`, `-init` imajları (`X.Y.Z`, `X.Y`, `latest`) → GHCR → GitHub Release (notlar + imaj adları) |
 | Yerel deneme | `scripts/release.sh agent X.Y.Z --allow-dirty` (imzasız; `dist/agent-vX.Y.Z/`) | `scripts/release.sh server X.Y.Z --check` (yalnızca sürüm tutarlılığı) ya da tam: testler + panel build + notlar (`dist/server-vX.Y.Z/`) |
 | CI | yalnızca agent işleri | server + panel işleri |
 
@@ -350,6 +359,8 @@ sonra her kurulumda Ayarlar → Agent sürümleri'nden girilir.
 - [ ] `scripts/release.sh server X.Y.Z --check` temiz. Migration eklendiyse ileri yönlü/eklemeli olduğu doğrulandı (`COMPATIBILITY.md` kural 6).
 - [ ] Commit'lendi, `main`'a alındı.
 - [ ] `git tag server/vX.Y.Z && git push origin server/vX.Y.Z` → Actions: CI (server + panel) → sürüm tutarlılığı → imajlar GHCR'a → GitHub Release.
+- [ ] GHCR'da **yeni oluşan bir paket** (ilk kez yayınlanan imaj, ör. `healthbeat-init`) özel başlar: paket ayarlarından
+      herkese aç ve repoya bağla; açılmazsa kurulumlar `docker compose pull`'da yetki hatası alır.
 - [ ] Release sayfasında notları, GHCR'da `X.Y.Z`/`X.Y`/`latest` etiketlerini kontrol et; server dağıtımı bölüm 8'e göre (yedek al, `HB_VERSION=X.Y.Z`).
 - [ ] Panelde alt çubuktaki **HealthBeat Server X.Y.Z** satırı yeni sürümü göstermeli (panel ve server sürümü farklıysa yanındaki şeritte uyarı çıkar).
 

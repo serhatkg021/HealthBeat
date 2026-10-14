@@ -10,13 +10,19 @@
 #                         HB_REGISTRY=ghcr.io/<sahip> HB_VERSION=X.Y.Z docker compose up -d   # X.Y.Z = server + panel sürümü (server/vX.Y.Z), agent'tan bağımsız
 #   (aynı değerleri .env'ye yazarsan komutlara gerekmez)
 #
-# Kalıcı veriler adlandırılmış volume'lerdedir; `docker compose down` / `up` onları SİLMEZ:
+# Kalıcı veriler üç yerdedir; `docker compose down` / `up` onları SİLMEZ:
 #   pgdata  PostgreSQL veri dizini (tüm kullanıcılar, sunucular, metrikler, alert'ler)
 #   certs   server VE panelin okuduğu TLS sertifikası (cert.pem, key.pem) ve isteğe bağlı CA (ca.pem) —
-#           ikisi de aynı domain'i aynı sertifikayla, farklı porttan (443/8443) sunar.
+#           ikisi de aynı domain'i aynı sertifikayla, farklı porttan (panel 443, API 8443) sunar.
 #   logs    server'ın kalıcı log dosyaları (LOG_FILE: günlük dosyalar, son 14 gün).
-# Volume'leri silmek yalnızca `docker compose down -v` (ya da `docker volume rm`) ile olur.
+# Nerede durdukları .env'deki HB_VOLUMES_DIR'e bağlıdır:
+#   HB_VOLUMES_DIR=./volumes  →  ./volumes/pgdata, ./volumes/certs, ./volumes/logs (dizin; kendi sertifikan
+#                                volumes/certs içine cert.pem + key.pem olarak konur, sahipliği init düzeltir)
+#   boş                       →  Docker'ın adlandırılmış volume'leri (healthbeat_pgdata, …); yalnızca
+#                                `docker compose down -v` ya da `docker volume rm` siler
 # Ayrıntı ve yedekleme: docs/DEPLOYMENT.md, "Docker Compose".
+#
+# Bu dosyayı düzenlemen gerekmez: portlar, adresler ve dizinler .env'den gelir.
 
 name: healthbeat
 
@@ -41,7 +47,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD gerekli — ./deploy/init-env.sh çalıştır}
       POSTGRES_DB: ${POSTGRES_DB:-healthbeat}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # Dizin yoksa Docker oluşturur, sahipliğini postgres imajı ayarlar: db init'i beklemez (sertifika sorunu
+      # veritabanını durdurmasın; yedek/geri yükleme için yalnızca db kaldırılabilsin).
+      - ${HB_VOLUMES_DIR:+${HB_VOLUMES_DIR}/}pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
       interval: 5s
@@ -51,16 +59,19 @@ services:
     # ports:
     #   - "127.0.0.1:5432:5432"
 
-  # Tek seferlik: /certs volume'ünde sertifika yoksa kendinden imzalı bir çift yazar. Bu çift hem server'ın
-  # (agent'lara, :8443) hem panelin (tarayıcıya, :443) sunduğu TEK sertifikadır — ikisi de aynı domain'de
-  # olduğu için (bkz. HB_TLS_HOSTS) ayrı sertifikaya gerek yok.
-  certs-init:
-    image: ${HB_REGISTRY:-healthbeat}/healthbeat-certs-init:${HB_VERSION:-local}
-    build: ./deploy/certs-init
+  # Hazırlık adımı: her `up`'ta root olarak bir kez çalışır, server başlamadan önce kalıcı dizinleri hazırlar ve çıkar
+  # (deploy/init/init.sh). certs: sertifika yoksa kendinden imzalı bir çift üretir (HB_TLS_HOSTS için); varsa
+  # denetler ve sahipliğini/iznini server'ın okuyabileceği hale getirir — kullanılamıyorsa hata verir, server başlamaz.
+  # Bu çift hem server'ın (agent'lara) hem panelin (tarayıcıya) sunduğu TEK sertifikadır. logs: sahibini server yapar.
+  # 2.1.x'e kadar adı certs-init'ti: güncellemede eski container'ı `docker compose up -d --remove-orphans` temizler.
+  init:
+    image: ${HB_REGISTRY:-healthbeat}/healthbeat-init:${HB_VERSION:-local}
+    build: ./deploy/init
     environment:
       HB_TLS_HOSTS: ${HB_TLS_HOSTS:-localhost,server}
     volumes:
-      - certs:/certs
+      - ${HB_VOLUMES_DIR:+${HB_VOLUMES_DIR}/}certs:/certs
+      - ${HB_VOLUMES_DIR:+${HB_VOLUMES_DIR}/}logs:/logs
     restart: "no"
 
   server:
@@ -71,7 +82,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      certs-init:
+      init:
         condition: service_completed_successfully
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-healthbeat}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-healthbeat}?sslmode=disable
@@ -119,11 +130,13 @@ services:
       LOG_FILE_MAX_TOTAL_MB: ${LOG_FILE_MAX_TOTAL_MB:-}
     volumes:
       # Server bu dizinden yalnızca OKUR (sertifika + CA); değişiklikler yeniden başlatmadan algılanır.
-      - certs:/certs:ro
-      # Kalıcı server logu (LOG_FILE). Hostta bir klasörde görmek için: ./logs:/var/log/healthbeat (bkz. docs/DEPLOYMENT.md).
-      - logs:/var/log/healthbeat
+      - ${HB_VOLUMES_DIR:+${HB_VOLUMES_DIR}/}certs:/certs:ro
+      # Kalıcı server logu (LOG_FILE).
+      - ${HB_VOLUMES_DIR:+${HB_VOLUMES_DIR}/}logs:/var/log/healthbeat
     ports:
       # Push agent'lar buraya bağlanır; pull agent'lar ise server'dan onlara gider.
+      # Soldaki port .env'den gelir (HB_API_PORT); sağdaki 8443 container'ın içidir — panel ve sağlık
+      # denetimi server'a ondan bağlanır, değiştirme.
       - "${HB_API_BIND:-0.0.0.0}:${HB_API_PORT:-8443}:8443"
     stop_grace_period: 20s # kapanış: HTTP (5 sn) + arka plan işleri (5 sn) + bekleyen e-postaların boşaltılması (10 sn)
 
@@ -142,8 +155,9 @@ services:
       API_PROXY_URL: ${API_PROXY_URL-https://server:8443}
     volumes:
       # Server'la AYNI sertifika: panel TLS'i kendisi sonlandırır, dosyaları yalnızca okur.
-      - certs:/certs:ro
+      - ${HB_VOLUMES_DIR:+${HB_VOLUMES_DIR}/}certs:/certs:ro
     ports:
+      # Soldaki port .env'den gelir (HB_PANEL_PORT); sağdaki 8443 container'ın içidir, değiştirme.
       - "${HB_PANEL_BIND:-0.0.0.0}:${HB_PANEL_PORT:-443}:8443"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "--no-check-certificate", "https://127.0.0.1:8443/"]
@@ -162,6 +176,7 @@ services:
     ports:
       - "127.0.0.1:8025:8025" # gelen kutusu arayüzü yalnızca bu makineden erişilir; SMTP (1025) yalnızca ağ içinde
 
+# HB_VOLUMES_DIR boşken kullanılan adlandırılmış volume'ler (doluyken kullanılmazlar).
 volumes:
   pgdata:
   certs:
