@@ -397,9 +397,11 @@ olmadığından CORS'tan etkilenmez.
 
 ## 6. Docker Compose (tek komutla kurulum)
 
-> **Sürüm etiketli imajlar:** yayınlanmış bir sürümü kullanmak için `.env`'ye `HB_REGISTRY=ghcr.io/<sahip>` ve
-> `HB_VERSION=X.Y.Z` ekle, `docker compose pull && docker compose up -d` çalıştır (yerelde derlemek için ikisini de boş
-> bırak). Güncelleme ve geri alma adımları (veritabanı yedeği dahil): [docs/DISTRIBUTION.md](DISTRIBUTION.md#8-server-dağıtımı).
+> **Yayınlanmış bir sürümü kurmak** için kaynak kod gerekmez: GitHub Release'teki **kurulum paketi**
+> (`healthbeat-server_X.Y.Z.tar.gz`; compose dosyası, sürümü dolu `.env.example`, `init-env.sh`, `KURULUM.md`) yeterlidir.
+> Kurulum, güncelleme ve geri alma (veritabanı yedeği dahil): [docs/DISTRIBUTION.md](DISTRIBUTION.md#8-server-dağıtımı).
+> Aşağıdaki komutlar depodan (kaynak koddan) çalışır: yayınlanmış imajlar için `.env`'ye `HB_REGISTRY=ghcr.io/<sahip>` ve
+> `HB_VERSION=X.Y.Z` ekle; yerelde derlemek için ikisini boş bırak.
 
 Yukarıdaki bölümler server ve panel'i ayrı ayrı, elle dağıtmayı anlatır. Tek makinede hızlı
 kurulum (ya da küçük bir üretim) için proje kökündeki `docker-compose.yml`, PostgreSQL + API
@@ -461,7 +463,7 @@ sertifikalar) ve `key.pem`'i (PEM, **şifresiz**) `$HB_VOLUMES_DIR/certs/` için
 Sertifika, tarayıcıların ve agent'ların bağlanacağı adresi (DNS ya da IP SAN) içermeli. **Server ve panel aynı çifti okur.**
 
 ```sh
-sudo install -d volumes/certs
+sudo mkdir -p volumes/certs
 sudo cp /yol/fullchain.pem volumes/certs/cert.pem
 sudo cp /yol/privkey.pem   volumes/certs/key.pem
 docker compose up -d        # init denetler ve sahipliği düzeltir; sorun varsa: docker compose logs init
