@@ -4,7 +4,11 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-14 — Push sunucusunun **host id'si** panelde sunucu Ayarlar → Bağlantı ve kimlik kartında
+**Son güncelleme:** 2026-10-14 — **DNS bilgisi** (agent, server ve panel; protokol 4'e eklendi, sürüm artmadı): agent
+DNS yapılandırmasını 5 dakikada bir topluyor (systemd-resolved ya da doğrudan `resolv.conf`; sunucular, kullanılan sunucu,
+alan adları, DNSSEC/DoT); server `system_state`'te saklıyor (migration yok). Yalnızca bilgi: ad çözme denemesi ve alert
+yok. Envanter'in üst sırası "Makine ve işletim sistemi" ↔ "Ağ" oldu; DNS Ağ kartında. hbe2e'de test-1 ile denendi;
+`compat_e2e.sh` yeni ve eski server/agent ile geçti. Aynı gün: Push sunucusunun **host id'si** panelde sunucu Ayarlar → Bağlantı ve kimlik kartında
 kopyalanabilir duruyor (önceden yalnızca sunucu eklenirken gösteriliyordu); sihirbazın host id sorusu ve 401 mesajı bu
 kartı gösteriyor. hbe2e'de test-1'de denendi. Aynı gün: **Agent kurulum sihirbazı yenilendi, kurulum betiği Türkçe** (yalnızca agent):
 `install.sh wizard` / `healthbeat-agent-setup` 6 adımda soruyor ve kaydetmeden önce server'a bir deneme raporu gönderiyor

@@ -161,6 +161,27 @@ type TimeSync struct {
 	Sources           []TimeSource `json:"sources,omitempty"`
 }
 
+// DNS, makinenin DNS yapılandırmasıdır (yalnızca bilgi; ad çözme denemesi yapılmaz).
+type DNS struct {
+	Resolver         string      `json:"resolver"`                    // resolved | resolv.conf
+	Mode             string      `json:"mode,omitempty"`              // resolved: stub | uplink | static
+	CurrentServer    string      `json:"current_server,omitempty"`    // resolved'ın o an sorduğu sunucu
+	CurrentInterface string      `json:"current_interface,omitempty"` // "" = genel
+	Servers          []DNSServer `json:"servers,omitempty"`
+	FallbackServers  []string    `json:"fallback_servers,omitempty"`
+	SearchDomains    []string    `json:"search_domains,omitempty"`
+	RoutingDomains   []string    `json:"routing_domains,omitempty"` // yalnızca yönlendirme alanları
+	DNSSEC           string      `json:"dnssec,omitempty"`          // yes | no | allow-downgrade
+	DNSOverTLS       string      `json:"dns_over_tls,omitempty"`    // yes | no | opportunistic
+	Options          []string    `json:"options,omitempty"`         // resolv.conf "options"
+}
+
+// DNSServer, tanımlı bir DNS sunucusudur; Interface "" = genel.
+type DNSServer struct {
+	Address   string `json:"address"`
+	Interface string `json:"interface,omitempty"`
+}
+
 // TimeSource, bir NTP kaynağıdır.
 type TimeSource struct {
 	Name     string   `json:"name"`

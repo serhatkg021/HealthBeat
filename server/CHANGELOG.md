@@ -99,7 +99,7 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - **Protokol 4: sistem sağlığı ve performans** (agent'ın yeni sürümüyle gelir; eski agent'lar olduğu gibi çalışır). Server
   protokol 4 raporlarını kabul eder ve saklar: CPU ve bellek ayrıntısı, kaynak baskısı (PSI), disk ve ağ G/Ç'si, TCP, swap
   zaman serisi olarak (metrik satırında); sıcaklık, RAID, kapasite sınırları, en çok kaynak kullanan süreçler, bekleyen
-  güncellemeler, saat senkronu ve OOM sayacı son durum olarak; systemd servisleri ayrı listede; container'ların
+  güncellemeler, saat senkronu, DNS yapılandırması ve OOM sayacı son durum olarak; systemd servisleri ayrı listede; container'ların
   healthcheck sonucu, çıkış kodu ve OOM bilgisi. Değerler ölçüldüğü gibi saklanır, yuvarlama panelde yapılır. Bozuk bir
   bölüm yalnızca kendisini düşürür; CPU, RAM ve disk metriği kaybolmaz.
 - **Yeni sayısal alert'ler:** disk gecikmesi (disk başına, ms), sıcaklık (sensör başına, °C), servis yeniden başlatma
@@ -133,6 +133,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   senkronu ayrıntısı (kaynaklarıyla), en çok kaynak kullanan süreçler ve yazılım RAID. **Genel:** bozuk RAID, salt okunur
   mount ve son 24 saatteki OOM için uyarı şeridi; disk kartında fiziksel disk başına son G/Ç. **Özet**'in alert türü
   süzgecinde yeni türler üç başlık altında (Kaynak, Servis ve container, Sistem durumu).
+- Panel: Envanter'in üst sırası **Makine ve işletim sistemi** ile **Ağ** oldu; Ağ kartında hostname ve IP adreslerinin
+  altında **DNS**: çözümleyici, kullanılan sunucu, arayüz başına sunucular, yedek sunucular, alan adları (yalnızca
+  yönlendirme olanlar ayrı), DNSSEC ve DNS-over-TLS ayarı ya da `resolv.conf` seçenekleri. Yalnızca bilgidir, alert üretmez.
 
 ### Değişti
 - Panel: sunucu Ayarlar'ındaki Kimlik bilgisi kartı ve yenileme penceresi, yeni değeri sunucuda veren

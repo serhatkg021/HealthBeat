@@ -181,6 +181,19 @@ func FromCapacity(c collector.CapacityStats) *Capacity {
 		ConntrackMax: c.ConntrackMax, Tasks: c.Tasks, PIDMax: c.PIDMax}
 }
 
+func FromDNS(d *collector.DNSInfo) *DNS {
+	if d == nil {
+		return nil
+	}
+	out := &DNS{Resolver: d.Resolver, Mode: d.Mode, CurrentServer: d.CurrentServer, CurrentInterface: d.CurrentInterface,
+		FallbackServers: d.FallbackServers, SearchDomains: d.SearchDomains, RoutingDomains: d.RoutingDomains,
+		DNSSEC: d.DNSSEC, DNSOverTLS: d.DNSOverTLS, Options: d.Options}
+	for _, s := range d.Servers {
+		out.Servers = append(out.Servers, DNSServer{Address: s.Address, Interface: s.Interface})
+	}
+	return out
+}
+
 func FromTimeSync(t *collector.TimeSyncInfo) *TimeSync {
 	if t == nil {
 		return nil

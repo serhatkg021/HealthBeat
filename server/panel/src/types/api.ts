@@ -320,6 +320,33 @@ export interface SystemState {
   processes?: Processes
   updates?: PendingUpdates
   time_sync?: TimeSync
+  dns?: DNSConfig
+}
+
+// Makinenin DNS yapılandırması (yalnızca bilgi; agent ad çözme denemesi yapmaz).
+export interface DNSConfig {
+  resolver: 'resolved' | 'resolv.conf'
+  // resolved'ın resolv.conf'u yönetme biçimi.
+  mode?: 'stub' | 'uplink' | 'static'
+  // resolved'ın o an sorduğu sunucu ve arayüzü (arayüz yoksa genel).
+  current_server?: string
+  current_interface?: string
+  servers?: DNSServer[]
+  // Hiçbir sunucu tanımlı değilken resolved'ın kullandıkları.
+  fallback_servers?: string[]
+  search_domains?: string[]
+  // Yalnızca yönlendirme alanları: kısa adlara eklenmez, o alanın adları ilgili arayüzün sunucusuna sorulur.
+  routing_domains?: string[]
+  dnssec?: 'yes' | 'no' | 'allow-downgrade'
+  dns_over_tls?: 'yes' | 'no' | 'opportunistic'
+  // resolv.conf "options" satırları.
+  options?: string[]
+}
+
+// Address IP'dir; gerekirse ":port" ve DNS-over-TLS için "#sunucu-adı" taşır. interface yoksa genel sunucu.
+export interface DNSServer {
+  address: string
+  interface?: string
 }
 
 // max/crit donanımın bildirdiği sınırlardır.

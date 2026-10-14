@@ -14,7 +14,7 @@ import (
 // v4Keys, protokol 4'ün eklediği JSON alan adlarıdır (üst düzey ve iç içe).
 var v4Keys = []string{
 	"cpu_detail", "memory_detail", "pressure", "disk_io", "net_io", "tcp", "temperatures", "raid", "capacity",
-	"processes", "updates", "services", "time_sync", "read_only", "health", "health_failing_streak", "exit_code", "oom_killed",
+	"processes", "updates", "services", "time_sync", "dns", "read_only", "health", "health_failing_streak", "exit_code", "oom_killed",
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -45,13 +45,15 @@ func withV4(p *MetricsPayload) {
 	p.Services = &Services{Items: []Service{{Name: "postgresql.service", Active: "failed", Sub: "failed", Restarts: ptr(3)}}}
 	p.TimeSync = &TimeSync{Enabled: ptr(true), Synchronized: ptr(true), Daemon: "timesyncd", OffsetMs: ptr(1.841),
 		Sources: []TimeSource{{Name: "185.125.190.57", State: "selected", Reach: ptr(255)}}}
+	p.DNS = &DNS{Resolver: "resolved", Mode: "stub", CurrentServer: "192.168.1.1", CurrentInterface: "enp4s0",
+		Servers: []DNSServer{{Address: "192.168.1.1", Interface: "enp4s0"}}, RoutingDomains: []string{"lab.local"}, DNSSEC: "no", DNSOverTLS: "no"}
 }
 
 // hasV4, çekirdek dışı protokol 4 alanlarından herhangi biri dolu mu.
 func hasV4(p MetricsPayload) bool {
 	if p.CPUDetail != nil || p.MemoryDetail != nil || p.Pressure != nil || p.DiskIO != nil || p.NetIO != nil || p.TCP != nil ||
 		p.Temperatures != nil || p.RAID != nil || p.Capacity != nil || p.Processes != nil || p.Updates != nil ||
-		p.Services != nil || p.TimeSync != nil {
+		p.Services != nil || p.TimeSync != nil || p.DNS != nil {
 		return true
 	}
 	for _, d := range p.Disk {
@@ -104,6 +106,7 @@ func TestV4PayloadShape(t *testing.T) {
 		`"services":{"full":false,"items":[{"name":"postgresql.service","active":"failed","sub":"failed","restarts":3}]}`,
 		`"read_only":true`, `"health":"unhealthy","health_failing_streak":3,"exit_code":137,"oom_killed":true`,
 		`"rx_drops":12`, `"sources":[{"name":"185.125.190.57","state":"selected","reach":255}]`,
+		`"dns":{"resolver":"resolved","mode":"stub","current_server":"192.168.1.1","current_interface":"enp4s0","servers":[{"address":"192.168.1.1","interface":"enp4s0"}]`,
 	} {
 		if !strings.Contains(string(b), want) {
 			t.Errorf("missing %s in %s", want, b)
@@ -166,5 +169,17 @@ func TestInventoryConverters(t *testing.T) {
 	p := FromProcesses(collector.ProcessSummary{Total: 3, TopRAM: []collector.ProcessGroup{{Name: "java", Count: 1, RSSMB: 10}}})
 	if p.TopCPU != nil || len(p.TopRAM) != 1 || p.Total != 3 {
 		t.Errorf("processes = %+v; no CPU ranking yet must stay omitted", p)
+	}
+}
+
+func TestFromDNS(t *testing.T) {
+	if FromDNS(nil) != nil {
+		t.Fatal("unknown DNS must stay nil")
+	}
+	got := FromDNS(&collector.DNSInfo{Resolver: "resolv.conf", Servers: []collector.DNSServer{{Address: "10.0.0.2"}},
+		SearchDomains: []string{"sirket.local"}, Options: []string{"rotate"}})
+	want := &DNS{Resolver: "resolv.conf", Servers: []DNSServer{{Address: "10.0.0.2"}}, SearchDomains: []string{"sirket.local"}, Options: []string{"rotate"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("FromDNS = %+v, want %+v", got, want)
 	}
 }

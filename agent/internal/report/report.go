@@ -28,6 +28,9 @@ const (
 	// timeSyncEvery: saat senkronunun ayrıntısı 5 dakikada bir (birkaç komut; NTP sorgu aralığı zaten dakikalar).
 	timeSyncEvery   = 5 * time.Minute
 	timeSyncTimeout = 10 * time.Second
+	// dnsEvery: DNS yapılandırması saat senkronuyla aynı sıklıkta (birkaç busctl çağrısı; nadiren değişir).
+	dnsEvery   = 5 * time.Minute
+	dnsTimeout = 10 * time.Second
 	// FirstReportWait, açılıştaki ilk raporun yavaş kaynakların ilk sonucunu en çok ne kadar beklediğidir.
 	FirstReportWait = 3 * time.Second
 )
@@ -45,6 +48,7 @@ type Builder struct {
 	processes  *collector.Background[collector.ProcessSummary]
 	updates    *collector.Background[*collector.UpdatesInfo]
 	timeSync   *collector.Background[*collector.TimeSyncInfo]
+	dns        *collector.Background[*collector.DNSInfo]
 }
 
 // New, toplayıcıları kurar; interval, yavaş kaynakların her rapor aralığında toplananlarının (Docker) aralığıdır.
@@ -66,6 +70,7 @@ func New(diskMounts []string, interval func() time.Duration) *Builder {
 			collector.NewUpdatesCollector().Collect),
 		timeSync: collector.NewBackground("time sync", every(timeSyncEvery), timeSyncTimeout,
 			collector.NewTimeSyncCollector().Collect),
+		dns: collector.NewBackground("dns", every(dnsEvery), dnsTimeout, collector.NewDNSCollector().Collect),
 	}
 }
 
@@ -78,6 +83,7 @@ func (b *Builder) Start(ctx context.Context) {
 	b.processes.Start(ctx)
 	b.updates.Start(ctx)
 	b.timeSync.Start(ctx)
+	b.dns.Start(ctx)
 	b.host.Start(ctx)
 }
 
@@ -86,7 +92,7 @@ func (b *Builder) WaitReady(ctx context.Context, d time.Duration) {
 	deadline := time.Now().Add(d)
 	for _, wait := range []func(context.Context, time.Duration){
 		b.docker.WaitReady, b.services.WaitReady, b.processes.WaitReady, b.updates.WaitReady, b.timeSync.WaitReady,
-		b.host.WaitReady,
+		b.dns.WaitReady, b.host.WaitReady,
 	} {
 		left := time.Until(deadline)
 		if left <= 0 {
@@ -123,6 +129,7 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 	}
 	updates, _ := b.updates.Latest()
 	timeSync, _ := b.timeSync.Latest()
+	dns, _ := b.dns.Latest()
 	// Sıcaklık yalnızca fiziksel makinede: sanal makinelerin bildirdiği (acpitz gibi) sensörler sahte değerdir.
 	var temperatures []pusher.Temperature
 	if v := hostInfo.Virtualization; v == nil || (v.Kind != "vm" && v.Kind != "container") {
@@ -152,5 +159,6 @@ func (b *Builder) Build(ctx context.Context) pusher.MetricsPayload {
 		Processes:    processes,
 		Updates:      pusher.FromUpdates(updates),
 		TimeSync:     pusher.FromTimeSync(timeSync),
+		DNS:          pusher.FromDNS(dns),
 	}
 }

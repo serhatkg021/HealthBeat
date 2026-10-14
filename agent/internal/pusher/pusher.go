@@ -86,6 +86,7 @@ type MetricsPayload struct {
 	Updates      *Updates      `json:"updates,omitempty"`
 	Services     *Services     `json:"services,omitempty"`
 	TimeSync     *TimeSync     `json:"time_sync,omitempty"`
+	DNS          *DNS          `json:"dns,omitempty"`
 }
 
 // Core, yalnızca her server sürümünün kabul ettiği çekirdek alanları (CPU, RAM, disk, Docker)

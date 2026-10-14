@@ -160,7 +160,7 @@ func TestRecordStoresProtocol4Report(t *testing.T) {
 
 	st, err := e.hosts.SystemState(ctx, e.host)
 	if err != nil || st == nil || *st.OOMKills != 2 || st.OOMLastIncreaseAt != nil || st.Updates.Security != 3 ||
-		st.TimeSync == nil || *st.TimeSync.OffsetMs != 2.2285 || len(st.Temperatures) != 2 {
+		st.TimeSync == nil || *st.TimeSync.OffsetMs != 2.2285 || len(st.Temperatures) != 2 || st.DNS == nil || st.DNS.Mode != "stub" {
 		t.Fatalf("system state = %+v, %v", st, err)
 	}
 

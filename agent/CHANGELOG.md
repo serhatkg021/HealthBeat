@@ -42,6 +42,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
   - Saat senkronunun ayrıntısı (`time_sync`, 5 dakikada bir): hangi daemon (systemd-timesyncd, chrony, ntpd), NTP
     sunucusu, stratum, saat farkı, gecikme, jitter, kök mesafesi, son senkron zamanı, leap durumu ve kaynakların durumu
     (seçili, aday, yanlış zaman veriyor, ulaşılamıyor, kullanılamaz). timesyncd ayrıntısı systemd 240+ gerektirir.
+  - DNS yapılandırması (`dns`, 5 dakikada bir; yalnızca bilgi, ad çözme denemesi yok): systemd-resolved mi doğrudan
+    `resolv.conf` mu kullanıldığı, arayüz başına ve genel DNS sunucuları, o an kullanılan sunucu, yedek sunucular, arama
+    ve yalnızca yönlendirme alanları, DNSSEC ve DNS-over-TLS ayarı; resolved'sız makinede `resolv.conf` seçenekleri.
 - `--print-report`: agent'ın göndereceği tam raporu (protokol 4 alanları dahil) JSON olarak yazdırır; oranlar için iki
   ölçüm alır (~4 sn).
 - **Token `agent.json`'da şifreli:** kurulum API token'ı (pull'da secret'ı) bu makinenin kimliğine bağlı şifreli yazar

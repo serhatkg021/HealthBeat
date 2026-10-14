@@ -369,6 +369,7 @@ type MetricsIngestRequest struct {
 	Updates      *Updates      `json:"updates,omitempty"`
 	Services     *Services     `json:"services,omitempty"`
 	TimeSync     *TimeSync     `json:"time_sync,omitempty"`
+	DNS          *DNS          `json:"dns,omitempty"`
 }
 
 // Hardware, isteğin donanım bölümünü saklanacak (temizlenmiş) hâliyle döndürür.
