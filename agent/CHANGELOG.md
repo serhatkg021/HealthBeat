@@ -9,6 +9,11 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Düzeltildi
+- Paket yükseltmesi (deb/rpm) Türkçe locale'de (`tr_TR.UTF-8`) `agent.json`'daki düz token'ı algılamıyor ve
+  `healthbeat-agent-setup encrypt` uyarısını basmıyordu (`[a-z]` aralığı bu locale'de `i`'yi kapsamaz). Kurulum betiği
+  (`install.sh`) etkilenmiyordu.
+
 ## [1.1.0] - 2026-10-14
 
 Sistem sağlığı ve performans verilerinin (protokol 4) geldiği sürüm. Yeni verileri panelde görmek ve alert almak için

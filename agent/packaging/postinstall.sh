@@ -1,6 +1,9 @@
 #!/bin/sh
 # Dosyalar açıldıktan sonra çalışır (deb: postinst, rpm: %post).
 set -e
+# Aşağıdaki karakter sınıfı regex'leri her locale'de düz ASCII anlamına gelmeli (tr_TR'de
+# GNU sed, [a-z] içinde 'i'yi reddeder: düz token uyarısı hiç basılmazdı).
+export LC_ALL=C
 
 # Eski bir tarball/install.sh kurulumundan kalanlar paketle çakışır: /etc/systemd/system'daki unit,
 # paketin unit'ini gölgeler ve /usr/local/bin'deki eski binary'yi çalıştırmaya devam eder.
