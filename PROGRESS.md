@@ -4,7 +4,10 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-15 — Server + panel **2.2.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
+**Son güncelleme:** 2026-10-19 — Agent paketinin yükseltme betiği Türkçe locale'de düz token uyarısını basmıyordu
+(`postinstall.sh`'a `LC_ALL=C`); `tr_TR.UTF-8` kurulu bir Ubuntu 24.04 container'ında elle doğrulandı, CI'da Türkçe
+locale sınanmıyor.
+Önceki: 2026-10-15 — Server + panel **2.2.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
 "Güncellemeden önce" notları): kurulum paketi, kalıcı veriler tek dizinde, `init`; migration yok, Compose ≥ v2.18.
 Birleşince `main`'den `server/v2.2.0` etiketi atılacak; `healthbeat-init` GHCR paketi ilk yayında herkese açılmalı.
 Önceki: 2026-10-15 — **Server kurulum paketi**: her server sürümünde Release'e
