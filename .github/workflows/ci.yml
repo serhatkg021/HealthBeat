@@ -126,7 +126,7 @@ jobs:
           HB_VOLUMES_DIR= docker compose --env-file /dev/null config --format json \
             | jq -e '[.services[].volumes[]?.type] | unique == ["volume"]'
           HB_VOLUMES_DIR=./volumes docker compose --env-file /dev/null config --format json \
-            | jq -e '[.services[].volumes[]? | select(.type == "bind" and (.source | endswith("/volumes/pgdata") or endswith("/volumes/certs") or endswith("/volumes/logs")))] | length == 6'
+            | jq -e '[.services[].volumes[]? | select(.type == "bind" and (.source | endswith("/volumes/pgdata") or endswith("/volumes/certs") or endswith("/volumes/logs") or endswith("/volumes/agent-packages")))] | length == 8'
       # Release'teki paketin aynısı: kaynak kodsuz bir dizinde .env üretilip compose yapılandırması çözülebilmeli.
       - name: kurulum paketi (üret, aç, .env, compose config)
         run: |

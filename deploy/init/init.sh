@@ -7,6 +7,7 @@
 #           denetlenir; kullanılamıyorsa açık bir hatayla durulur, server başlamaz. Sahiplik/izin her seferinde düzeltilir:
 #           elle kopyalanan (root'a ait, 600) dosyaları server okuyamazdı.
 #   /logs   server'ın kalıcı log dizini (LOG_FILE): sahibi server kullanıcısı yapılır.
+#   /agent-packages  panelden yüklenen agent paketleri (AGENT_PACKAGES_DIR): sahibi server kullanıcısı yapılır.
 #
 # PostgreSQL'in veri dizinine dokunulmaz: postgres imajı onu kendisi oluşturur ve sahipliğini ayarlar; db bu adımı
 # beklemez (sertifika sorunu veritabanını durdurmasın).
@@ -15,11 +16,12 @@
 #   HB_TLS_HOSTS  kendinden imzalı sertifikanın geçerli olacağı virgülle ayrılmış DNS adları / IP'ler
 #                 (varsayılan: localhost,server). Agent'lar server'a hangi adresle bağlanıyorsa onu ekle.
 #   HB_TLS_UID    dosyaların sahibi olacak kullanıcı (server imajındaki kullanıcı: 10001).
-#   HB_CERTS_DIR, HB_LOGS_DIR  dizinler (varsayılan /certs, /logs; testler için).
+#   HB_CERTS_DIR, HB_LOGS_DIR, HB_AGENT_PACKAGES_DIR  dizinler (varsayılan /certs, /logs, /agent-packages; testler için).
 set -eu
 
 certs="${HB_CERTS_DIR:-/certs}"
 logs="${HB_LOGS_DIR:-/logs}"
+agent_packages="${HB_AGENT_PACKAGES_DIR:-/agent-packages}"
 hosts="${HB_TLS_HOSTS:-localhost,server}"
 uid="${HB_TLS_UID:-10001}"
 
@@ -98,4 +100,12 @@ if [ -d "$logs" ]; then
   chown -R "$uid:$uid" "$logs"
   chmod 750 "$logs"
   say "log dizini hazır: $logs"
+fi
+
+# ---------------------------------------------------------------- agent paketleri
+
+if [ -d "$agent_packages" ]; then
+  chown -R "$uid:$uid" "$agent_packages"
+  chmod 750 "$agent_packages"
+  say "agent paket dizini hazır: $agent_packages"
 fi

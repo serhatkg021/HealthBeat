@@ -39,7 +39,7 @@ func TestFieldsMatchStoreColumns(t *testing.T) {
 	}
 	for _, f := range Fields {
 		if _, isInt := intRanges[f]; !isInt && !slices.Contains([]Field{FieldLatestAgentVersion, FieldMinSupportedAgentVersion,
-			FieldPanelBaseURL, FieldLogLevel, FieldTimezone}, f) {
+			FieldPanelBaseURL, FieldLogLevel, FieldTimezone, FieldAgentDownloadEnabled}, f) {
 			t.Errorf("%s has no validation", f)
 		}
 	}
@@ -311,5 +311,29 @@ func TestTimezoneSetting(t *testing.T) {
 	}
 	if got := s.Location().String(); got != "Europe/Berlin" {
 		t.Errorf("after reset with TZ set: Location = %s, want Europe/Berlin", got)
+	}
+}
+
+func TestAgentDownloadEnabledToggles(t *testing.T) {
+	ctx := context.Background()
+	s, st, admin := newService(t)
+	if !s.Current().AgentDownloadEnabled {
+		t.Fatal("agent downloads are off on a fresh install, want on")
+	}
+	changes, err := s.Update(ctx, &admin, Patch{AgentDownloadEnabled: ptr(false)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(changes) != fmt.Sprint(Changes{FieldAgentDownloadEnabled: {Old: true, New: false}}) {
+		t.Fatalf("changes = %v", changes)
+	}
+	if db, _ := st.Get(ctx); db.AgentDownloadEnabled || s.Current().AgentDownloadEnabled {
+		t.Fatal("agent downloads still on after turning them off")
+	}
+	if got := s.Changed(); !slices.Equal(got, []Field{FieldAgentDownloadEnabled}) {
+		t.Fatalf("changed = %v", got)
+	}
+	if _, err := s.Reset(ctx, &admin, []Field{FieldAgentDownloadEnabled}); err != nil || !s.Current().AgentDownloadEnabled {
+		t.Fatalf("reset: err=%v enabled=%v, want on", err, s.Current().AgentDownloadEnabled)
 	}
 }

@@ -41,6 +41,9 @@ type AppSettings struct {
 	// zamanlar buna göredir. "" = server sürecinin TZ'si, o da yoksa UTC (bkz. internal/tz).
 	Timezone string
 
+	// AgentDownloadEnabled, yüklenen agent paketlerinin indirme ucundan sunulup sunulmadığıdır.
+	AgentDownloadEnabled bool
+
 	UpdatedAt time.Time
 	UpdatedBy *uuid.UUID
 }
