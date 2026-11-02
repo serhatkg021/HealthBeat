@@ -49,8 +49,9 @@ Bildirim → Kanallar'da e-postayı, Ayarlar'da panel adresini ve saat dilimini 
 
 ## 4. Kendi sertifikan
 
-Veritabanı, sertifika ve loglar `volumes/` altındadır (`pgdata/`, `certs/`, `logs/`). Kendi (CA imzalı) sertifikanı
-`cert.pem` (tam zincir, önce sunucu sertifikası) ve `key.pem` (şifresiz) olarak koy; tercihen ilk `up`'tan önce:
+Veritabanı, sertifika, loglar ve agent paketleri `volumes/` altındadır (`pgdata/`, `certs/`, `logs/`, `agent-packages/`).
+Kendi (CA imzalı) sertifikanı `cert.pem` (tam zincir, önce sunucu sertifikası) ve `key.pem` (şifresiz) olarak koy; tercihen
+ilk `up`'tan önce:
 
 ```sh
 sudo mkdir -p volumes/certs

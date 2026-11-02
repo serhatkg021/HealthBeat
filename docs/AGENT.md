@@ -15,6 +15,8 @@ sonradan değiştirilemez — bkz. bölüm 6.e):
 > sistemine göre kurulum, güncelleme ve geri alma: **[docs/DISTRIBUTION.md](DISTRIBUTION.md)**. Bu belgenin `install.sh`
 > bölümleri **tarball yolunu** ve yapılandırma ayrıntılarını anlatır; paketle kurulu bir makinede
 > `install.sh install/upgrade/rollback/uninstall` bilerek reddedilir (yalnızca `configure` çalışır).
+> Paketler panelden server'a yüklendiyse makine onları server'ın API adresinden indirebilir:
+> [DISTRIBUTION.md bölüm 4.5](DISTRIBUTION.md#45-paketi-serverdan-indirmek).
 
 Yalnızca **Linux** desteklenir (metrikler `/proc`, `/sys` ve `statfs` üzerinden okunur).
 
