@@ -13,6 +13,9 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 - Paket yükseltmesi (deb/rpm) Türkçe locale'de (`tr_TR.UTF-8`) `agent.json`'daki düz token'ı algılamıyor ve
   `healthbeat-agent-setup encrypt` uyarısını basmıyordu (`[a-z]` aralığı bu locale'de `i`'yi kapsamaz). Kurulum betiği
   (`install.sh`) etkilenmiyordu.
+- Agent Go 1.27.3 ile derleniyor: Go 1.27.2 standart kütüphanesindeki `crypto/x509` güvenlik açığı (GO-2026-6809,
+  ele geçirilmiş ara sertifikalara güvenilmesi) kapandı; bağlantı denetimi (`-check-connection`) ve server'a TLS
+  bağlantısı bu kodu kullanıyor.
 
 ## [1.1.0] - 2026-10-14
 

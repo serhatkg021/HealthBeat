@@ -43,15 +43,13 @@ jobs:
         run: |
           go vet ./...
           go test ./... -race
-      # Araç sürümleri ve geçici GOTOOLCHAIN ayarı server-lint işindekiyle aynı (gerekçesi orada).
+      # Araç sürümleri server-lint işindekiyle aynı (gerekçesi orada).
       - name: staticcheck
         working-directory: agent
-        env:
-          GOTOOLCHAIN: go1.27.1
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
       - name: govulncheck
         working-directory: agent
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
       - name: install.sh testleri
         run: agent/deploy/install_test.sh
       - name: nfpm kur
@@ -100,17 +98,13 @@ jobs:
           go-version-file: server/go.mod
           cache-dependency-path: server/go.sum
       # Araç sürümleri sabit: @latest bir gün kendiliğinden güncellenip CI'ı kod değişmeden kırabilir.
-      # Geçici: staticcheck v0.8.1, Go 1.27.2 derleyicisinin dışa aktarma biçimini okuyamıyor; lint Go 1.27.1 ile çalışır
-      # (derleme, testler ve govulncheck go.mod'daki sürümle). staticcheck'in Go 1.27.2'yi tanıyan sürümü çıkınca env kaldırılır.
       - name: staticcheck
         working-directory: server
-        env:
-          GOTOOLCHAIN: go1.27.1
-        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./...
+        run: go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
       # Yalnızca kodun gerçekten çağırdığı açıklar başarısız sayılır; kullanılmayan paketlerdeki bildirimler yalnızca listelenir.
       - name: govulncheck
         working-directory: server
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 
   deploy:
     name: dağıtım (init.sh, docker-compose.yml)
