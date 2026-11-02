@@ -4,7 +4,6 @@ import { agentPackagesApi, settingsApi } from '../api/endpoints'
 import { useAuth } from '../auth/AuthContext'
 import { CommandLine } from '../components/CommandLine'
 import { EmptyState } from '../components/EmptyState'
-import { FieldLabel } from '../components/FieldLabel'
 import { InfoTip } from '../components/InfoTip'
 import { Modal } from '../components/Modal'
 import { RowMenu } from '../components/RowMenu'
@@ -168,15 +167,6 @@ export function AgentPackages({ settings, onSettingsSaved }: { settings: Setting
       )}
 
       <div className={`agent-packages-body${active ? '' : ' is-off'}`}>
-        <div className="form-row">
-          <FieldLabel
-            htmlFor="agent-download-pattern"
-            label="İndirme adresi"
-            hint="Agent’ların server’a bağlandığı adres (API portu). Agent’lar farklı bir alan adı ya da portla bağlanıyorsa adresin başını ona göre değiştirin."
-          />
-          <input id="agent-download-pattern" className="mono" readOnly value={`${base}${path}<sürüm>/<dosya>`} />
-        </div>
-
         <div className="toolbar">
           <div className="toolbar-group">
             <input ref={fileInput} type="file" multiple hidden accept=".deb,.rpm,.gz" onChange={onFiles} />
