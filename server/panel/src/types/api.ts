@@ -789,6 +789,8 @@ export interface SettingsValues {
   log_file_max_total_mb: number
   // Kurulumun saat dilimi (IANA adı); "" = server'ın saat dilimi.
   timezone: string
+  // Yüklenen agent paketleri indirme ucundan sunulsun mu.
+  agent_download_enabled: boolean
 }
 
 export type SettingsField = keyof SettingsValues
@@ -973,4 +975,41 @@ export interface LogPage {
   entries: LogEntry[]
   next_before: number
   scanned: number
+}
+
+// Server'a yüklenmiş bir agent paket dosyası (GET /api/v1/agent-packages).
+export type AgentPackageFormat = 'deb' | 'rpm' | 'tar.gz'
+
+export interface AgentPackage {
+  id: string
+  version: string
+  filename: string
+  arch: 'amd64' | 'arm64'
+  format: AgentPackageFormat
+  size_bytes: number
+  sha256: string
+  uploaded_by_email?: string
+  uploaded_at: string
+  download_count: number
+  last_downloaded_at?: string
+}
+
+export interface AgentPackageList {
+  // Paket dizini kullanılabilir mi (AGENT_PACKAGES_DIR); değilse yükleme ve indirme kapalıdır.
+  storage_available: boolean
+  // İndirme ucunun kökü: <download_path><sürüm>/<dosya>.
+  download_path: string
+  packages: AgentPackage[]
+}
+
+export interface AgentPackageUploadResult {
+  filename: string
+  package?: AgentPackage
+  error?: string
+}
+
+export interface AgentPackageDownload {
+  client_ip: string
+  user_agent: string
+  downloaded_at: string
 }

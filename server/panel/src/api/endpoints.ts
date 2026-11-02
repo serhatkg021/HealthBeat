@@ -1,5 +1,8 @@
-import { apiDownload, apiRequest, apiRequestPage } from './client'
+import { apiDownload, apiRequest, apiRequestPage, apiUpload } from './client'
 import type {
+  AgentPackageDownload,
+  AgentPackageList,
+  AgentPackageUploadResult,
   Alert,
   ChannelInfo,
   ChannelOption,
@@ -336,6 +339,19 @@ export const usersApi = {
       method: 'POST',
       body: { organization_id: organizationId },
     }),
+}
+
+// Agent paketleri (agent.package.manage; varsayılan olarak yalnızca süper admin).
+export const agentPackagesApi = {
+  list: () => apiRequest<AgentPackageList>('/api/v1/agent-packages'),
+  upload: (files: File[]) => {
+    const form = new FormData()
+    for (const f of files) form.append('files', f, f.name)
+    return apiUpload<{ results: AgentPackageUploadResult[] }>('/api/v1/agent-packages', form)
+  },
+  remove: (id: string) => apiRequest<void>(`/api/v1/agent-packages/${id}`, { method: 'DELETE' }),
+  downloads: (id: string, limit = 50) =>
+    apiRequest<{ downloads: AgentPackageDownload[] }>(`/api/v1/agent-packages/${id}/downloads`, { query: { limit: String(limit) } }),
 }
 
 // Sistem ayarları (settings.view okur, settings.manage değiştirir).

@@ -9,6 +9,7 @@ const LIMITERS: Record<string, { title: string; description: string }> = {
   ingest_rate: { title: 'Agent rapor hızı', description: 'Kimliği doğrulanmış push agent’ların gönderdiği raporlar; sunucu başına.' },
   reset_ips: { title: 'Şifre sıfırlama istekleri (IP)', description: '“Şifremi unuttum” istekleri; kaynak IP başına.' },
   reset_emails: { title: 'Şifre sıfırlama istekleri (e-posta)', description: '“Şifremi unuttum” istekleri; hedef e-posta adresi başına.' },
+  agent_downloads: { title: 'Agent paketi indirmeleri', description: 'Yüklenen agent paketlerinin indirilmesi; kaynak IP başına.' },
 }
 
 // limiterInfo, bir sınırlayıcının başlığı ve açıklamasıdır; panelin tanımadığı bir sınırlayıcı kimliğiyle gösterilir.

@@ -117,7 +117,7 @@ export const SETTINGS_SECTIONS: SectionDef[] = [
 ]
 
 // toDisplay, bir ayarın API değerini formdaki metnine çevirir (süreler seçilen birime).
-export function toDisplay(def: FieldDef, value: string | number): string {
+export function toDisplay(def: FieldDef, value: string | number | boolean): string {
   if (def.kind !== 'number') return String(value)
   const n = Number(value) / (def.scale ?? 1)
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100)
@@ -168,7 +168,7 @@ export function fieldMessage(def: FieldDef | undefined, message: string): string
 }
 
 // defaultText, bir alanın varsayılanını okunur biçimde verir ("varsayılan: 15 dakika", "varsayılan: boş").
-export function defaultText(def: FieldDef, value: string | number): string {
+export function defaultText(def: FieldDef, value: string | number | boolean): string {
   const shown = toDisplay(def, value)
   if (shown === '') return 'varsayılan: boş'
   return `varsayılan: ${shown}${def.unit ? ` ${def.unit}` : ''}`

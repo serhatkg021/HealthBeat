@@ -19,6 +19,7 @@ const CATEGORIES: { value: string; label: string }[] = [
   { value: 'contact.', label: 'Kişi' }, // sistem kişileri ve organizasyonların iletişim kişileri
   { value: 'settings.', label: 'Ayarlar' },
   { value: 'system.', label: 'Sistem araçları' }, // log görüntüleme ve indirme
+  { value: 'agent_package.', label: 'Agent paketleri' },
 ]
 
 const PAGE_SIZE = 50

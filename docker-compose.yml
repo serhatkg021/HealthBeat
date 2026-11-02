@@ -159,6 +159,8 @@ services:
       # Panel ile API'yi ayrı alan adlarında sunacaksan API_PROXY_URL'i boşaltıp API_BASE_URL ver.
       API_BASE_URL: ${API_BASE_URL:-}
       API_PROXY_URL: ${API_PROXY_URL-https://server:8443}
+      # Agent'ların bağlandığı API portu; panel agent paketlerinin indirme adresini bununla gösterir.
+      HB_API_PORT: ${HB_API_PORT:-8443}
     volumes:
       # Server'la AYNI sertifika: panel TLS'i kendisi sonlandırır, dosyaları yalnızca okur.
       - ${HB_VOLUMES_DIR:+${HB_VOLUMES_DIR}/}certs:/certs:ro

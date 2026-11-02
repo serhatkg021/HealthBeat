@@ -10,6 +10,7 @@ import { SearchSelect } from '../components/SearchSelect'
 import { refreshMeta } from '../components/useAgentPolicy'
 import { timezoneOptions } from './timezones'
 import { useTab } from '../components/useTab'
+import { AgentPackages } from './AgentPackages'
 import type { SettingsField, SettingsResponse } from '../types/api'
 import { SETTINGS_SECTIONS, buildPatch, defaultText, fieldMessage, toDisplay, type SectionDef } from './settingsForm'
 import { formatDateTime } from './datetime'
@@ -68,6 +69,7 @@ export function SettingsPage() {
             SETTINGS_SECTIONS.map((s) => (
               <div key={s.id} id={`settings-${s.id}`} hidden={section !== s.id} className="settings-panel">
                 <GeneralSection section={s} data={settings} canEdit={canEdit} onSaved={setSettings} />
+                {s.id === 'agent' && can('agent.package.manage') && <AgentPackages settings={settings} onSettingsSaved={setSettings} />}
               </div>
             ))}
         </div>

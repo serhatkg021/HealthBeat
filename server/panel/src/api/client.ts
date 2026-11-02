@@ -201,6 +201,30 @@ export async function apiDownload(path: string, query: Record<string, string | u
   URL.revokeObjectURL(href)
 }
 
+// apiUpload, dosyaları multipart/form-data olarak gönderir (ör. agent paketleri). Content-Type'ı tarayıcı sınır
+// (boundary) ile birlikte kendisi koyar.
+export async function apiUpload<T>(path: string, form: FormData, retry = true): Promise<T> {
+  const token = getAccessToken()
+  const resp = await fetch(new URL(apiUrl(path), window.location.origin).href, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: form,
+  })
+  if (resp.status === 401 && retry && (await refreshAccessToken())) return apiUpload(path, form, false)
+  const data: unknown = (resp.headers.get('content-type') ?? '').includes('application/json') ? await resp.json() : undefined
+  if (!resp.ok) {
+    const message =
+      data && typeof data === 'object' && 'error' in data
+        ? String((data as { error: unknown }).error)
+        : resp.status === 413
+          ? 'yükleme çok büyük'
+          : resp.statusText
+    const requestId = (data as { request_id?: string } | undefined)?.request_id ?? resp.headers.get('X-Request-ID') ?? undefined
+    throw new ApiError(resp.status, message, undefined, requestId)
+  }
+  return data as T
+}
+
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { data } = await rawRequest(path, opts, true)
   return data as T
