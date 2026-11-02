@@ -1,6 +1,7 @@
 declare global {
   interface Window {
-    HEALTHBEAT_CONFIG?: { apiBaseUrl?: string }
+    // apiPort: agent'ların bağlandığı API portu (HB_API_PORT); agent paketlerinin indirme adresi için.
+    HEALTHBEAT_CONFIG?: { apiBaseUrl?: string; apiPort?: number }
   }
 }
 

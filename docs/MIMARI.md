@@ -113,6 +113,8 @@ Kurallar:
 - **Bakım pencereleri:** `maintenance.view` (üç rol) ve `maintenance.manage` (süper admin, organizasyon admin). Kullanıcı
   kapsamında en az bir sunucusu ya da organizasyonu olan pencereyi görür; görmediği kapsam sayı olarak yazılır. Düzenlemek,
   bitirmek ve silmek için pencerenin bütün kapsamını yönetebilmelidir.
+- **Agent paketleri:** `agent.package.manage` (süper admin) paket yükler, siler ve indirme günlüğünü okur; indirmeyi
+  açıp kapamak bir ayardır (`settings.manage`). İndirme ucu giriş istemez.
 - Bir sunucu oluşturulurken organizasyon seçimi zorunludur (bkz. bölüm 6).
 
 Uygulama: her istek iki denetimden geçer. **İzin** (ne yapabilir) `role_permissions`'tan gelir (`internal/rbac`; rol başına
@@ -181,6 +183,9 @@ Tam liste `server/internal/httpapi/router.go`'dadır; özet:
 # agent -> server (push)
 POST   /api/v1/metrics                          X-Host-ID + Bearer token
 
+# makine -> server (agent paketi indirme; kimlik doğrulamasız, IP başına hız sınırı, Range)
+GET    /agent/download/{sürüm}/{dosya}
+
 # server -> agent (pull)
 GET    https://<agent>:<port>/<pull_endpoint>   Bearer paylaşılan secret
 
@@ -207,6 +212,7 @@ GET    /api/v1/settings  PATCH /api/v1/settings  POST /api/v1/settings/reset    
 GET    /api/v1/system/queue | /system/queue/items?status=…&kind=…                     (system.queue.view)
 GET    /api/v1/system/cache                                                          (system.cache.view)
 GET    /api/v1/system/logs | /system/logs/entries?day=…&level=…&q=… | /system/logs/download?day=…   (system.logs.view)
+GET    /api/v1/agent-packages | …/:id/downloads   POST /api/v1/agent-packages (multipart: version, arch, file)   DELETE …/:id   (agent.package.manage)
 ```
 
 ### Hata yanıtları

@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"healthbeat-server/internal/agentpkg"
 	"healthbeat-server/internal/alertengine"
 	"healthbeat-server/internal/authsvc"
 	"healthbeat-server/internal/clientip"
@@ -124,7 +125,8 @@ func main() {
 	background.Go("password mails", deps.RunMailOutbox)
 	background.Go("token purge", retention.NewTokenPurger(store.NewRefreshTokens(pool), store.NewPasswordResets(pool)).Run)
 	purger := retention.New(
-		retention.Stores{Metrics: store.NewMetrics(pool), Audit: store.NewAudit(pool), Alerts: store.NewAlerts(pool)},
+		retention.Stores{Metrics: store.NewMetrics(pool), Audit: store.NewAudit(pool), Alerts: store.NewAlerts(pool),
+			AgentPackages: store.NewAgentPackages(pool)},
 		retentionDays(cur),
 	)
 	background.Go("retention", purger.Run)
@@ -154,6 +156,7 @@ func main() {
 
 	deps.SetSystemSources(scheduler, certs)
 	deps.SetLogFiles(logFile)
+	deps.SetAgentPackagesDir(openAgentPackagesDir(cfg))
 
 	srv := httpapi.NewServer(cfg.HTTPAddr, httpapi.WithCORS(deps.Router(), cfg.CORSAllowedOrigins), certs.TLSConfig())
 
@@ -252,6 +255,21 @@ func openLogFile(cfg *config.Config, level slog.Leveler) *logging.FileWriter {
 	logging.Setup(io.MultiWriter(os.Stderr, fw), level, cfg.LogFormat)
 	slog.Info("logging to file", "path", cfg.LogFile)
 	return fw
+}
+
+// openAgentPackagesDir, AGENT_PACKAGES_DIR ayarlıysa panelden yüklenen agent paketlerinin dizinini hazırlar. Dizin
+// kullanılamazsa server yine başlar ve bunu ERROR olarak loglar; paket yükleme ve indirme kapalı kalır.
+func openAgentPackagesDir(cfg *config.Config) *agentpkg.Dir {
+	if cfg.AgentPackagesDir == "" {
+		return nil
+	}
+	dir, err := agentpkg.NewDir(cfg.AgentPackagesDir)
+	if err != nil {
+		slog.Error("agent packages disabled", "dir", cfg.AgentPackagesDir, "err", err)
+		return nil
+	}
+	slog.Info("agent packages", "dir", cfg.AgentPackagesDir)
+	return dir
 }
 
 // settingsTargets, panelden değişen ayarların uygulandığı bileşenlerdir.

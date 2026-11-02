@@ -10,6 +10,16 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Eklendi
+- Agent paketleri: süper admin agent paketlerini (`.deb`, `.rpm`, `.tar.gz`) panelden server'a yükler, makineler onları
+  API adresinden giriş yapmadan indirir: `https://<server>:8443/agent/download/<sürüm>/<dosya>`. Sürüm ve mimari yüklerken
+  seçilir, biçim dosyanın içeriğinden anlaşılır; paket release adıyla sunulur. Her indirme IP adresiyle kaydedilir ve paket
+  başına sayılır; indirme panelden açılıp kapanır. Yeni izin `agent.package.manage` (süper admin), migration `000010`,
+  ortam değişkeni `AGENT_PACKAGES_DIR` ve Docker Compose'da `agent-packages` dizini (`docs/DEPLOYMENT.md` bölüm 2,
+  `docs/DISTRIBUTION.md` bölüm 4.5).
+- Panel: Ayarlar → Agent sürümleri'nde "Agent paketleri" bölümü: yüklemeden önce dosya başına sürüm ve mimari (dosya
+  adından okunabiliyorsa dolu), sürüme göre liste, indirme adresi ve SHA256, son indirmeler, silme.
+
 ### Düzeltildi
 - Server Go 1.27.3 ile derleniyor: Go 1.27.2 standart kütüphanesindeki `crypto/x509` güvenlik açığı (GO-2026-6809,
   ele geçirilmiş ara sertifikalara güvenilmesi) kapandı.

@@ -133,6 +133,35 @@ sudo -E healthbeat-agent-setup --mode push --server-url https://hb.example.com -
 Token `agent.json`'a bu makineye bağlı şifreli yazılır. Panelde kimlik bilgisi yenilenince yalnızca token değiştirilir:
 `sudo healthbeat-agent-setup token` (yeni değeri gizli sorar, servisi yeniden başlatır; `docs/AGENT.md` bölüm 6.c).
 
+### 4.5 Paketi server'dan indirmek
+
+Paketler panelde **Ayarlar → Agent sürümleri → Agent paketleri**'ne yüklendiyse makine onları agent'ların bağlandığı
+API adresinden indirir (`docs/DEPLOYMENT.md` bölüm 2, "Agent paketleri"). Her paketin tam adresi ve SHA256 özeti panelde
+paketin ayrıntısındadır; adres giriş istemez.
+
+```sh
+S=https://hb.example.com:8443/agent/download/X.Y.Z
+
+# Ubuntu / Debian
+curl -fSLO --cacert ca.pem "$S/healthbeat-agent_X.Y.Z_$(dpkg --print-architecture).deb"
+sudo apt install ./healthbeat-agent_X.Y.Z_*.deb
+
+# RHEL ailesi
+curl -fSLO --cacert ca.pem "$S/healthbeat-agent-X.Y.Z-1.$(uname -m).rpm"
+sudo dnf install ./healthbeat-agent-X.Y.Z-1.*.rpm
+
+sudo healthbeat-agent-setup
+```
+
+- `--cacert`: server'ın sertifikası kendinden imzalıysa ya da kurum içi bir CA'dan geliyorsa o sertifika (Docker Compose
+  kurulumunda server'daki `volumes/certs/cert.pem`); sihirbazın CA sorusuna da aynı dosya verilir. Sertifika makinede zaten
+  güvenilirse gerekmez.
+- Önsürümlerde adresteki sürüm `1.2.0-rc.1`, `.deb`/`.rpm` dosya adındaki `1.2.0~rc.1`'dir; adresi panelden kopyalamak en
+  kolayıdır.
+- `404`: paket yüklenmemiş, adres yanlış ya da paket indirme panelden kapatılmış. `429`: aynı IP'den dakikada 30'dan fazla
+  istek; biraz bekleyip yeniden dene (`curl -C -` yarıda kalanı sürdürür).
+- Yükseltmede de aynı indirme, ardından bölüm 5.2'deki komut.
+
 ## 5. Güncelleme (yeni sürüm dağıtımı)
 
 **Zorunlu değildir:** eski agent'lar yeni server'a çalışmaya devam eder (`docs/COMPATIBILITY.md`). Panelde
@@ -145,6 +174,8 @@ Token `agent.json`'a bu makineye bağlı şifreli yazılır. Panelde kimlik bilg
 belirlediğin gruplarla); her sunucudan sonra sayaç düşmeli.
 
 ### 5.2 Komutlar (yeni artifact'ı indirip doğruladıktan sonra)
+
+Paket server'a yüklendiyse makine onu oradan da indirebilir (bölüm 4.5).
 
 | Kurulum türü | Yükseltme | Sürümü doğrula |
 | --- | --- | --- |

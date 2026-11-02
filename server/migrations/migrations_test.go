@@ -975,3 +975,94 @@ func TestSystemNotificationRulesMigrationAndRollback(t *testing.T) {
 		t.Fatalf("upgrading again: applied=%d err=%v, want 000009 re-applied", len(applied), err)
 	}
 }
+
+// 000010: agent paket tabloları, izin (yalnızca super_admin) ve indirme ayarı (varsayılan açık); .down.sql hepsini
+// kaldırır, eski binary yeniden açılır ve tekrar yükseltilebilir.
+func TestAgentPackagesMigrationAndRollback(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.NewEmpty(t)
+	runner := func(fsys fs.FS) *migrate.Runner {
+		t.Helper()
+		r, err := migrate.New(pool, fsys)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	latest, old := runner(upTo(t, "000010")), runner(upTo(t, "000009"))
+	if _, err := latest.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var grants string
+	var enabled bool
+	if err := pool.QueryRow(ctx, `SELECT
+		(SELECT string_agg(role, ',' ORDER BY role) FROM role_permissions WHERE permission_key = 'agent.package.manage'),
+		(SELECT agent_download_enabled FROM app_settings)`).Scan(&grants, &enabled); err != nil {
+		t.Fatal(err)
+	}
+	if grants != "super_admin" || !enabled {
+		t.Fatalf("grants=%q enabled=%v, want super_admin only and downloads on", grants, enabled)
+	}
+
+	// Kısıtlar: geçersiz sürüm, mimari, biçim, SHA256, yol ayırıcılı dosya adı ve boş asıl ad reddedilir; aynı dosya adı
+	// ya da aynı sürüm + mimari + biçim iki kez olmaz.
+	insertAs := func(ver, filename, original, arch, format, sha string) error {
+		_, err := pool.Exec(ctx, `INSERT INTO agent_packages (version, filename, original_filename, arch, format, size_bytes, sha256)
+			VALUES ($1, $2, $3, $4, $5, 10, $6)`, ver, filename, original, arch, format, sha)
+		return err
+	}
+	insert := func(ver, filename, arch, format, sha string) error {
+		return insertAs(ver, filename, "agent.deb", arch, format, sha)
+	}
+	sha := strings.Repeat("0f", 32)
+	if err := insert("1.2.0-rc.1", "healthbeat-agent_1.2.0~rc.1_amd64.deb", "amd64", "deb", sha); err != nil {
+		t.Fatalf("valid package: %v", err)
+	}
+	for name, err := range map[string]error{
+		"duplicate filename": insert("1.2.0-rc.1", "healthbeat-agent_1.2.0~rc.1_amd64.deb", "amd64", "deb", sha),
+		"duplicate variant":  insert("1.2.0-rc.1", "e.deb", "amd64", "deb", sha),
+		"bad version":        insert("1.2", "a.deb", "amd64", "deb", sha),
+		"dash in prerelease": insert("1.2.0-rc-1", "f.deb", "amd64", "deb", sha),
+		"empty original":     insertAs("1.2.0", "g.deb", "", "amd64", "deb", sha),
+		"path in filename":   insert("1.2.0", "../a.deb", "amd64", "deb", sha),
+		"bad arch":           insert("1.2.0", "b.deb", "i386", "deb", sha),
+		"bad format":         insert("1.2.0", "c.zip", "amd64", "zip", sha),
+		"uppercase sha256":   insert("1.2.0", "d.deb", "amd64", "deb", strings.ToUpper(sha)),
+	} {
+		if err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+
+	if err := old.RequireUpToDate(ctx); !errors.Is(err, migrate.ErrDatabaseNewer) {
+		t.Fatalf("old binary on the new schema: err=%v, want ErrDatabaseNewer", err)
+	}
+	down, err := fs.ReadFile(migrations.FS, "000010_agent_packages.down.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, string(down)); err != nil {
+		t.Fatalf("down migration: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `DELETE FROM healthbeat_migrations WHERE version = 10`); err != nil {
+		t.Fatal(err)
+	}
+	if err := old.RequireUpToDate(ctx); err != nil {
+		t.Fatalf("old binary after the down migration: %v, want it to start", err)
+	}
+	var tables, columns, perms int
+	if err := pool.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM pg_tables WHERE schemaname = current_schema() AND tablename LIKE 'agent_package%'),
+		(SELECT count(*) FROM information_schema.columns WHERE table_schema = current_schema()
+		    AND table_name = 'app_settings' AND column_name = 'agent_download_enabled'),
+		(SELECT count(*) FROM permissions WHERE key = 'agent.package.manage')`).Scan(&tables, &columns, &perms); err != nil {
+		t.Fatal(err)
+	}
+	if tables != 0 || columns != 0 || perms != 0 {
+		t.Fatalf("after the down migration: tables=%d columns=%d permissions=%d, want all 0", tables, columns, perms)
+	}
+	if applied, err := latest.Up(ctx); err != nil || len(applied) != 1 {
+		t.Fatalf("upgrading again: applied=%d err=%v, want 000010 re-applied", len(applied), err)
+	}
+}

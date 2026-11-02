@@ -32,6 +32,7 @@ export type Permission =
   | 'system.logs.view'
   | 'maintenance.view'
   | 'maintenance.manage'
+  | 'agent.package.manage'
 
 // hasPermission, kullanıcının izni olup olmadığıdır. İzinler henüz yüklenmediyse (eski oturumdan kalan kullanıcı, /me
 // yanıtı gelmeden) hiçbir izin yok sayılır: düğme bir an geç görünür ama hiçbir zaman yetkisiz birine görünmez.

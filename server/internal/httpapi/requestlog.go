@@ -242,6 +242,9 @@ var sensitiveJSONValue = regexp.MustCompile(`(?i)("[^"]*(?:passw|token|secret|au
 
 // bodyAttrs, bir gövdeyi maskeli olarak <prefix>_body (ve kesildiyse <prefix>_body_truncated) alanlarına çevirir.
 func bodyAttrs(prefix string, body []byte, truncated bool, h http.Header) []slog.Attr {
+	if strings.HasPrefix(strings.ToLower(h.Get("Content-Type")), "multipart/") { // dosya yüklemesi (agent paketleri)
+		return []slog.Attr{slog.String(prefix+"_body", "[multipart body omitted]")}
+	}
 	attrs := []slog.Attr{slog.String(prefix+"_body", maskBody(body, truncated, h.Get("Content-Encoding")))}
 	if truncated {
 		attrs = append(attrs, slog.Bool(prefix+"_body_truncated", true))

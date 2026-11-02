@@ -43,6 +43,7 @@ flowchart LR
 | `HTTP_ADDR` | hayır | Varsayılan `:8443`. |
 | `LOG_FORMAT` | hayır | `text` (varsayılan, `key=value`) ya da `json` (log toplayıcılar için). |
 | `LOG_FILE` | hayır | Logun stdout'a ek olarak yazıldığı **kalıcı dosya** (saklama sınırları panelden, bkz. 2.1); o dizinde günlük dosyalar tutulur (`server-YYYY-MM-DD.log`, eski günler `.log.gz`). Boş = kapalı (bare-metal varsayılanı). Docker Compose varsayılanı `/var/log/healthbeat/server.log` (`logs` dizini, bölüm 6). Açılamazsa server yine başlar, log'a `log file disabled` yazar. Bkz. "Loglama". |
+| `AGENT_PACKAGES_DIR` | hayır | Panelden yüklenen agent paketlerinin dizini (`<sürüm>/<dosya>`; kayıtları veritabanında). Boş = paket yükleme ve indirme kapalı (bare-metal varsayılanı). Docker Compose varsayılanı `/var/lib/healthbeat/agent-packages` (`agent-packages` dizini, bölüm 6). Dizin yazılamazsa server yine başlar, log'a `agent packages disabled` yazar. Bkz. "Agent paketleri". |
 
 2.0.0'dan önce ortamda olan `SMTP_*`, `PANEL_BASE_URL`, `LATEST_AGENT_VERSION`, `MIN_SUPPORTED_AGENT_VERSION`,
 `*_RETENTION_DAYS`, `ACCESS_TOKEN_TTL`, `REFRESH_TOKEN_TTL`, `RATE_LIMIT_*`, `LOG_LEVEL`, `LOG_ERROR_BODY_BYTES` ve
@@ -70,6 +71,7 @@ eski/yeni değerleriyle yazılır. Varsayılanlar ve sınırlar veritabanındad�
 | Log seviyesi | `info` | `debug`, `info`, `warn`, `error`. Başarılı agent raporları, `/healthz` ve `/readyz` yalnızca `debug`'da loglanır. Açılış ve migration logları (veritabanı okunmadan önce) her zaman `info`'dadır. |
 | Hata isteklerinde gövde | 4096 bayt | 4xx/5xx isteklerde loga yazılan istek/yanıt gövdesinin azami boyutu (en fazla 1048576); `0` = yazılmaz. |
 | Log dosyası geçmişi / toplamı | 14 gün / 1024 MB | `LOG_FILE` açıksa. Sınırlar veritabanından okunana kadar açılışta hiçbir log dosyası silinmez. |
+| Paket indirme | açık | Agent paketlerinin indirme ucu (Ayarlar → Agent sürümleri → Agent paketleri). Kapalıyken indirme adresleri 404 döner; paketler ve kayıtları silinmez. Bkz. "Agent paketleri". |
 
 ### E-posta ile şifre sıfırlama
 
@@ -162,6 +164,30 @@ satırları birlikte — o dizindeki günlük dosyalara da yazılır:
   `request_id` ve saat süzgeçleri; günün düz metin olarak indirilmesi). İzin `system.logs.view` (varsayılan olarak yalnızca
   süper admin); bir günün açılması ve indirilmesi denetim kaydına yazılır. `LOG_FILE` boşsa sekme kapalıdır: bare-metal'de
   panelden log okumak için `LOG_FILE`'ı ayarla. Günler server'ın tarihine göre ayrılır.
+
+### Agent paketleri
+
+Süper admin (`agent.package.manage`) agent paketlerini (`.deb`, `.rpm`, `.tar.gz`) panelde **Ayarlar → Agent sürümleri →
+Agent paketleri**'nden yükler; makineler onları agent'ların bağlandığı API adresinden indirir:
+
+```
+https://<server>:8443/agent/download/<sürüm>/<dosya>
+```
+
+- Dosyalar seçilince önce bir liste açılır: her dosyanın sürümü ve mimarisi orada seçilir (dosya adından okunabiliyorsa
+  dolu gelir, her durumda değiştirilebilir). Biçim (.deb, .rpm, .tar.gz) dosyanın içeriğinden anlaşılır; başka dosyalar
+  yüklenmez. Dosya başına en fazla 50 MB.
+- Server paketi, yüklenen ad ne olursa olsun release adıyla saklar ve sunar (`healthbeat-agent_1.1.0_amd64.deb`,
+  `healthbeat-agent-1.1.0-1.x86_64.rpm`, `healthbeat-agent_1.1.0_linux_amd64.tar.gz`; önsürümde `.deb`/`.rpm` adı
+  `1.2.0~rc.1`); yüklenen ad paketin ayrıntısında görünür. Bir sürümün aynı mimari ve biçimden tek paketi olur: yerine
+  yenisini koymak için önce eskisi silinir.
+- İndirme ucu giriş istemez. Kaynak IP başına dakikada 30 istek sınırı vardır; yarıda kalan indirme `Range` ile sürer.
+  Her indirme IP adresi ve `User-Agent` ile kaydedilir (panelde paketin ayrıntısında); kayıtlar denetim kaydının saklama
+  süresiyle temizlenir, paketin indirme sayacı kalır.
+- Panel adresi kopyalarken API adresini `API_BASE_URL`'den, o boşsa panelin alan adı ve `HB_API_PORT`'tan kurar.
+  Makineler server'a farklı bir adla bağlanıyorsa adresin başı ona göre değiştirilir.
+- İndirme panelden kapatılabilir (bölüm 2.1, "Paket indirme"); `AGENT_PACKAGES_DIR` boşsa yükleme ve indirme kapalıdır.
+- Makinede kurulum: `docs/DISTRIBUTION.md` bölüm 4.5.
 
 ### Hız sınırları ve istemci IP'si
 
@@ -431,7 +457,7 @@ docker compose up -d --build
 | Servis | Ne yapar |
 | --- | --- |
 | `db` | PostgreSQL 16, `pgdata` dizininde. Kendi dizinini kendisi hazırlar; `init`'i **beklemez** (sertifika sorunu veritabanını durdurmaz, yedek/geri yükleme için yalnızca `db` kaldırılabilir). |
-| `init` | Her `up`'ta root olarak bir kez çalışıp çıkar (`deploy/init/init.sh`). `certs`: sertifika yoksa `HB_TLS_HOSTS` için kendinden imzalı bir çift üretir; varsa denetler (çift tam mı, anahtar şifresiz mi, sertifikayla eşleşiyor mu) ve sahipliği/izinleri server'ın okuyacağı hale getirir (`10001`, anahtar `640`). Kullanılamayan bir çiftte açık bir hatayla durur, server başlamaz; süresi dolmuş/dolmak üzere olan sertifika yalnızca uyarıdır. `logs`: sahibini server kullanıcısı yapar. 2.1.x'e kadar adı `certs-init`'ti. |
+| `init` | Her `up`'ta root olarak bir kez çalışıp çıkar (`deploy/init/init.sh`). `certs`: sertifika yoksa `HB_TLS_HOSTS` için kendinden imzalı bir çift üretir; varsa denetler (çift tam mı, anahtar şifresiz mi, sertifikayla eşleşiyor mu) ve sahipliği/izinleri server'ın okuyacağı hale getirir (`10001`, anahtar `640`). Kullanılamayan bir çiftte açık bir hatayla durur, server başlamaz; süresi dolmuş/dolmak üzere olan sertifika yalnızca uyarıdır. `logs` ve `agent-packages`: sahibini server kullanıcısı yapar. 2.1.x'e kadar adı `certs-init`'ti. |
 | `server` | API server; `db` sağlıklı ve `init` başarıyla bitince başlar. |
 | `panel` | Panel; kendi TLS'ini `certs` dizininden (server'la aynı sertifika) sonlandırır. `API_PROXY_URL=https://server:8443` ile panel `/api/` isteklerini server'a **kendi origin'inden** proxy'ler (CORS ve sertifika onayı gerekmez — bkz. `server/panel/deploy/docker-entrypoint.d/15-healthbeat-config.sh`). Panel ile API'yi ayrı alan adlarında sunacaksan `.env`'de `API_PROXY_URL=` (boş) yap, `API_BASE_URL` ve `CORS_ALLOWED_ORIGINS` ver (bölüm 4). |
 
@@ -443,12 +469,13 @@ volumes/
   pgdata/   PostgreSQL veri dizini: tüm kullanıcılar, sunucular, metrikler, alert'ler (sahibi postgres, 70)
   certs/    cert.pem + key.pem (+ isteğe bağlı ca.pem): server VE panelin sunduğu tek sertifika çifti
   logs/     server'ın kalıcı log dosyaları (bölüm 2 "Loglama")
+  agent-packages/  panelden yüklenen agent paketleri (bölüm 2 "Agent paketleri")
 ```
 
 - Dizinler yoksa oluşturulur; sahiplik ve izinleri `init` ve postgres imajı ayarlar — elle `chown` gerekmez. Docker'ın
   oluşturduğu dizinler `root`'a ait olduğundan içlerine dosya koymak/silmek için `sudo` gerekir.
 - `docker compose down` dizinlere dokunmaz. `HB_VOLUMES_DIR` **boşsa** (2.1.x ve öncesinin varsayılanı, eski `.env`'ler)
-  aynı üçü Docker'ın adlandırılmış volume'leridir (`<proje>_pgdata`, …); onları yalnızca `docker compose down -v` siler.
+  aynı dizinler Docker'ın adlandırılmış volume'leridir (`<proje>_pgdata`, …); onları yalnızca `docker compose down -v` siler.
 - `HB_VOLUMES_DIR`'i kurulumdan sonra değiştirmek verileri **taşımaz**: yeni dizinde boş bir veritabanıyla açılır. Taşımak
   için önce yedek al, `docker compose down`, eski yerin içeriğini sahiplik korunarak kopyala (`sudo cp -a`), sonra değeri
   değiştirip `up -d` (adlandırılmış volume'ün yeri: `docker volume inspect <proje>_pgdata`).

@@ -28,6 +28,7 @@ var SettingsColumns = []string{
 	"panel_base_url",
 	"log_level", "log_error_body_bytes", "log_file_max_age_days", "log_file_max_total_mb",
 	"timezone",
+	"agent_download_enabled",
 }
 
 var settingsSelect = strings.Join(SettingsColumns, ", ") + ", updated_at, updated_by"
@@ -53,6 +54,7 @@ func scanSettings(row interface{ Scan(...any) error }) (model.AppSettings, error
 		&s.PanelBaseURL,
 		&s.LogLevel, &s.LogErrorBodyBytes, &s.LogFileMaxAgeDays, &s.LogFileMaxTotalMB,
 		&s.Timezone,
+		&s.AgentDownloadEnabled,
 		&s.UpdatedAt, &s.UpdatedBy)
 	if latest != nil {
 		s.LatestAgentVersion = *latest

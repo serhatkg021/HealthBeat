@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"healthbeat-server/internal/access"
+	"healthbeat-server/internal/agentpkg"
 	"healthbeat-server/internal/alertengine"
 	"healthbeat-server/internal/authsvc"
 	"healthbeat-server/internal/clientip"
@@ -85,6 +86,13 @@ type Deps struct {
 	// maintenance, bakım pencereleridir (bkz. maintenance_handlers.go).
 	maintenance *store.MaintenanceWindows
 
+	// agentPackages, yüklenen agent paketlerinin kayıtları; agentPackageDir dosyaları (AGENT_PACKAGES_DIR boşsa ya da
+	// kullanılamıyorsa nil: yükleme ve indirme kapalı). agentDownloads indirme ucunu kaynak IP başına sınırlar.
+	// Bkz. agent_package_handlers.go.
+	agentPackages   *store.AgentPackages
+	agentPackageDir *agentpkg.Dir
+	agentDownloads  *ratelimit.Limiter
+
 	// errorBodyBytes, hata alan (4xx/5xx) bir isteğin loga yazılan istek/yanıt gövdesinin azami boyutudur; 0 gövde
 	// yazmaz. Bkz. requestlog.go.
 	errorBodyBytes atomic.Int64
@@ -101,6 +109,11 @@ const (
 	// olduğudur; ingestBurst bir ağ aksamasından sonra yetişen host'ı karşılar.
 	authFailureBurst = 10
 	ingestBurst      = 20
+
+	// agentDownloadsPerMinute / agentDownloadBurst, indirme ucunun IP başına sınırıdır: bir makine kurulumda birkaç
+	// dosya indirir; yarıda kalan indirmeyi sürdürmek (Range) de bir istektir.
+	agentDownloadsPerMinute = 30
+	agentDownloadBurst      = 10
 )
 
 // AgentPolicy, panelin agent'ları sınıflandırdığı sürüm politikasıdır (app_settings; bkz. internal/settings).
@@ -121,6 +134,9 @@ func (d *Deps) SetSystemSources(pull *pullscheduler.Scheduler, certs *tlsreload.
 // SetLogFiles, Sistem Araçları'nın (Log Analiz) okuyacağı log dosyası yazıcısını bağlar; nil (LOG_FILE boş) ise
 // özellik "kapalı" görünür.
 func (d *Deps) SetLogFiles(w *logging.FileWriter) { d.logFiles = w }
+
+// SetAgentPackagesDir, yüklenen agent paketlerinin dizinini bağlar; nil ise yükleme ve indirme kapalıdır.
+func (d *Deps) SetAgentPackagesDir(dir *agentpkg.Dir) { d.agentPackageDir = dir }
 
 // SetClientIPResolver, istemci IP'sinin güvenilir proxy'lerin X-Forwarded-For'undan okunmasını açar (bkz. clientip).
 func (d *Deps) SetClientIPResolver(r *clientip.Resolver) { d.clientIPs = r }
@@ -150,6 +166,7 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 		ingestRate:     ratelimit.New(float64(limits.IngestPerMinute), ingestBurst),
 		resetIPs:       ratelimit.New(resetIPPerMinute(limits), resetIPBurst),
 		resetEmails:    ratelimit.New(resetEmailPerMinute(limits), resetEmailBurst),
+		agentDownloads: ratelimit.New(agentDownloadsPerMinute, agentDownloadBurst),
 
 		users:         store.NewUsers(pool),
 		organizations: store.NewOrganizations(pool),
@@ -165,6 +182,7 @@ func NewDeps(pool *pgxpool.Pool, tokenSvc *authsvc.TokenService, alertEngine *al
 		refreshTokens: store.NewRefreshTokens(pool),
 		resets:        store.NewPasswordResets(pool),
 		maintenance:   store.NewMaintenanceWindows(pool),
+		agentPackages: store.NewAgentPackages(pool),
 	}
 	d.SetAgentPolicy(AgentPolicy{})
 	d.SetPanelBaseURL("")

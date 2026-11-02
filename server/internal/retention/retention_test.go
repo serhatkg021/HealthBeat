@@ -64,6 +64,33 @@ func TestRunOnceDeletesExpiredAuditEntries(t *testing.T) {
 	}
 }
 
+// Agent paketi indirme günlüğü denetim kaydının süresiyle temizlenir; paketin sayacı değişmez.
+func TestRunOnceDeletesExpiredAgentPackageDownloads(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+	var pkg uuid.UUID
+	if err := pool.QueryRow(ctx, `INSERT INTO agent_packages (version, filename, original_filename, arch, format, size_bytes, sha256, download_count)
+		VALUES ('1.1.0', 'healthbeat-agent_1.1.0_amd64.deb', 'agent.deb', 'amd64', 'deb', 10, repeat('a', 64), 3) RETURNING id`).Scan(&pkg); err != nil {
+		t.Fatal(err)
+	}
+	for _, age := range []string{"1 day", "400 days", "800 days"} {
+		if _, err := pool.Exec(ctx, `INSERT INTO agent_package_downloads (package_id, client_ip, downloaded_at)
+			VALUES ($1, '10.0.0.5', now() - $2::interval)`, pkg, age); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := New(Stores{AgentPackages: store.NewAgentPackages(pool)}, Days{Audit: 365}).RunOnce(ctx)
+	if err != nil || n["agent package downloads"] != 2 {
+		t.Fatalf("RunOnce = %v err=%v, want 2 agent package downloads", n, err)
+	}
+	if left := count(t, pool, `SELECT count(*) FROM agent_package_downloads`); left != 1 {
+		t.Fatalf("%d downloads left, want 1", left)
+	}
+	if c := count(t, pool, `SELECT download_count FROM agent_packages`); c != 3 {
+		t.Fatalf("download_count = %d, want 3 (unchanged)", c)
+	}
+}
+
 // Yalnızca süresi dolmuş ÇÖZÜLMÜŞ alert'ler silinir; açık ve onaylanmış alert'ler ne kadar eski olursa olsun kalır.
 // Silinen alert'in bildirim satırı kalır ama alert'e bağı kopar (outbox temizliği onu sonra siler).
 func TestRunOnceDeletesOnlyOldResolvedAlerts(t *testing.T) {

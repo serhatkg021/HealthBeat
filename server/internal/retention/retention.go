@@ -1,5 +1,5 @@
-// Package retention, sınırsız büyüyen tabloları saklama sürelerine göre temizler: metrik örnekleri, denetim kayıtları ve
-// çözülmüş alert'ler. Agent'lar birkaç saniyede bir rapor verir; metrik temizliği olmadan tablo sınırsız büyür (10 sn
+// Package retention, sınırsız büyüyen tabloları saklama sürelerine göre temizler: metrik örnekleri, denetim kayıtları
+// (agent paketi indirme günlüğüyle birlikte) ve çözülmüş alert'ler. Agent'lar birkaç saniyede bir rapor verir; metrik temizliği olmadan tablo sınırsız büyür (10 sn
 // interval x 100 host yılda ~315M satırdır).
 package retention
 
@@ -33,6 +33,8 @@ type Stores struct {
 	Metrics *store.Metrics
 	Audit   *store.Audit
 	Alerts  *store.Alerts
+	// AgentPackages'ın indirme günlüğü denetim kaydının süresiyle temizlenir.
+	AgentPackages *store.AgentPackages
 }
 
 // target, saklama süresi olan bir tablodur.
@@ -60,6 +62,9 @@ func New(st Stores, days Days) *Purger {
 	}
 	if st.Audit != nil {
 		add("audit log entries", "audit_retention_days", func(d Days) int { return d.Audit }, st.Audit.PurgeOlderThan)
+	}
+	if st.AgentPackages != nil {
+		add("agent package downloads", "audit_retention_days", func(d Days) int { return d.Audit }, st.AgentPackages.PurgeDownloadsOlderThan)
 	}
 	if st.Alerts != nil {
 		add("resolved alerts", "resolved_alert_retention_days", func(d Days) int { return d.ResolvedAlerts }, st.Alerts.PurgeResolvedBefore)

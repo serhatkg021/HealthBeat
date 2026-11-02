@@ -6,4 +6,6 @@
 // apiBaseUrl: HealthBeat API'sinin origin'i, ör. "https://api.example.com".
 // API aynı origin'den sunuluyorsa (dev proxy ya da /api/v1'i server'a yönlendiren bir
 // reverse proxy) boş bırakın.
-window.HEALTHBEAT_CONFIG = { apiBaseUrl: '' }
+// apiPort: agent'ların bağlandığı API portu (HB_API_PORT); apiBaseUrl boşken agent paketlerinin indirme adresi panelin
+// alan adı ve bu portla gösterilir.
+window.HEALTHBEAT_CONFIG = { apiBaseUrl: '', apiPort: 8443 }

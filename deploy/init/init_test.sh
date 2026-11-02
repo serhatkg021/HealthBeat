@@ -32,7 +32,7 @@ run_case() {
   mkdir -p "$CASE"
   local envs=() e
   for e in "$@"; do envs+=(-e "$e"); done
-  OUT="$(docker run --rm -v "$CASE:/w" -e HB_CERTS_DIR=/w/certs -e HB_LOGS_DIR=/w/logs "${envs[@]}" \
+  OUT="$(docker run --rm -v "$CASE:/w" -e HB_CERTS_DIR=/w/certs -e HB_LOGS_DIR=/w/logs -e HB_AGENT_PACKAGES_DIR=/w/agent-packages "${envs[@]}" \
     --entrypoint sh "$IMG" -c "set -e; mkdir -p /w/certs; $GEN; ${setup:-:}; exec /usr/local/bin/init.sh" 2>&1)"
   RC=$?
 }
@@ -118,6 +118,16 @@ expect_ok "logs with a root-owned file"
 run_case no_logs ''
 expect_ok "no logs dir mounted"
 [[ "$OUT" != *"log dizini"* ]] && pass || fail "reported a logs dir that does not exist: $OUT"
+
+# ------------------------------------------------------------------ agent paketleri
+run_case agent_packages 'mkdir -p /w/agent-packages/1.1.0; echo x > /w/agent-packages/1.1.0/healthbeat-agent_1.1.0_amd64.deb'
+expect_ok "agent packages with a root-owned file"
+[[ "$(owner_mode "$CASE/agent-packages")" == "10001:10001 750" ]] && pass || fail "agent packages dir is $(owner_mode "$CASE/agent-packages")"
+[[ "$(owner_mode_in "$CASE/agent-packages/1.1.0/healthbeat-agent_1.1.0_amd64.deb")" == 10001:10001* ]] && pass \
+  || fail "copied package is $(owner_mode_in "$CASE/agent-packages/1.1.0/healthbeat-agent_1.1.0_amd64.deb")"
+
+run_case no_agent_packages ''
+[[ "$OUT" != *"agent paket dizini"* ]] && pass || fail "reported an agent packages dir that does not exist: $OUT"
 
 echo "init_test: $PASSES passed, $FAILS failed"
 [[ $FAILS -eq 0 ]]

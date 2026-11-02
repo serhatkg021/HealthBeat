@@ -4,7 +4,14 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-11-02 — Server ve agent Go 1.27.3'e geçti (`crypto/x509` açığı GO-2026-6809, govulncheck
+**Son güncelleme:** 2026-11-03 — **Agent paketleri** (server ve panel): süper admin agent paketlerini panelden
+yüklüyor, makineler `https://<server>:8443/agent/download/<sürüm>/<dosya>` adresinden giriş yapmadan indiriyor; indirmeler
+IP adresiyle kaydediliyor, indirme panelden açılıp kapanıyor. Sürüm ve mimari yüklemeden önce dosya başına seçiliyor (addan
+okunabiliyorsa dolu), biçim içerikten anlaşılıyor, paket release adıyla sunuluyor. Migration `000010`, `AGENT_PACKAGES_DIR`,
+compose'da `agent-packages` dizini. healthbeat-dev'de denendi: farklı adlı dosyaların yüklenmesi, çakışma uyarısı, Ubuntu
+24.04 ve Rocky 9 container'larında belgedeki komutlarla indirip kurma (SHA256 release ile aynı), yarıda kalanın
+sürdürülmesi, sayaç ve indirme kaydı, kapalıyken 404, silme; panel dar ekranda.
+Önceki: 2026-11-02 — Server ve agent Go 1.27.3'e geçti (`crypto/x509` açığı GO-2026-6809, govulncheck
 CI'ı düşürüyordu); staticcheck v0.8.2 Go 1.27.3'ü okuduğu için lint'teki geçici Go 1.27.1 ayarı kaldırıldı.
 Önceki: 2026-10-19 — Agent paketinin yükseltme betiği Türkçe locale'de düz token uyarısını basmıyordu
 (`postinstall.sh`'a `LC_ALL=C`); `tr_TR.UTF-8` kurulu bir Ubuntu 24.04 container'ında elle doğrulandı, CI'da Türkçe
@@ -114,8 +121,8 @@ DATABASE_URL='postgres://…' scripts/compat_e2e.sh
   [container başına]/offline/disk_missing; protokol 4: disk gecikmesi/sıcaklık/servis yeniden başlatma/saat farkı [konu başına,
   süre koşulu `alert_pending`'de] ve durum kuralları; sistem + organizasyon zinciri + sunucu kuralları toplanır, kullanıcı
   alıcılar gönderimde erişime göre süzülür; alıcı başına kalıcı kuyruk), `notify` (SMTP),
-  `settings` (panelden değişen ayarlar ve bildirim kanalları; bellekte, yeniden başlatmadan uygulanır), `maintenance` (bakım
-  pencerelerinin tekrar hesabı; saf), `tz` (kurulumun saat dilimi, gömülü tzdata), `offlinemonitor`,
+  `settings` (panelden değişen ayarlar ve bildirim kanalları; bellekte, yeniden başlatmadan uygulanır), `agentpkg` (agent
+  paketlerinin dosya adı ve diskte saklanması), `maintenance` (bakım pencerelerinin tekrar hesabı; saf), `tz` (kurulumun saat dilimi, gömülü tzdata), `offlinemonitor`,
   `pullscheduler`, `retention`, `secretbox`, `tlsreload`, `ratelimit`, `httpapi`, `testdb`/`testsmtp`; migration'lar binary'ye gömülü.
 - **Agent (`agent/`)**: yalnızca stdlib; `config`, `collector` (cpu, memory, disk, docker, envanter; protokol 4: G/Ç ve ağ oranları,
   PSI, RAID, servisler, sıcaklık, süreçler, güncellemeler, kapasite, saat senkronu), `report` (hızlı kaynaklar rapor anında,

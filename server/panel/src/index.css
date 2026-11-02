@@ -5829,3 +5829,247 @@ td.actions .row-menu-button {
   gap: 4px;
 }
 
+
+/* ---------------------------------------------------------------- Ayarlar → Agent sürümleri → Paketler */
+
+.agent-packages {
+  max-width: 960px;
+  margin-top: 16px;
+}
+
+.agent-packages-body > .toolbar {
+  margin: 4px 0 12px;
+}
+
+/* Paket indirme kapalıyken (ya da dizin yokken) içerik soluk görünür; yönetim (yükleme, silme) çalışmaya devam eder. */
+.agent-packages-body.is-off {
+  opacity: 0.55;
+  filter: grayscale(1);
+  transition: opacity 0.15s;
+}
+
+.agent-packages-body.is-off:focus-within {
+  opacity: 0.85;
+}
+
+.agent-packages .card-title .badge {
+  margin-left: 2px;
+}
+
+.package-group {
+  margin-top: 16px;
+}
+
+.package-group-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.package-group-title .muted {
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+.package-group .table-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.package-table td.expand-col {
+  width: 40px;
+  padding-right: 0;
+}
+
+.package-row {
+  cursor: pointer;
+}
+
+.package-row.open td {
+  border-bottom-color: transparent;
+}
+
+.package-table .mono {
+  word-break: break-all;
+}
+
+/* Mobilde td flex olduğundan iki satırlı hücre içeriği tek blokta tutulur. */
+.package-table .cell-stack {
+  min-width: 0;
+}
+
+.package-table .cell-sub {
+  overflow-wrap: anywhere;
+}
+
+.package-detail td {
+  padding: 4px 18px 16px 58px;
+  background: var(--surface-2);
+}
+
+/* Yükleme öncesi liste: dosya başına sürüm ve mimari. */
+.upload-drafts {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.upload-drafts-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+}
+
+.upload-drafts-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.upload-drafts-head .muted {
+  font-size: 12.5px;
+}
+
+.upload-drafts .table-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.draft-table td {
+  vertical-align: top;
+}
+
+.draft-table .mono {
+  word-break: break-all;
+}
+
+.draft-table .cell-sub {
+  overflow-wrap: anywhere;
+}
+
+.draft-field {
+  min-width: 0;
+}
+
+.draft-table input {
+  width: 130px;
+}
+
+.draft-table select {
+  width: 160px;
+}
+
+.draft-row.is-skipped td {
+  color: var(--text-muted);
+}
+
+.draft-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.draft-status.done {
+  color: var(--status-good-text);
+}
+
+.draft-status.failed {
+  color: var(--status-critical-text);
+}
+
+.upload-summary {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.upload-drafts .form-actions {
+  margin-top: 10px;
+}
+
+.download-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.download-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.download-list li {
+  font-size: 13px;
+}
+
+@media (max-width: 860px) {
+  /* Kart düzeninde ok sol üstte, ⋯ sağ üstte; ayrıntı kartın altında tam genişlikte. */
+  .package-table tr.package-row {
+    position: relative;
+    padding-left: 44px;
+    padding-right: 48px;
+  }
+
+  .package-table td.expand-col {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .package-table tr.package-row td.actions {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .draft-table select {
+    width: auto;
+    max-width: 100%;
+  }
+
+  /* Yükleme listesinde ✕ kartın sağ üstünde. */
+  .draft-table tr.draft-row {
+    position: relative;
+    padding-right: 48px;
+  }
+
+  .draft-table tr.draft-row td.actions {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  /* table.stack td (flex) kuralını ezmek için aynı özgüllükte. */
+  table.stack tr.package-detail td {
+    display: block;
+    padding: 4px 14px 14px;
+  }
+
+  .package-detail .detail-grid dd {
+    min-width: 0;
+  }
+}

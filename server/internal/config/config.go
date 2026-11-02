@@ -68,6 +68,10 @@ type Config struct {
 	// sınırları panelden değişir. Bkz. logging.FileWriter.
 	LogFile string
 
+	// AgentPackagesDir (AGENT_PACKAGES_DIR), panelden yüklenen agent paketlerinin dizinidir (bkz. internal/agentpkg).
+	// Boş = paket yükleme ve indirme kapalı (bare-metal varsayılanı; Docker Compose açar).
+	AgentPackagesDir string
+
 	// Obsolete, artık okunmayan (panele taşınan) ama ortamda hâlâ dolu olan değişkenlerin adlarıdır; server bunları
 	// açılışta uyarı olarak loglar.
 	Obsolete []string
@@ -163,6 +167,7 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid LOG_FORMAT: %w", err)
 	}
 	cfg.LogFile = strings.TrimSpace(os.Getenv("LOG_FILE"))
+	cfg.AgentPackagesDir = strings.TrimSpace(os.Getenv("AGENT_PACKAGES_DIR"))
 	for _, key := range ObsoleteVars {
 		if strings.TrimSpace(os.Getenv(key)) != "" { // compose boş geçirir: yalnızca dolu olanlar uyarılır
 			cfg.Obsolete = append(cfg.Obsolete, key)

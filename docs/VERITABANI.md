@@ -33,6 +33,9 @@ uygulanarak** üretilmiştir; şema değişince tablo ayrıntılarını yeniden 
 - **Bakım pencereleri** (`000008`): `maintenance_windows` ve kapsamı (`maintenance_window_hosts`,
   `maintenance_window_orgs`), tek tekrarın istisnaları `maintenance_occurrence_overrides`. Bakımdaki sunucunun bildirimi
   ertelenir (`alerts.notify_pending`); tekrarlar `app_settings.timezone`'a göre hesaplanır.
+- **Agent paketleri** (`000010`): panelden yüklenen agent paketlerinin kaydı `agent_packages`'ta, dosyaların kendisi
+  diskte (`AGENT_PACKAGES_DIR/<sürüm>/<dosya>`); her indirme `agent_package_downloads`'a yazılır. İndirme
+  `app_settings.agent_download_enabled` ile açılıp kapanır.
 - **Çift kayıt.** `host_inventory.machine_id_hash` aynı makinenin iki kez kaydedilmesini yakalamak için indekslidir; benzersiz
   değildir (klonlanmış sanal makineler aynı kimliği taşır). Panel yalnızca uyarır.
 
@@ -83,6 +86,8 @@ erDiagram
     organizations ||--o{ maintenance_window_orgs : ""
     maintenance_windows ||--o{ maintenance_occurrence_overrides : ""
     users ||--o{ maintenance_occurrence_overrides : ""
+    users ||--o{ agent_packages : ""
+    agent_packages ||--o{ agent_package_downloads : ""
 ```
 
 ## Tablolar
@@ -104,6 +109,7 @@ Yetki anahtarları (`host.view`, `alert.acknowledge`, …). Kod izni sabit rolde
 Sistem Araçları'nın her aracı ayrı bir izindir (`000006`): `system.queue.view`, `system.cache.view`, `system.logs.view`;
 üçü de yalnızca `super_admin`'e verilir.
 Bakım pencereleri (`000008`): `maintenance.view` üç role, `maintenance.manage` `super_admin` ve `org_admin`'e verilir.
+Agent paketleri (`000010`): `agent.package.manage` yalnızca `super_admin`'e verilir.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -773,7 +779,8 @@ Panelden (Ayarlar) değişen çalışma zamanı ayarları (`000005`): **tek sat�
 `DEFAULT`'larıdır, sınırlar `CHECK`'lerdir; server açılışta okur, değişince yeniden başlatmadan uygular. Süreler saniyedir;
 `NULL` sürüm "tanımsız" demektir. Bkz. `docs/DEPLOYMENT.md` §2.1. `timezone` (`000008`) kurulumun saat dilimidir (IANA
 adı, ör. `Europe/Istanbul`): tekrarlı bakım pencereleri ve e-postalardaki saatler buna göredir; boşsa server sürecinin `TZ`'si,
-o da yoksa UTC. Adın geçerliliğini server denetler.
+o da yoksa UTC. Adın geçerliliğini server denetler. `agent_download_enabled` (`000010`) agent paketlerinin indirme ucunu
+açar/kapar.
 
 | Sütun | Tip | Boş olabilir | Varsayılan |
 | --- | --- | --- | --- |
@@ -795,6 +802,7 @@ o da yoksa UTC. Adın geçerliliğini server denetler.
 | `updated_at` | timestamptz | hayır | `now()` |
 | `updated_by` | uuid | evet |  |
 | `timezone` | text | hayır | `''::text` |
+| `agent_download_enabled` | boolean | hayır | `true` |
 
 - **CHECK** `app_settings_access_token_ttl_chk`: (((access_token_ttl_seconds >= 60) AND (access_token_ttl_seconds <= 86400)))
 - **CHECK** `app_settings_latest_agent_version_chk`: ((latest_agent_version ~ '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$'::text))
@@ -833,6 +841,60 @@ kanalda değil bildirim kurallarındadır (`owner_min_level` `000009` ile kalkt�
 - **CHECK** `notification_channels_config_object_chk`: ((jsonb_typeof(config) = 'object'::text))
 - **FK** (updated_by) REFERENCES users(id) ON DELETE SET NULL
 - **PK** (channel)
+
+### `agent_packages`
+
+Panelden yüklenen agent paketleri (`000010`). Sürüm ve mimariyi yükleyen seçer, biçim dosyanın ilk baytlarından anlaşılır;
+bir sürümün aynı mimari ve biçimden tek paketi olur. `filename` server'ın bu üçünden ürettiği release adıdır (diskte
+`AGENT_PACKAGES_DIR/<version>/<filename>`, indirme adresinde de bu ad), `original_filename` yüklenen dosyanın adıdır. `download_count` ve
+`last_downloaded_at` her indirmede güncellenir; indirme günlüğü temizlense de sayaç kalır.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `id` | uuid | hayır | `gen_random_uuid()` |
+| `version` | text | hayır |  |
+| `filename` | text | hayır |  |
+| `original_filename` | text | hayır |  |
+| `arch` | text | hayır |  |
+| `format` | text | hayır |  |
+| `size_bytes` | bigint | hayır |  |
+| `sha256` | text | hayır |  |
+| `uploaded_by` | uuid | evet |  |
+| `uploaded_at` | timestamptz | hayır | `now()` |
+| `download_count` | bigint | hayır | `0` |
+| `last_downloaded_at` | timestamptz | evet |  |
+
+- **CHECK** `agent_packages_arch_chk`: ((arch = ANY (ARRAY['amd64'::text, 'arm64'::text])))
+- **CHECK** `agent_packages_download_count_chk`: ((download_count >= 0))
+- **CHECK** `agent_packages_filename_chk`: (((filename ~ '^[0-9A-Za-z._~-]+$'::text) AND (length(filename) <= 128)))
+- **CHECK** `agent_packages_format_chk`: ((format = ANY (ARRAY['deb'::text, 'rpm'::text, 'tar.gz'::text])))
+- **CHECK** `agent_packages_original_filename_chk`: (((length(original_filename) >= 1) AND (length(original_filename) <= 255)))
+- **CHECK** `agent_packages_sha256_chk`: ((sha256 ~ '^[0-9a-f]{64}$'::text))
+- **CHECK** `agent_packages_size_chk`: ((size_bytes > 0))
+- **CHECK** `agent_packages_version_chk`: (((version ~ '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'::text) AND (length(version) <= 64)))
+- **FK** (uploaded_by) REFERENCES users(id) ON DELETE SET NULL
+- **PK** (id)
+- **UNIQUE** `agent_packages_filename_key`: (filename)
+- **UNIQUE** `agent_packages_variant_key`: (version, arch, format)
+
+### `agent_package_downloads`
+
+Agent paketlerinin indirme günlüğü (`000010`): istemci IP'si ve `User-Agent`. Denetim kaydının saklama süresiyle
+(`app_settings.audit_retention_days`) temizlenir.
+
+| Sütun | Tip | Boş olabilir | Varsayılan |
+| --- | --- | --- | --- |
+| `id` | bigint | hayır |  |
+| `package_id` | uuid | hayır |  |
+| `client_ip` | text | hayır |  |
+| `user_agent` | text | hayır | `''::text` |
+| `downloaded_at` | timestamptz | hayır | `now()` |
+
+- **CHECK** `agent_package_downloads_user_agent_chk`: ((length(user_agent) <= 256))
+- **FK** (package_id) REFERENCES agent_packages(id) ON DELETE CASCADE
+- **PK** (id)
+- **İndeks** `agent_package_downloads_downloaded_at_idx`: `btree (downloaded_at)`
+- **İndeks** `agent_package_downloads_package_idx`: `btree (package_id, downloaded_at DESC)`
 
 ### `healthbeat_migrations`
 

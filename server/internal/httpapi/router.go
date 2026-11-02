@@ -125,6 +125,13 @@ func (d *Deps) Router() http.Handler {
 	mux.HandleFunc("GET /api/v1/system/logs/entries", d.requirePermission("system.logs.view", handle(d.handleLogEntries)))
 	mux.HandleFunc("GET /api/v1/system/logs/download", d.requirePermission("system.logs.view", handle(d.handleLogDownload)))
 
+	// Agent paketleri: yönetim panelden, indirme kimlik doğrulamasız. Bkz. agent_package_handlers.go.
+	mux.HandleFunc("GET /api/v1/agent-packages", d.requirePermission("agent.package.manage", handle(d.handleListAgentPackages)))
+	mux.HandleFunc("POST /api/v1/agent-packages", d.requirePermission("agent.package.manage", handle(d.handleUploadAgentPackage)))
+	mux.HandleFunc("DELETE /api/v1/agent-packages/{id}", d.requirePermission("agent.package.manage", handle(d.handleDeleteAgentPackage)))
+	mux.HandleFunc("GET /api/v1/agent-packages/{id}/downloads", d.requirePermission("agent.package.manage", handle(d.handleListAgentPackageDownloads)))
+	mux.HandleFunc("GET "+AgentDownloadPath+"{version}/{filename}", d.handleAgentDownload)
+
 	mux.HandleFunc("GET /api/v1/dashboard/summary", d.requirePermission("dashboard.view", handle(d.handleDashboardSummary)))
 	mux.HandleFunc("GET /api/v1/dashboard/overview", d.requirePermission("dashboard.view", handle(d.handleDashboardOverview)))
 

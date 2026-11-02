@@ -51,11 +51,38 @@ location /api/ {
     proxy_read_timeout 60s;
     expires epoch;
 }
+# Agent paketi yükleme: istek başına bir paket (server 50 MB'a kadar kabul eder) ve yavaş bir hatta uzun sürer; gövde
+# nginx'te biriktirilmeden server'a akıtılır.
+location = /api/v1/agent-packages {
+    resolver $resolver valid=10s ipv6=off;
+    set \$api_upstream $proxy;
+    proxy_pass \$api_upstream;
+    proxy_http_version 1.1;
+    proxy_set_header Host \$http_host;
+    proxy_set_header X-Forwarded-For \$remote_addr;
+    proxy_set_header X-Forwarded-Proto \$scheme;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify off;
+    proxy_connect_timeout 5s;
+    client_max_body_size 64m;
+    proxy_request_buffering off;
+    proxy_read_timeout 900s;
+    proxy_send_timeout 900s;
+    client_body_timeout 900s;
+    expires epoch;
+}
 CONF
   echo "healthbeat: /api/ -> ${proxy} (proxy)"
 else
   printf '# API_PROXY_URL tanimli degil: /api/ proxy edilmez\n' > "$proxy_conf"
 fi
 
-printf "window.HEALTHBEAT_CONFIG = { apiBaseUrl: '%s' }\n" "$api" > "$html_dir/config.js"
-echo "healthbeat: config.js written (apiBaseUrl='${api}')"
+# HB_API_PORT: agent'ların bağlandığı API portu (compose'daki yayın portu); panel agent paketlerinin indirme adresini
+# API_BASE_URL boşken panelin alan adı ve bu portla gösterir.
+api_port="${HB_API_PORT:-8443}"
+if ! printf '%s' "$api_port" | LC_ALL=C grep -Eq '^[0-9]{1,5}$'; then
+  echo "healthbeat: HB_API_PORT must be a port number; got: $api_port" >&2
+  exit 1
+fi
+printf "window.HEALTHBEAT_CONFIG = { apiBaseUrl: '%s', apiPort: %s }\n" "$api" "$api_port" > "$html_dir/config.js"
+echo "healthbeat: config.js written (apiBaseUrl='${api}', apiPort=${api_port})"

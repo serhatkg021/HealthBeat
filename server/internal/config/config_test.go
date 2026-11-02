@@ -208,13 +208,15 @@ func TestLoadDBMaxConns(t *testing.T) {
 func TestLoadLogSettings(t *testing.T) {
 	setRequired(t)
 	cfg, err := Load()
-	if err != nil || cfg.LogFormat != "text" || cfg.LogFile != "" {
-		t.Fatalf("defaults: format=%q file=%q err=%v", cfg.LogFormat, cfg.LogFile, err)
+	if err != nil || cfg.LogFormat != "text" || cfg.LogFile != "" || cfg.AgentPackagesDir != "" {
+		t.Fatalf("defaults: format=%q file=%q packages=%q err=%v", cfg.LogFormat, cfg.LogFile, cfg.AgentPackagesDir, err)
 	}
 	t.Setenv("LOG_FORMAT", "json")
 	t.Setenv("LOG_FILE", " /var/log/healthbeat/server.log ")
-	if cfg, err = Load(); err != nil || cfg.LogFormat != "json" || cfg.LogFile != "/var/log/healthbeat/server.log" {
-		t.Fatalf("set: format=%q file=%q err=%v", cfg.LogFormat, cfg.LogFile, err)
+	t.Setenv("AGENT_PACKAGES_DIR", " /var/lib/healthbeat/agent-packages ")
+	if cfg, err = Load(); err != nil || cfg.LogFormat != "json" || cfg.LogFile != "/var/log/healthbeat/server.log" ||
+		cfg.AgentPackagesDir != "/var/lib/healthbeat/agent-packages" {
+		t.Fatalf("set: format=%q file=%q packages=%q err=%v", cfg.LogFormat, cfg.LogFile, cfg.AgentPackagesDir, err)
 	}
 	t.Setenv("LOG_FORMAT", "xml")
 	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "LOG_FORMAT") {

@@ -32,6 +32,7 @@ const (
 	FieldLogFileMaxAgeDays              Field = "log_file_max_age_days"
 	FieldLogFileMaxTotalMB              Field = "log_file_max_total_mb"
 	FieldTimezone                       Field = "timezone"
+	FieldAgentDownloadEnabled           Field = "agent_download_enabled"
 )
 
 // Fields, bütün ayarlardır (sabit sıra; store.SettingsColumns ile aynı küme — bkz. TestFieldsMatchStoreColumns).
@@ -43,6 +44,7 @@ var Fields = []Field{
 	FieldPanelBaseURL,
 	FieldLogLevel, FieldLogErrorBodyBytes, FieldLogFileMaxAgeDays, FieldLogFileMaxTotalMB,
 	FieldTimezone,
+	FieldAgentDownloadEnabled,
 }
 
 // intRange, sayısal bir ayarın izin verilen aralığıdır; migration 000005'teki CHECK kısıtlarıyla aynıdır
@@ -91,6 +93,7 @@ type Patch struct {
 	LogFileMaxAgeDays              *int    `json:"log_file_max_age_days"`
 	LogFileMaxTotalMB              *int    `json:"log_file_max_total_mb"`
 	Timezone                       *string `json:"timezone"`
+	AgentDownloadEnabled           *bool   `json:"agent_download_enabled"`
 }
 
 // values, Patch'te verilen alanları döndürür.
@@ -121,6 +124,9 @@ func (p Patch) values() map[Field]any {
 	num(FieldLogFileMaxAgeDays, p.LogFileMaxAgeDays)
 	num(FieldLogFileMaxTotalMB, p.LogFileMaxTotalMB)
 	str(FieldTimezone, p.Timezone)
+	if p.AgentDownloadEnabled != nil {
+		out[FieldAgentDownloadEnabled] = *p.AgentDownloadEnabled
+	}
 	return out
 }
 
@@ -143,6 +149,7 @@ func Values(s model.AppSettings) map[Field]any {
 		FieldLogFileMaxAgeDays:              s.LogFileMaxAgeDays,
 		FieldLogFileMaxTotalMB:              s.LogFileMaxTotalMB,
 		FieldTimezone:                       s.Timezone,
+		FieldAgentDownloadEnabled:           s.AgentDownloadEnabled,
 	}
 }
 
@@ -174,6 +181,8 @@ func normalize(in map[Field]any) (map[Field]any, error) {
 				return nil, &FieldError{f, "geçerli bir saat dilimi değil (IANA adı, ör. Europe/Istanbul); boş bırakılırsa server'ın saat dilimi kullanılır"}
 			}
 			out[f] = s
+		case FieldAgentDownloadEnabled:
+			out[f] = v.(bool)
 		case FieldLogLevel:
 			s := strings.ToLower(strings.TrimSpace(v.(string)))
 			if !slices.Contains(logLevels, s) {

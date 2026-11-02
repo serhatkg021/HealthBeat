@@ -257,3 +257,11 @@ func TestMaskBody(t *testing.T) {
 		}
 	}
 }
+
+func TestBodyAttrsOmitsMultipart(t *testing.T) {
+	h := http.Header{"Content-Type": {"multipart/form-data; boundary=x"}}
+	attrs := bodyAttrs("req", []byte("--x\r\nContent-Disposition: form-data; name=\"files\"; filename=\"a.deb\"\r\n\r\n!<arch>"), true, h)
+	if len(attrs) != 1 || attrs[0].Value.String() != "[multipart body omitted]" {
+		t.Fatalf("attrs = %v, want only the omitted marker", attrs)
+	}
+}
