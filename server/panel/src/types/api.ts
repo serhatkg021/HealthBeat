@@ -979,12 +979,15 @@ export interface LogPage {
 
 // Server'a yüklenmiş bir agent paket dosyası (GET /api/v1/agent-packages).
 export type AgentPackageFormat = 'deb' | 'rpm' | 'tar.gz'
+export type AgentPackageArch = 'amd64' | 'arm64'
 
 export interface AgentPackage {
   id: string
   version: string
+  // Server'ın verdiği release adı (diskte ve indirme adresinde); original_filename yüklenen dosyanın adı.
   filename: string
-  arch: 'amd64' | 'arm64'
+  original_filename: string
+  arch: AgentPackageArch
   format: AgentPackageFormat
   size_bytes: number
   sha256: string
@@ -1000,12 +1003,6 @@ export interface AgentPackageList {
   // İndirme ucunun kökü: <download_path><sürüm>/<dosya>.
   download_path: string
   packages: AgentPackage[]
-}
-
-export interface AgentPackageUploadResult {
-  filename: string
-  package?: AgentPackage
-  error?: string
 }
 
 export interface AgentPackageDownload {

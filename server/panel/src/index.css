@@ -5912,21 +5912,92 @@ td.actions .row-menu-button {
   background: var(--surface-2);
 }
 
-.upload-results {
-  margin-bottom: 12px;
-  padding: 10px 12px;
+/* Yükleme öncesi liste: dosya başına sürüm ve mimari. */
+.upload-drafts {
+  margin-bottom: 16px;
+  padding: 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-2);
-  font-size: 13px;
 }
 
-.upload-summary {
-  margin: 0 0 6px;
+.upload-drafts-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-bottom: 10px;
+}
+
+.upload-drafts-head h3 {
+  margin: 0;
+  font-size: 14px;
   font-weight: 600;
 }
 
-.upload-results ul,
+.upload-drafts-head .muted {
+  font-size: 12.5px;
+}
+
+.upload-drafts .table-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.draft-table td {
+  vertical-align: top;
+}
+
+.draft-table .mono {
+  word-break: break-all;
+}
+
+.draft-table .cell-sub {
+  overflow-wrap: anywhere;
+}
+
+.draft-field {
+  min-width: 0;
+}
+
+.draft-table input {
+  width: 130px;
+}
+
+.draft-table select {
+  width: 160px;
+}
+
+.draft-row.is-skipped td {
+  color: var(--text-muted);
+}
+
+.draft-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.draft-status.done {
+  color: var(--status-good-text);
+}
+
+.draft-status.failed {
+  color: var(--status-critical-text);
+}
+
+.upload-summary {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.upload-drafts .form-actions {
+  margin-top: 10px;
+}
+
 .download-list {
   display: grid;
   gap: 4px;
@@ -5935,20 +6006,11 @@ td.actions .row-menu-button {
   list-style: none;
 }
 
-.upload-results li,
 .download-list li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 10px;
-}
-
-.upload-results li.ok svg {
-  color: var(--status-good);
-}
-
-.upload-results li.failed svg {
-  color: var(--status-critical);
 }
 
 .download-list li {
@@ -5973,6 +6035,26 @@ td.actions .row-menu-button {
   }
 
   .package-table tr.package-row td.actions {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    width: auto;
+    min-height: 0;
+    padding: 0;
+  }
+
+  .draft-table select {
+    width: auto;
+    max-width: 100%;
+  }
+
+  /* Yükleme listesinde ✕ kartın sağ üstünde. */
+  .draft-table tr.draft-row {
+    position: relative;
+    padding-right: 48px;
+  }
+
+  .draft-table tr.draft-row td.actions {
     position: absolute;
     top: 8px;
     right: 10px;

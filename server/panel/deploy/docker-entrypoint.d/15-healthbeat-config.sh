@@ -51,8 +51,8 @@ location /api/ {
     proxy_read_timeout 60s;
     expires epoch;
 }
-# Agent paketi yükleme: istek gövdesi büyük (server dosya başına 50 MB, istek başına 400 MB kabul eder) ve yavaş bir
-# hatta uzun sürer; gövde nginx'te biriktirilmeden server'a akıtılır.
+# Agent paketi yükleme: istek başına bir paket (server 50 MB'a kadar kabul eder) ve yavaş bir hatta uzun sürer; gövde
+# nginx'te biriktirilmeden server'a akıtılır.
 location = /api/v1/agent-packages {
     resolver $resolver valid=10s ipv6=off;
     set \$api_upstream $proxy;
@@ -64,7 +64,7 @@ location = /api/v1/agent-packages {
     proxy_ssl_server_name on;
     proxy_ssl_verify off;
     proxy_connect_timeout 5s;
-    client_max_body_size 400m;
+    client_max_body_size 64m;
     proxy_request_buffering off;
     proxy_read_timeout 900s;
     proxy_send_timeout 900s;

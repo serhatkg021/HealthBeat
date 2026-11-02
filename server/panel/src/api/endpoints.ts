@@ -1,8 +1,9 @@
 import { apiDownload, apiRequest, apiRequestPage, apiUpload } from './client'
 import type {
+  AgentPackage,
+  AgentPackageArch,
   AgentPackageDownload,
   AgentPackageList,
-  AgentPackageUploadResult,
   Alert,
   ChannelInfo,
   ChannelOption,
@@ -344,10 +345,13 @@ export const usersApi = {
 // Agent paketleri (agent.package.manage; varsayılan olarak yalnızca süper admin).
 export const agentPackagesApi = {
   list: () => apiRequest<AgentPackageList>('/api/v1/agent-packages'),
-  upload: (files: File[]) => {
+  // upload, tek bir paketi sürüm ve mimariyle yükler; alanlar dosyadan önce gönderilir (server akış hâlinde okur).
+  upload: (file: File, version: string, arch: AgentPackageArch) => {
     const form = new FormData()
-    for (const f of files) form.append('files', f, f.name)
-    return apiUpload<{ results: AgentPackageUploadResult[] }>('/api/v1/agent-packages', form)
+    form.append('version', version)
+    form.append('arch', arch)
+    form.append('file', file, file.name)
+    return apiUpload<AgentPackage>('/api/v1/agent-packages', form)
   },
   remove: (id: string) => apiRequest<void>(`/api/v1/agent-packages/${id}`, { method: 'DELETE' }),
   downloads: (id: string, limit = 50) =>

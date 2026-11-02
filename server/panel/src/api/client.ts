@@ -219,8 +219,9 @@ export async function apiUpload<T>(path: string, form: FormData, retry = true): 
         : resp.status === 413
           ? 'yükleme çok büyük'
           : resp.statusText
-    const requestId = (data as { request_id?: string } | undefined)?.request_id ?? resp.headers.get('X-Request-ID') ?? undefined
-    throw new ApiError(resp.status, message, undefined, requestId)
+    const body = data as { request_id?: string; code?: string; fields?: Record<string, string> } | undefined
+    const requestId = body?.request_id ?? resp.headers.get('X-Request-ID') ?? undefined
+    throw new ApiError(resp.status, message, body?.code, requestId, body?.fields)
   }
   return data as T
 }
