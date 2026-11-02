@@ -191,7 +191,7 @@ func TestCacheStatusAPI(t *testing.T) {
 	for i, l := range st.RateLimiters {
 		byID[l.ID] = i
 	}
-	if len(st.RateLimiters) != 5 {
+	if len(st.RateLimiters) != 6 {
 		t.Fatalf("rate limiters = %+v", st.RateLimiters)
 	}
 	login := st.RateLimiters[byID["login_failures"]]

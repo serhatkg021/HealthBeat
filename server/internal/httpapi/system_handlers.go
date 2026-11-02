@@ -180,6 +180,7 @@ func (d *Deps) handleCacheStatus(w http.ResponseWriter, r *http.Request) error {
 		{"ingest_rate", limiterKeyHost, d.ingestRate},
 		{"reset_ips", limiterKeyIP, d.resetIPs},
 		{"reset_emails", limiterKeyEmail, d.resetEmails},
+		{"agent_downloads", limiterKeyIP, d.agentDownloads},
 	}
 	var pull *pullSchedulerView
 	if d.pullScheduler != nil {
