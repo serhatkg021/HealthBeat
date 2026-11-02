@@ -14,11 +14,13 @@ const (
 )
 
 // AgentPackage, server'a yüklenmiş bir agent paket dosyasıdır (bkz. migration 000010). Dosyanın kendisi diskte
-// (internal/agentpkg), kaydı veritabanındadır.
+// (internal/agentpkg), kaydı veritabanındadır. Filename server'ın ürettiği release adıdır (diskte ve indirme adresinde),
+// OriginalFilename yüklenen dosyanın adı.
 type AgentPackage struct {
 	ID               uuid.UUID  `json:"id"`
 	Version          string     `json:"version"`
 	Filename         string     `json:"filename"`
+	OriginalFilename string     `json:"original_filename"`
 	Arch             string     `json:"arch"`   // amd64 | arm64
 	Format           string     `json:"format"` // deb | rpm | tar.gz
 	SizeBytes        int64      `json:"size_bytes"`

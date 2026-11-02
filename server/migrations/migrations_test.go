@@ -1005,11 +1005,15 @@ func TestAgentPackagesMigrationAndRollback(t *testing.T) {
 		t.Fatalf("grants=%q enabled=%v, want super_admin only and downloads on", grants, enabled)
 	}
 
-	// Kısıtlar: geçersiz sürüm, mimari, biçim, SHA256 ve yol ayırıcılı dosya adı reddedilir; aynı dosya adı iki kez olmaz.
-	insert := func(ver, filename, arch, format, sha string) error {
-		_, err := pool.Exec(ctx, `INSERT INTO agent_packages (version, filename, arch, format, size_bytes, sha256)
-			VALUES ($1, $2, $3, $4, 10, $5)`, ver, filename, arch, format, sha)
+	// Kısıtlar: geçersiz sürüm, mimari, biçim, SHA256, yol ayırıcılı dosya adı ve boş asıl ad reddedilir; aynı dosya adı
+	// ya da aynı sürüm + mimari + biçim iki kez olmaz.
+	insertAs := func(ver, filename, original, arch, format, sha string) error {
+		_, err := pool.Exec(ctx, `INSERT INTO agent_packages (version, filename, original_filename, arch, format, size_bytes, sha256)
+			VALUES ($1, $2, $3, $4, $5, 10, $6)`, ver, filename, original, arch, format, sha)
 		return err
+	}
+	insert := func(ver, filename, arch, format, sha string) error {
+		return insertAs(ver, filename, "agent.deb", arch, format, sha)
 	}
 	sha := strings.Repeat("0f", 32)
 	if err := insert("1.2.0-rc.1", "healthbeat-agent_1.2.0~rc.1_amd64.deb", "amd64", "deb", sha); err != nil {
@@ -1017,7 +1021,10 @@ func TestAgentPackagesMigrationAndRollback(t *testing.T) {
 	}
 	for name, err := range map[string]error{
 		"duplicate filename": insert("1.2.0-rc.1", "healthbeat-agent_1.2.0~rc.1_amd64.deb", "amd64", "deb", sha),
+		"duplicate variant":  insert("1.2.0-rc.1", "e.deb", "amd64", "deb", sha),
 		"bad version":        insert("1.2", "a.deb", "amd64", "deb", sha),
+		"dash in prerelease": insert("1.2.0-rc-1", "f.deb", "amd64", "deb", sha),
+		"empty original":     insertAs("1.2.0", "g.deb", "", "amd64", "deb", sha),
 		"path in filename":   insert("1.2.0", "../a.deb", "amd64", "deb", sha),
 		"bad arch":           insert("1.2.0", "b.deb", "i386", "deb", sha),
 		"bad format":         insert("1.2.0", "c.zip", "amd64", "zip", sha),

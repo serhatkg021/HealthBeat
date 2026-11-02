@@ -69,8 +69,8 @@ func TestRunOnceDeletesExpiredAgentPackageDownloads(t *testing.T) {
 	pool := testdb.New(t)
 	ctx := context.Background()
 	var pkg uuid.UUID
-	if err := pool.QueryRow(ctx, `INSERT INTO agent_packages (version, filename, arch, format, size_bytes, sha256, download_count)
-		VALUES ('1.1.0', 'healthbeat-agent_1.1.0_amd64.deb', 'amd64', 'deb', 10, repeat('a', 64), 3) RETURNING id`).Scan(&pkg); err != nil {
+	if err := pool.QueryRow(ctx, `INSERT INTO agent_packages (version, filename, original_filename, arch, format, size_bytes, sha256, download_count)
+		VALUES ('1.1.0', 'healthbeat-agent_1.1.0_amd64.deb', 'agent.deb', 'amd64', 'deb', 10, repeat('a', 64), 3) RETURNING id`).Scan(&pkg); err != nil {
 		t.Fatal(err)
 	}
 	for _, age := range []string{"1 day", "400 days", "800 days"} {

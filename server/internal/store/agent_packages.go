@@ -14,9 +14,10 @@ import (
 	"healthbeat-server/internal/version"
 )
 
-// Agent paketi hataları: aynı dosya adı zaten kayıtlı, alanlar migration 000010'daki kısıtlara uymuyor, paket yok.
+// Agent paketi hataları: aynı sürüm, mimari ve biçimde paket zaten kayıtlı; alanlar migration 000010'daki kısıtlara
+// uymuyor; paket yok.
 var (
-	ErrAgentPackageExists  = reason(ErrConflict, "agent package with this filename already exists")
+	ErrAgentPackageExists  = reason(ErrConflict, "agent package with this version, arch and format already exists")
 	ErrAgentPackageInvalid = reason(ErrConflict, "invalid agent package")
 	ErrAgentPackageMissing = reason(ErrNotFound, "agent package does not exist")
 )
@@ -32,13 +33,13 @@ type AgentPackages struct {
 
 func NewAgentPackages(pool *pgxpool.Pool) *AgentPackages { return &AgentPackages{pool: pool} }
 
-const agentPackageSelect = `SELECT p.id, p.version, p.filename, p.arch, p.format, p.size_bytes, p.sha256, p.uploaded_by,
+const agentPackageSelect = `SELECT p.id, p.version, p.filename, p.original_filename, p.arch, p.format, p.size_bytes, p.sha256, p.uploaded_by,
 	COALESCE(u.email, ''), p.uploaded_at, p.download_count, p.last_downloaded_at
 	FROM agent_packages p LEFT JOIN users u ON u.id = p.uploaded_by`
 
 func scanAgentPackage(row interface{ Scan(...any) error }) (model.AgentPackage, error) {
 	var p model.AgentPackage
-	err := row.Scan(&p.ID, &p.Version, &p.Filename, &p.Arch, &p.Format, &p.SizeBytes, &p.SHA256, &p.UploadedBy,
+	err := row.Scan(&p.ID, &p.Version, &p.Filename, &p.OriginalFilename, &p.Arch, &p.Format, &p.SizeBytes, &p.SHA256, &p.UploadedBy,
 		&p.UploadedByEmail, &p.UploadedAt, &p.DownloadCount, &p.LastDownloadedAt)
 	return p, err
 }
@@ -81,15 +82,16 @@ func (s *AgentPackages) GetFile(ctx context.Context, ver, filename string) (mode
 }
 
 // Create, paketin kaydını ekler ve aynı transaction içinde place'i çağırır (dosyayı yerine koyar): place başarısız
-// olursa kayıt eklenmez, kayıt eklenemezse place hiç çağrılmaz. Aynı dosya adı zaten kayıtlıysa ErrAgentPackageExists.
+// olursa kayıt eklenmez, kayıt eklenemezse place hiç çağrılmaz. Aynı sürüm, mimari ve biçim (ya da dosya adı) zaten
+// kayıtlıysa ErrAgentPackageExists.
 // ID, UploadedAt ve indirme alanları yok sayılır.
 func (s *AgentPackages) Create(ctx context.Context, p model.AgentPackage, place func() error) (model.AgentPackage, error) {
 	var id uuid.UUID
 	err := InTx(ctx, s.pool, func(tx pgx.Tx) error {
 		if err := tx.QueryRow(ctx,
-			`INSERT INTO agent_packages (version, filename, arch, format, size_bytes, sha256, uploaded_by)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-			p.Version, p.Filename, p.Arch, p.Format, p.SizeBytes, p.SHA256, p.UploadedBy).Scan(&id); err != nil {
+			`INSERT INTO agent_packages (version, filename, original_filename, arch, format, size_bytes, sha256, uploaded_by)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+			p.Version, p.Filename, p.OriginalFilename, p.Arch, p.Format, p.SizeBytes, p.SHA256, p.UploadedBy).Scan(&id); err != nil {
 			switch pgErrorCode(err) {
 			case pgUniqueViolation:
 				return ErrAgentPackageExists

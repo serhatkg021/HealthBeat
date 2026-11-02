@@ -1,5 +1,6 @@
--- 000010: server'dan dağıtılan agent paketleri. Süper admin release'teki paketleri panelden yükler; dosyalar diskte
--- (AGENT_PACKAGES_DIR), kayıtları burada durur. Paketler kimlik doğrulamasız bir uçtan indirilir; her indirme
+-- 000010: server'dan dağıtılan agent paketleri. Süper admin paketleri panelden yükler ve sürümle mimariyi seçer; biçim
+-- dosyanın içeriğinden anlaşılır. Dosya diskte (AGENT_PACKAGES_DIR) server'ın ürettiği release adıyla durur (filename),
+-- yüklenen asıl ad original_filename'dedir. Paketler kimlik doğrulamasız bir uçtan indirilir; her indirme
 -- agent_package_downloads'a yazılır.
 --
 -- Yalnızca tablo, satır ve varsayılanlı sütun eklenir: güncelleme sırasında hâlâ çalışan eski bir server süreci bu şemayla
@@ -10,6 +11,7 @@ CREATE TABLE agent_packages (
     id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     version            TEXT NOT NULL,
     filename           TEXT NOT NULL,
+    original_filename  TEXT NOT NULL,
     arch               TEXT NOT NULL,
     format             TEXT NOT NULL,
     size_bytes         BIGINT NOT NULL,
@@ -19,15 +21,16 @@ CREATE TABLE agent_packages (
     download_count     BIGINT NOT NULL DEFAULT 0,
     last_downloaded_at TIMESTAMPTZ,
     CONSTRAINT agent_packages_filename_key UNIQUE (filename),
-    CONSTRAINT agent_packages_version_chk CHECK (version ~ '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'),
+    CONSTRAINT agent_packages_variant_key UNIQUE (version, arch, format),
+    CONSTRAINT agent_packages_version_chk CHECK (version ~ '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' AND length(version) <= 64),
     CONSTRAINT agent_packages_filename_chk CHECK (filename ~ '^[0-9A-Za-z._~-]+$' AND length(filename) <= 128),
+    CONSTRAINT agent_packages_original_filename_chk CHECK (length(original_filename) BETWEEN 1 AND 255),
     CONSTRAINT agent_packages_arch_chk CHECK (arch IN ('amd64', 'arm64')),
     CONSTRAINT agent_packages_format_chk CHECK (format IN ('deb', 'rpm', 'tar.gz')),
     CONSTRAINT agent_packages_size_chk CHECK (size_bytes > 0),
     CONSTRAINT agent_packages_sha256_chk CHECK (sha256 ~ '^[0-9a-f]{64}$'),
     CONSTRAINT agent_packages_download_count_chk CHECK (download_count >= 0)
 );
-CREATE INDEX agent_packages_version_idx ON agent_packages (version);
 
 -- ---------------------------------------------------------------- agent_package_downloads
 CREATE TABLE agent_package_downloads (

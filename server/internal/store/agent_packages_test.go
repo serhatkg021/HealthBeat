@@ -15,8 +15,8 @@ import (
 )
 
 func agentPackage(ver, filename, arch, format string, by *uuid.UUID) model.AgentPackage {
-	return model.AgentPackage{Version: ver, Filename: filename, Arch: arch, Format: format, SizeBytes: 3729808,
-		SHA256: strings.Repeat("ab", 32), UploadedBy: by}
+	return model.AgentPackage{Version: ver, Filename: filename, OriginalFilename: "yüklenen " + filename, Arch: arch,
+		Format: format, SizeBytes: 3729808, SHA256: strings.Repeat("ab", 32), UploadedBy: by}
 }
 
 func TestAgentPackageCreateListDelete(t *testing.T) {
@@ -60,7 +60,7 @@ func TestAgentPackageCreateListDelete(t *testing.T) {
 	}
 	first := list[3]
 	if first.UploadedByEmail != "admin@example.com" || first.DownloadCount != 0 || first.LastDownloadedAt != nil ||
-		first.SizeBytes != 3729808 || first.UploadedAt.IsZero() {
+		first.SizeBytes != 3729808 || first.UploadedAt.IsZero() || first.OriginalFilename != "yüklenen healthbeat-agent_1.1.0_amd64.deb" {
 		t.Fatalf("package = %+v", first)
 	}
 	if list[0].UploadedBy != nil || list[0].UploadedByEmail != "" {
@@ -120,6 +120,16 @@ func TestAgentPackageCreateRollsBackOnFailure(t *testing.T) {
 	}
 	if called {
 		t.Fatal("place was called for a duplicate filename")
+	}
+	same := p
+	same.Filename = "healthbeat-agent_1.1.0_amd64-2.deb" // aynı sürüm, mimari ve biçim
+	if _, err := s.Create(ctx, same, func() error { return nil }); !errors.Is(err, store.ErrAgentPackageExists) {
+		t.Fatalf("duplicate version/arch/format: %v, want ErrAgentPackageExists", err)
+	}
+	noName := agentPackage("1.1.0", "healthbeat-agent_1.1.0_arm64.deb", "arm64", "deb", nil)
+	noName.OriginalFilename = ""
+	if _, err := s.Create(ctx, noName, func() error { return nil }); !errors.Is(err, store.ErrAgentPackageInvalid) {
+		t.Fatalf("empty original filename: %v, want ErrAgentPackageInvalid", err)
 	}
 
 	bad := agentPackage("1.1", "healthbeat-agent_1.1_amd64.deb", "amd64", "deb", nil)

@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"mime/multipart"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -21,8 +25,12 @@ import (
 const (
 	// maxAgentPackageBytes, tek bir paket dosyasının üst sınırıdır (release paketleri 3–9 MB).
 	maxAgentPackageBytes = 50 << 20
-	// maxAgentUploadBytes, bir yükleme isteğinin tamamının üst sınırıdır (bir sürümün 6 paketi ve multipart ekleri).
-	maxAgentUploadBytes = 8 * maxAgentPackageBytes
+	// maxAgentUploadBytes, bir yükleme isteğinin tamamının üst sınırıdır: bir paket, form alanları ve multipart ekleri.
+	maxAgentUploadBytes = maxAgentPackageBytes + 1<<20
+	// maxAgentFieldBytes, yüklemedeki bir form alanının (sürüm, mimari) üst sınırıdır.
+	maxAgentFieldBytes = 256
+	// maxOriginalFilename, kayda yazılan yüklenen dosya adının üst sınırıdır (agent_packages_original_filename_chk).
+	maxOriginalFilename = 255
 	// agentUploadTimeout / agentDownloadTimeout, server'ın genel okuma/yazma sürelerinin yerine geçer: yavaş bir hatta
 	// büyük bir yükleme ya da indirme onlara sığmaz.
 	agentUploadTimeout   = 15 * time.Minute
@@ -59,16 +67,10 @@ func (d *Deps) handleListAgentPackages(w http.ResponseWriter, r *http.Request) e
 	return nil
 }
 
-// agentPackageUploadResult, yüklemedeki bir dosyanın sonucudur: Package ya da Error doludur.
-type agentPackageUploadResult struct {
-	Filename string              `json:"filename"`
-	Package  *model.AgentPackage `json:"package,omitempty"`
-	Error    string              `json:"error,omitempty"`
-}
-
-// POST /api/v1/agent-packages (multipart/form-data; her dosya bir parça). Her dosya ayrı değerlendirilir: biri
-// reddedilse de diğerleri yüklenir. Yanıt 200 ve dosya başına sonuçtur.
-func (d *Deps) handleUploadAgentPackages(w http.ResponseWriter, r *http.Request) error {
+// POST /api/v1/agent-packages (multipart/form-data): önce "version" ve "arch" alanları, sonra tek bir dosya parçası
+// ("file"). Biçim dosyanın ilk baytlarından anlaşılır; dosya diskte ve indirme adresinde release adıyla durur
+// (agentpkg.FileName), yüklenen ad original_filename'e yazılır. Yanıt 201 ve paket kaydıdır.
+func (d *Deps) handleUploadAgentPackage(w http.ResponseWriter, r *http.Request) error {
 	if d.agentPackageDir == nil {
 		return newError(http.StatusServiceUnavailable, "agent paket dizini kullanılamıyor (AGENT_PACKAGES_DIR)")
 	}
@@ -81,88 +83,124 @@ func (d *Deps) handleUploadAgentPackages(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		return badRequest("istek multipart/form-data olmalı")
 	}
+	fields := map[string]string{}
+	for {
+		part, err := mr.NextPart()
+		if errors.Is(err, io.EOF) {
+			return badRequest("yüklenecek dosya yok")
+		}
+		if err != nil {
+			return uploadReadError(err)
+		}
+		if part.FileName() == "" { // form alanı
+			v, err := io.ReadAll(io.LimitReader(part, maxAgentFieldBytes+1))
+			_ = part.Close()
+			if err != nil {
+				return uploadReadError(err)
+			}
+			if len(v) > maxAgentFieldBytes {
+				return fieldError400(part.FormName(), "çok uzun")
+			}
+			fields[part.FormName()] = strings.TrimSpace(string(v))
+			continue
+		}
+		defer part.Close()
+		return d.uploadAgentPackage(w, r, part, fields)
+	}
+}
+
+// uploadAgentPackage, dosya parçasını sürüm ve mimariyle yükler.
+func (d *Deps) uploadAgentPackage(w http.ResponseWriter, r *http.Request, part *multipart.Part, fields map[string]string) error {
+	ver, arch := fields["version"], fields["arch"]
+	switch {
+	case ver == "":
+		return fieldError400("version", "sürüm gerekli (dosyadan önce gönderilir)")
+	case !agentpkg.ValidVersion(ver):
+		return fieldError400("version", "sürüm 1.2.0 ya da 1.2.0-rc.1 biçiminde olmalı")
+	case arch == "":
+		return fieldError400("arch", "mimari gerekli (dosyadan önce gönderilir)")
+	case !agentpkg.ValidArch(arch):
+		return fieldError400("arch", "mimari amd64 ya da arm64 olmalı")
+	}
+	original := originalFilename(part.FileName())
+
+	staged, err := d.agentPackageDir.Stage(part, maxAgentPackageBytes)
+	switch {
+	case errors.Is(err, agentpkg.ErrTooLarge):
+		return newError(http.StatusRequestEntityTooLarge, fmt.Sprintf("dosya en fazla %d MB olabilir", maxAgentPackageBytes>>20))
+	case errors.Is(err, agentpkg.ErrEmpty):
+		return badRequest("dosya boş")
+	case errors.Is(err, agentpkg.ErrUnknownFormat):
+		return badRequest("agent paketi değil: dosya .deb, .rpm ya da .tar.gz olmalı")
+	case err != nil:
+		if r.Context().Err() != nil {
+			return uploadReadError(err)
+		}
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			return uploadReadError(err)
+		}
+		return serverErr("dosya kaydedilemedi", "agent package upload: stage", err)
+	}
+	defer staged.Discard()
+
+	info := agentpkg.Info{Version: ver, Arch: arch, Format: staged.Format}
+	name, err := agentpkg.FileName(info)
+	if err != nil { // yukarıda denetlendi
+		return badRequest("geçersiz sürüm ya da mimari")
+	}
 	var uploader *uuid.UUID
 	if id, ok := userIDFromContext(r.Context()); ok {
 		uploader = &id
 	}
-	results := []agentPackageUploadResult{}
-	for {
-		part, err := mr.NextPart()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			var tooLarge *http.MaxBytesError
-			if errors.As(err, &tooLarge) {
-				return newError(http.StatusRequestEntityTooLarge, fmt.Sprintf("istek en fazla %d MB olabilir", maxAgentUploadBytes>>20))
-			}
-			return badRequest("yükleme okunamadı")
-		}
-		name := part.FileName()
-		if name == "" { // dosya olmayan form alanı
-			_ = part.Close()
-			continue
-		}
-		res := d.uploadAgentPackage(r, part, name, uploader)
-		_ = part.Close()
-		if res == nil { // istek gövdesi okunamadı (bağlantı koptu ya da sınır aşıldı)
-			return newError(http.StatusRequestEntityTooLarge, fmt.Sprintf("istek en fazla %d MB olabilir", maxAgentUploadBytes>>20))
-		}
-		results = append(results, *res)
-	}
-	if len(results) == 0 {
-		return badRequest("yüklenecek dosya yok")
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"results": results})
-	return nil
-}
-
-// uploadAgentPackage, tek bir dosyayı yükler. İstek gövdesinin kendisi okunamadıysa nil döner.
-func (d *Deps) uploadAgentPackage(r *http.Request, body io.Reader, name string, uploader *uuid.UUID) *agentPackageUploadResult {
-	res := &agentPackageUploadResult{Filename: name}
-	info, err := agentpkg.Parse(name)
-	if err != nil {
-		res.Error = "agent paketi değil: yalnızca release'teki .deb, .rpm ve .tar.gz paketleri yüklenebilir"
-		return res
-	}
-	staged, err := d.agentPackageDir.Stage(body, maxAgentPackageBytes)
-	switch {
-	case errors.Is(err, agentpkg.ErrTooLarge):
-		res.Error = fmt.Sprintf("dosya en fazla %d MB olabilir", maxAgentPackageBytes>>20)
-		return res
-	case errors.Is(err, agentpkg.ErrEmpty):
-		res.Error = "dosya boş"
-		return res
-	case err != nil:
-		var tooLarge *http.MaxBytesError
-		if errors.As(err, &tooLarge) || r.Context().Err() != nil {
-			return nil
-		}
-		slog.ErrorContext(r.Context(), "agent package upload: stage", "filename", name, "err", err)
-		res.Error = "dosya kaydedilemedi"
-		return res
-	}
-	defer staged.Discard()
-
-	p := model.AgentPackage{Version: info.Version, Filename: name, Arch: info.Arch, Format: info.Format,
+	p := model.AgentPackage{Version: ver, Filename: name, OriginalFilename: original, Arch: arch, Format: staged.Format,
 		SizeBytes: staged.Size, SHA256: staged.SHA256, UploadedBy: uploader}
-	created, err := d.agentPackages.Create(r.Context(), p, func() error { return staged.Place(info.Version, name) })
+	created, err := d.agentPackages.Create(r.Context(), p, func() error { return staged.Place(ver, name) })
 	switch {
 	case errors.Is(err, store.ErrAgentPackageExists):
-		res.Error = "bu dosya zaten yüklü; yeniden yüklemek için önce silin"
-		return res
+		return conflict(fmt.Sprintf("%s sürümünün %s %s paketi zaten yüklü; yerine koymak için önce silin", ver, arch, formatLabel(staged.Format)))
 	case err != nil:
-		slog.ErrorContext(r.Context(), "agent package upload: save", "filename", name, "err", err)
-		res.Error = "dosya kaydedilemedi"
-		return res
+		return serverErr("dosya kaydedilemedi", "agent package upload: save", err)
 	}
 	id := created.ID.String()
 	d.logAudit(r, "agent_package.upload", "agent_package", &id, map[string]any{
-		"filename": created.Filename, "version": created.Version, "size_bytes": created.SizeBytes, "sha256": created.SHA256,
+		"filename": created.Filename, "original_filename": created.OriginalFilename, "version": created.Version,
+		"size_bytes": created.SizeBytes, "sha256": created.SHA256,
 	})
-	res.Package = &created
-	return res
+	writeJSON(w, http.StatusCreated, created)
+	return nil
 }
+
+// uploadReadError, istek gövdesi okunamadığında dönen hatadır (sınır aşıldı ya da bağlantı koptu).
+func uploadReadError(err error) error {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return newError(http.StatusRequestEntityTooLarge, fmt.Sprintf("dosya en fazla %d MB olabilir", maxAgentPackageBytes>>20))
+	}
+	return badRequest("yükleme okunamadı")
+}
+
+// originalFilename, yüklenen dosyanın adını kayda uygun hale getirir: yol kısmı atılır, geçersiz UTF-8 ve denetim
+// karakterleri temizlenir, en fazla maxOriginalFilename bayt.
+func originalFilename(name string) string {
+	name = strings.ToValidUTF8(filepath.Base(strings.ReplaceAll(name, "\\", "/")), "")
+	name = strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return -1
+		}
+		return r
+	}, name))
+	for len(name) > maxOriginalFilename {
+		_, size := utf8.DecodeLastRuneInString(name)
+		name = name[:len(name)-size]
+	}
+	if name == "" || name == "." || name == "/" {
+		return "paket"
+	}
+	return name
+}
+
+func formatLabel(format string) string { return "." + format }
 
 // DELETE /api/v1/agent-packages/{id}
 func (d *Deps) handleDeleteAgentPackage(w http.ResponseWriter, r *http.Request) error {

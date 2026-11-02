@@ -127,7 +127,7 @@ func (d *Deps) Router() http.Handler {
 
 	// Agent paketleri: yönetim panelden, indirme kimlik doğrulamasız. Bkz. agent_package_handlers.go.
 	mux.HandleFunc("GET /api/v1/agent-packages", d.requirePermission("agent.package.manage", handle(d.handleListAgentPackages)))
-	mux.HandleFunc("POST /api/v1/agent-packages", d.requirePermission("agent.package.manage", handle(d.handleUploadAgentPackages)))
+	mux.HandleFunc("POST /api/v1/agent-packages", d.requirePermission("agent.package.manage", handle(d.handleUploadAgentPackage)))
 	mux.HandleFunc("DELETE /api/v1/agent-packages/{id}", d.requirePermission("agent.package.manage", handle(d.handleDeleteAgentPackage)))
 	mux.HandleFunc("GET /api/v1/agent-packages/{id}/downloads", d.requirePermission("agent.package.manage", handle(d.handleListAgentPackageDownloads)))
 	mux.HandleFunc("GET "+AgentDownloadPath+"{version}/{filename}", d.handleAgentDownload)
