@@ -85,13 +85,13 @@ kurallar disiplinle uygulanır.
 
 ```sh
 cd server && TEST_DATABASE_URL=postgres://… go test ./... -race     # veritabanı testleri geçici şemada çalışır
-cd server && GOTOOLCHAIN=go1.27.1 go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+cd server && go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 cd agent && go test ./... -race && ../agent/deploy/install_test.sh
-cd agent && GOTOOLCHAIN=go1.27.1 go run honnef.co/go/tools/cmd/staticcheck@v0.8.1 ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+cd agent && go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./... && go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
 cd server/panel && npx tsc -b && npm test && npm run build
 scripts/release_test.sh                                            # sürüm betikleri
 scripts/compat_e2e.sh                                              # ingest'e dokunulduysa
 ```
 
-staticcheck satırlarındaki `GOTOOLCHAIN=go1.27.1` geçicidir: staticcheck v0.8.1 Go 1.27.2'yi okuyamıyor; Go 1.27.2'yi tanıyan
-sürümü çıkınca `ci.yml` ile birlikte kaldırılır.
+`go run araç@sürüm` modülün `toolchain` satırını değil aracın kendi `go.mod`'unu izler: kurulu Go, `go.mod`'daki
+sürümden eskiyse staticcheck/govulncheck komutlarının başına `GOTOOLCHAIN=$(go env GOVERSION)` ekle.

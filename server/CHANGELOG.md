@@ -10,6 +10,13 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ## [Yayınlanmamış]
 
+### Düzeltildi
+- Server Go 1.27.3 ile derleniyor: Go 1.27.2 standart kütüphanesindeki `crypto/x509` güvenlik açığı (GO-2026-6809,
+  ele geçirilmiş ara sertifikalara güvenilmesi) kapandı.
+
+### İç değişiklikler (davranış değişmedi)
+- CI ve yerel lint staticcheck v0.8.2 ve govulncheck v1.9.0'a geçti; staticcheck'in geçici Go 1.27.1 ayarı kaldırıldı.
+
 ## [2.2.0] - 2026-10-15
 
 Kurulum ve işletimin kolaylaştığı sürüm: server artık kaynak kod gerekmeden Release'teki imzalı kurulum paketiyle kurulup

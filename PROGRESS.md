@@ -4,7 +4,9 @@ Bu dosya kısa tutulur: **şu anki durum, nasıl çalıştırılır, bilinen sı
 `docs/MIMARI.md`'de, veritabanı `docs/VERITABANI.md`'de, geçmiş değişiklikler `agent/CHANGELOG.md` ve `server/CHANGELOG.md`'dedir.
 Anlamlı bir iş bitince bu dosya güncellenir.
 
-**Son güncelleme:** 2026-10-19 — Agent paketinin yükseltme betiği Türkçe locale'de düz token uyarısını basmıyordu
+**Son güncelleme:** 2026-11-02 — Server ve agent Go 1.27.3'e geçti (`crypto/x509` açığı GO-2026-6809, govulncheck
+CI'ı düşürüyordu); staticcheck v0.8.2 Go 1.27.3'ü okuduğu için lint'teki geçici Go 1.27.1 ayarı kaldırıldı.
+Önceki: 2026-10-19 — Agent paketinin yükseltme betiği Türkçe locale'de düz token uyarısını basmıyordu
 (`postinstall.sh`'a `LC_ALL=C`); `tr_TR.UTF-8` kurulu bir Ubuntu 24.04 container'ında elle doğrulandı, CI'da Türkçe
 locale sınanmıyor.
 Önceki: 2026-10-15 — Server + panel **2.2.0** sürümü hazırlandı (`server/CHANGELOG.md`: öne çıkanlar ve
@@ -79,8 +81,8 @@ ve saat senkronu ayrıntısı topluyor (hepsi yetkisiz, sandbox gevşetilmeden).
 sıcaklık, servis yeniden başlatma ve saat farkı eşikleri (süre koşuluyla, konu başına) ve 11 durum kuralı ile alert üretiyor;
 yeni türler varsayılanda kapalı. Panelde Alert kuralları, Servisler, Performans, Envanter ve Genel sekmelerindeki "Yakında"
 kartlarının yerini gerçek veri aldı. Migration `000007`. Bunlar "Yayınlanmamış"ta; server + panel **2.0.0** yayında. Ayrıca server Go 1.27.2'ye geçti
-(Go 1.27.1 standart kütüphanesindeki güvenlik açıkları); staticcheck v0.8.1 Go 1.27.2'yi okuyamadığı için CI'da ve yerelde
-geçici olarak Go 1.27.1 ile çalışıyor.
+(Go 1.27.1 standart kütüphanesindeki güvenlik açıkları); staticcheck o dönem geçici olarak Go 1.27.1 ile çalıştı
+(2026-11-02'de kaldırıldı).
 
 ## Durum
 
