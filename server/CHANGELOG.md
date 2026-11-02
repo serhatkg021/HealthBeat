@@ -16,7 +16,7 @@ Davranışı değiştirmeyen iç düzenlemeler, bölümün sonundaki "İç deği
 
 ### İç değişiklikler (davranış değişmedi)
 - CI ve yerel lint staticcheck v0.8.2 ve govulncheck v1.9.0'a geçti; staticcheck'in geçici Go 1.27.1 ayarı kaldırıldı.
-- Panel: bağımlılıklar güncellendi — `lucide-react` 1.64, `react`/`react-dom` 19.3.1, `react-router-dom` 7.18.5,
+- Panel: bağımlılıklar güncellendi — `lucide-react` 1.65, `react`/`react-dom` 19.3.1, `react-router-dom` 7.18.5,
   `oxlint` 1.90, `vite` 8.3.5.
 
 ## [2.2.0] - 2026-10-15
